@@ -44,8 +44,10 @@ class HomeScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Text nearby friends with Wi-Fi Direct. No router, account, or mobile data needed.',
+                  Text(
+                    c.isDemo
+                        ? 'Explore the interface with simulated friends. Tap Go nearby to find demo devices.'
+                        : 'Text nearby friends with Wi-Fi Direct. No router, account, or mobile data needed.',
                   ),
                   const SizedBox(height: 24),
                   Card(
@@ -68,7 +70,7 @@ class HomeScreen extends StatelessWidget {
                                     context,
                                   ).textTheme.titleMedium,
                                 ),
-                                Text(c.state),
+                                Text(c.isDemo ? 'Demo • ${c.state}' : c.state),
                               ],
                             ),
                           ),
@@ -131,16 +133,22 @@ class HomeScreen extends StatelessWidget {
                     ),
                   if (c.scanning) const LinearProgressIndicator(),
                   if (c.started && c.peers.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
                       child: Column(
                         children: [
-                          Icon(Icons.devices, size: 48),
-                          SizedBox(height: 12),
-                          Text('Looking for LocalChat phones'),
-                          SizedBox(height: 6),
+                          const Icon(Icons.devices, size: 48),
+                          const SizedBox(height: 12),
                           Text(
-                            'Open LocalChat and tap Go nearby on both phones.',
+                            c.isDemo
+                                ? 'Looking for simulated devices'
+                                : 'Looking for LocalChat phones',
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            c.isDemo
+                                ? 'Demo friends will appear shortly.'
+                                : 'Open LocalChat and tap Go nearby on both phones.',
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -153,7 +161,11 @@ class HomeScreen extends StatelessWidget {
                           child: Icon(Icons.person_outline),
                         ),
                         title: Text(peer.name),
-                        subtitle: const Text('Nearby • tap to connect'),
+                        subtitle: Text(
+                          c.isDemo
+                              ? 'Simulated device • tap to connect'
+                              : 'Nearby • tap to connect',
+                        ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: c.state == 'Connecting'
                             ? null
@@ -181,6 +193,8 @@ class HomeScreen extends StatelessWidget {
                       subtitle: Text(
                         peer.id == c.connectedPeer
                             ? 'Connected'
+                            : c.isDemo
+                            ? 'In-memory demo history'
                             : 'Saved on this phone',
                       ),
                       onTap: () async {
@@ -189,9 +203,11 @@ class HomeScreen extends StatelessWidget {
                       },
                     ),
                   const SizedBox(height: 32),
-                  const Text(
-                    'Keep the app open while chatting. Wi-Fi must be on. Some older Android phones also require Location to be on.',
-                    style: TextStyle(color: Colors.white54),
+                  Text(
+                    c.isDemo
+                        ? 'This browser preview does not discover or communicate with real phones. Use Android devices to test Wi-Fi Direct.'
+                        : 'Keep the app open while chatting. Wi-Fi must be on. Some older Android phones also require Location to be on.',
+                    style: const TextStyle(color: Colors.white54),
                   ),
                 ],
               ),

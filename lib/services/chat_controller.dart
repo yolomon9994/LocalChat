@@ -7,7 +7,8 @@ import '../core/secure_session.dart';
 import 'transport.dart';
 
 class ChatController extends ChangeNotifier {
-  ChatController(this.transport, this.store);
+  ChatController(this.transport, this.store, {this.isDemo = false});
+  final bool isDemo;
   final Transport transport;
   final LocalStore store;
   StreamSubscription<Map<String, dynamic>>? _subscription;

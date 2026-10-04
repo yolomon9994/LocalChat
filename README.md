@@ -37,6 +37,33 @@ Output: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`. This targets mo
 
 The Android Gradle wrapper is included. Flutter writes the machine-specific `android/local.properties`, which is intentionally ignored by Git. The first development build downloads dependencies; **the installed app uses no Internet service**.
 
+## Chrome browser preview on Windows
+
+From PowerShell in the project directory:
+
+```powershell
+flutter pub get
+flutter run -d chrome
+```
+
+Web runs automatically use **Browser Demo** mode. Tap **Go nearby**, choose
+**Ava (Demo)** or **Noah (Demo)**, then tap **Codes match** to explore the chat.
+The simulated friend sends a welcome message, acknowledges your messages and
+replies automatically. You can disconnect, reopen history, switch demo friends,
+rename your profile and delete history in Settings.
+
+The persistent demo notice appears on every screen. Devices, peer confirmation,
+messages and delivery status are simulated inside the browser tab: **no real
+Wi-Fi Direct communication takes place**. History, profile name and demo
+identities live only in memory and reset on reload. The preview does not use
+SQLite or platform secure storage and does not test Android hardware security.
+The shared controller exchanges protocol frames with an in-process simulated
+peer; this does not represent secure communication with another device.
+
+Android still selects the native Wi-Fi Direct transport, encrypted SQLite store
+and platform secure storage. No demo flag is needed and Android never defaults
+to demo mode. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for session context.
+
 ## Try it on two phones
 
 1. Install the same APK on both phones. Keep them near one another.

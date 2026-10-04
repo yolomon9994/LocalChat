@@ -11,3 +11,4 @@ android/key.properties
 .idea/
 *.iml
 .DS_Store
+LocalChat-history.bundle

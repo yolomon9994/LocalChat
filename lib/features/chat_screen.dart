@@ -47,7 +47,11 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               Text(c.selectedName.isEmpty ? 'Nearby chat' : c.selectedName),
               Text(
-                current ? c.state : 'Saved conversation',
+                c.isDemo
+                    ? 'Demo • ${current ? c.state : 'Saved conversation'}'
+                    : current
+                    ? c.state
+                    : 'Saved conversation',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -87,8 +91,10 @@ class _ChatScreenState extends State<ChatScreen> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            'Compare this code with the other phone in person. Only confirm if every group matches.',
+                          Text(
+                            c.isDemo
+                                ? 'Demo verification: tap Codes match to continue. The other phone and its confirmation are simulated.'
+                                : 'Compare this code with the other phone in person. Only confirm if every group matches.',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 16),
@@ -125,8 +131,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 color: Theme.of(context).colorScheme.primaryContainer,
-                child: const Text(
-                  'Verified connection • messages are encrypted',
+                child: Text(
+                  c.isDemo
+                      ? 'Demo chat • simulated peer and delivery acknowledgements'
+                      : 'Verified connection • messages are encrypted',
                   textAlign: TextAlign.center,
                 ),
               ),

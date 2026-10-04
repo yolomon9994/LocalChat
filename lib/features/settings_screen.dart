@@ -36,7 +36,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 SnackBar(
                   content: Text(
                     widget.controller.error ??
-                        'Name saved. Tap Go nearby to advertise it.',
+                        (widget.controller.isDemo
+                            ? 'Demo name saved until reload. Tap Go nearby to continue.'
+                            : 'Name saved. Tap Go nearby to advertise it.'),
                   ),
                 ),
               );
@@ -45,28 +47,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: const Text('Save name'),
         ),
         const SizedBox(height: 28),
-        const ListTile(
+        ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(Icons.lock_outline),
-          title: Text('Private nearby conversations'),
+          leading: const Icon(Icons.lock_outline),
+          title: Text(
+            widget.controller.isDemo
+                ? 'Simulated verification'
+                : 'Private nearby conversations',
+          ),
           subtitle: Text(
-            'Compare security codes on both phones every time you connect. Names are public and can be copied.',
+            widget.controller.isDemo
+                ? 'The preview confirms a simulated peer. Real Android conversations require comparing the complete code on both phones.'
+                : 'Compare security codes on both phones every time you connect. Names are public and can be copied.',
           ),
         ),
-        const ListTile(
+        ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(Icons.storage),
-          title: Text('History stays on your phone'),
+          leading: const Icon(Icons.storage),
+          title: Text(
+            widget.controller.isDemo
+                ? 'Temporary demo history'
+                : 'History stays on your phone',
+          ),
           subtitle: Text(
-            'Message text is encrypted locally. Names, timestamps and delivery status are not encrypted in the database.',
+            widget.controller.isDemo
+                ? 'Messages and settings live in memory in this browser tab. Reloading resets them. The demo does not use SQLite or secure storage.'
+                : 'Message text is encrypted locally. Names, timestamps and delivery status are not encrypted in the database.',
           ),
         ),
-        const ListTile(
+        ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(Icons.info_outline),
-          title: Text('LocalChat 0.1 • Android'),
+          leading: const Icon(Icons.info_outline),
+          title: Text(
+            widget.controller.isDemo
+                ? 'LocalChat 0.1 • Browser demo'
+                : 'LocalChat 0.1 • Android',
+          ),
           subtitle: Text(
-            'Text only. Keep the app open on both phones. Bluetooth fallback, media and background messaging are planned. This prototype has not had an independent security audit.',
+            widget.controller.isDemo
+                ? 'Interface preview only. Devices, replies and delivery status are simulated. No real Wi-Fi Direct communication takes place.'
+                : 'Text only. Keep the app open on both phones. Bluetooth fallback, media and background messaging are planned. This prototype has not had an independent security audit.',
           ),
         ),
         const SizedBox(height: 24),
@@ -78,8 +98,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text('Delete history?'),
-                content: const Text(
-                  'This permanently deletes saved messages on this phone.',
+                content: Text(
+                  widget.controller.isDemo
+                      ? 'This clears the temporary messages in this demo tab.'
+                      : 'This permanently deletes saved messages on this phone.',
                 ),
                 actions: [
                   TextButton(
