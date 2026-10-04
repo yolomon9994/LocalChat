@@ -1,0 +1,48 @@
+# Two-device acceptance tests
+
+These tests require physical hardware and are **not marked as passed** by the automated protocol tests. Record phone model, Android version and outcomes when testing.
+
+| Case | Expected behavior |
+|---|---|
+| Fresh install on Android 13+ | Nearby device permission requested, no Location runtime request |
+| Android 7–12 | Location permission requested; Location toggle required for scanning |
+| Permission denied/revoked | Actionable error, no crash or plaintext fallback |
+| Wi-Fi disabled | Instructions to enable Wi-Fi; no mobile data fallback |
+| No router, mobile data off | Both phones discover/connect/chat using Wi-Fi Direct |
+| Discovery | Only LocalChat v1 service advertisements appear |
+| Pairing | Receiver accepts the system Wi-Fi Direct invitation |
+| Security code | All five groups match on both phones |
+| Only one phone confirms | Composer remains disabled on both |
+| Codes differ | Disconnect; no text exchange |
+| Text and Unicode | Correct text in both directions, including emoji and Urdu |
+| Large text | 4096-byte limit applied; longer UTF-8 payload rejected |
+| Delivery acknowledgement | Sender changes from sending to delivered after peer stores text |
+| Connection dropped before ack | Sender marks message unconfirmed; retains history |
+| Relaunch | Names, identity and encrypted-body history persist; sending leftovers are unconfirmed |
+| Reconnect | Fresh code, mandatory verification, same peer's saved history |
+| Simultaneous sending | Correct order per sender, no nonce/counter race |
+| Rename | Connection closes; tap Go nearby again to advertise new name |
+| Delete history | Messages/conversations disappear locally |
+| Peer leaves range | Connection ends or next send fails; no silent delivered status |
+| Third device connects | Single-session behavior; no unverified messages accepted |
+
+## Troubleshooting
+
+- Keep both apps in the foreground and both radios on. Some vendor firmware suppresses service discovery while a group is already formed.
+- Try scanning again on both phones after the 15-second scan window. A peer may remain in the current list until the next scan; tapping a stale peer can fail and require another scan.
+- If Wi-Fi Direct is busy, disconnect, close and reopen both apps, then try again. You may need to remove an existing Wi-Fi Direct connection in system settings.
+- On older Android, enable Location in system settings as well as granting permission. No app location data is collected.
+- Not all Android phones support Wi-Fi Direct. This version has no Bluetooth fallback.
+- A failed/unconfirmed status does not prove nondelivery; it only means no acknowledgement was received.
+- Emulator-to-emulator tests cannot validate the real Wi-Fi Direct path.
+
+Useful development commands:
+
+```bash
+flutter devices
+flutter run -d FIRST_DEVICE_ID
+flutter run -d SECOND_DEVICE_ID
+adb logcat -s flutter AndroidRuntime
+```
+
+Never include secret keys or private conversations in diagnostic logs. The native transport does not log frame contents.

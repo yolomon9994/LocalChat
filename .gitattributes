@@ -1,0 +1,7 @@
+* text=auto
+*.dart text eol=lf
+*.kt text eol=lf
+android/gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.png binary
