@@ -101,7 +101,96 @@ void main() {
       store.conversations(),
       throwsA(isA<SecretBoxAuthenticationError>()),
     );
+    await expectLater(
+      store.search('Private'),
+      throwsA(isA<SecretBoxAuthenticationError>()),
+    );
   });
+
+  test(
+    'Local search finds literal Unicode text across peers and directions without marking read',
+    () async {
+      await store.savePeer('bob', 'BÓB سلام');
+      await store.saveMessage(message());
+      await store.saveMessage(message(outgoing: false));
+      await store.saveMessage(message(peer: 'bob', outgoing: false));
+      final hits = await store.search('  PRIVATE  ');
+      expect(hits.messages.map((h) => (h.message.peerId, h.message.outgoing)), [
+        ('bob', false),
+        ('alice', false),
+        ('alice', true),
+      ]);
+      expect((await store.search('ALICE')).conversations.single.name, 'Alice');
+      final unicode = await store.search('سلام');
+      expect(unicode.messages.length, 3);
+      expect(unicode.conversations.single.id, 'bob');
+      await store.saveMessage(
+        const ChatMessage(
+          id: 'literal',
+          peerId: 'alice',
+          text: 'Literal %_ characters',
+          timestamp: 1,
+          outgoing: true,
+          status: 'delivered',
+        ),
+      );
+      expect((await store.search('%_')).messages.single.message.id, 'literal');
+      expect(
+        (await store.conversations()).map((p) => p.unreadCount),
+        everyElement(1),
+      );
+      expect((await store.search('   ')).messages, isEmpty);
+      expect((await store.search('absent')).messages, isEmpty);
+      final db = await openDatabase(databasePath);
+      expect(
+        (await db.query(
+          'messages',
+        )).every((r) => !(r['body'] as String).contains('Private text')),
+        isTrue,
+      );
+      await store.clearHistory();
+      expect((await store.search('Private')).messages, isEmpty);
+    },
+  );
+
+  test(
+    'Search scans beyond a batch, bounds newest matches and cancels obsolete work',
+    () async {
+      for (var i = 0; i < 106; i++) {
+        await store.saveMessage(
+          ChatMessage(
+            id: 'search-$i',
+            peerId: 'alice',
+            text: i % 52 == 0 ? 'Needle $i' : 'Other $i',
+            timestamp: i,
+            outgoing: false,
+            status: 'received',
+          ),
+        );
+      }
+      final all = await store.search('needle');
+      expect(all.messages.map((h) => h.message.id), [
+        'search-104',
+        'search-52',
+        'search-0',
+      ]);
+      expect(all.hasMoreMessages, isFalse);
+      final limited = await store.search('needle', limit: 2);
+      expect(limited.messages.map((h) => h.message.id), [
+        'search-104',
+        'search-52',
+      ]);
+      expect(limited.hasMoreMessages, isTrue);
+      var checks = 0;
+      final cancelled = await store.search(
+        'needle',
+        isCancelled: () => ++checks > 7,
+      );
+      expect(cancelled.messages, isEmpty);
+      expect(checks, 8);
+      expect((await store.conversations()).single.unreadCount, 106);
+    },
+  );
 
   test(
     'Unread summaries persist, deduplicate and clear only the opened peer',

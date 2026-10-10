@@ -35,3 +35,20 @@ class Conversation {
   final ChatMessage? latestMessage;
   final int unreadCount;
 }
+
+class MessageSearchHit {
+  const MessageSearchHit(this.conversation, this.message);
+  final Conversation conversation;
+  final ChatMessage message;
+}
+
+class LocalSearchResults {
+  const LocalSearchResults({
+    this.conversations = const [],
+    this.messages = const [],
+    this.hasMoreMessages = false,
+  });
+  final List<Conversation> conversations;
+  final List<MessageSearchHit> messages;
+  final bool hasMoreMessages;
+}

@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import '../core/models.dart';
 import '../services/chat_controller.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, required this.controller, this.routeObserver});
+  const ChatScreen({
+    super.key,
+    required this.controller,
+    this.routeObserver,
+    this.focusMessage,
+  });
   final ChatController controller;
   final RouteObserver<ModalRoute<dynamic>>? routeObserver;
+  final ChatMessage? focusMessage;
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
@@ -42,6 +49,8 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   void didPop() => widget.controller.setChatVisible(this, false);
   final _text = TextEditingController();
   final _scroll = ScrollController();
+  final _focusScroll = ScrollController();
+  late bool _showTarget = widget.focusMessage != null;
   bool _sending = false;
   Future<void> _send() async {
     if (_sending || _text.text.trim().isEmpty) return;
@@ -63,7 +72,118 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     widget.controller.setChatVisible(this, false);
     _text.dispose();
     _scroll.dispose();
+    _focusScroll.dispose();
     super.dispose();
+  }
+
+  bool _isTarget(ChatMessage message) {
+    final target = widget.focusMessage;
+    return _showTarget &&
+        target != null &&
+        target.peerId == message.peerId &&
+        target.id == message.id &&
+        target.outgoing == message.outgoing;
+  }
+
+  Widget _messageBubble(ChatMessage message) {
+    final colors = Theme.of(context).colorScheme;
+    final highlighted = _isTarget(message);
+    final foreground = message.outgoing
+        ? colors.onPrimaryContainer
+        : colors.onSurface;
+    final time = DateTime.fromMillisecondsSinceEpoch(
+      message.timestamp,
+    ).toLocal();
+    final stamp =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    return Align(
+      key: ValueKey((message.peerId, message.id, message.outgoing)),
+      alignment: message.outgoing
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * .8,
+        ),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: message.outgoing
+              ? colors.primaryContainer
+              : colors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(16),
+          border: highlighted
+              ? Border.all(color: colors.primary, width: 2)
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (highlighted)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'Search result',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: foreground),
+                ),
+              ),
+            SelectableText(message.text, style: TextStyle(color: foreground)),
+            const SizedBox(height: 5),
+            Text(
+              '$stamp${message.outgoing ? ' · ${message.status}' : ''}',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: foreground),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _messageList(ChatController chat) {
+    final pivot = _showTarget ? chat.messages.indexWhere(_isTarget) : -1;
+    if (pivot < 0) {
+      return ListView.builder(
+        controller: _scroll,
+        reverse: true,
+        padding: const EdgeInsets.all(16),
+        itemCount: chat.messages.length,
+        itemBuilder: (_, index) =>
+            _messageBubble(chat.messages[chat.messages.length - 1 - index]),
+      );
+    }
+    // Anchor the matched message directly. Both sides remain lazy and reachable,
+    // regardless of history length, bubble heights or text scale.
+    return CustomScrollView(
+      key: const ValueKey('search-message-history'),
+      controller: _focusScroll,
+      anchor: .25,
+      center: const ValueKey('search-anchor'),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, index) => _messageBubble(chat.messages[pivot - 1 - index]),
+              childCount: pivot,
+            ),
+          ),
+        ),
+        SliverPadding(
+          key: const ValueKey('search-anchor'),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, index) => _messageBubble(chat.messages[pivot + index]),
+              childCount: chat.messages.length - pivot,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -78,7 +198,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(c.selectedName.isEmpty ? 'Nearby chat' : c.selectedName),
+              Text(
+                c.selectedName.isEmpty ? 'Nearby chat' : c.selectedName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               Text(
                 c.isDemo
                     ? 'Demo • ${current ? c.state : 'Saved conversation'}'
@@ -86,10 +210,18 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                     ? c.state
                     : 'Saved conversation',
                 style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
           actions: [
+            if (_showTarget && !verifying)
+              IconButton(
+                tooltip: 'Jump to latest',
+                icon: const Icon(Icons.arrow_downward),
+                onPressed: () => setState(() => _showTarget = false),
+              ),
             if (c.connectedPeer != null || c.state == 'Connecting')
               IconButton(
                 tooltip: 'Disconnect',
@@ -107,6 +239,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   c.error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
+              ),
+            if (_showTarget && !verifying && !c.messages.any(_isTarget))
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('The matching message is no longer in this chat.'),
               ),
             if (verifying)
               Expanded(
@@ -184,75 +321,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                               : 'Connect and verify to start chatting.',
                         ),
                       )
-                    : ListView.builder(
-                        controller: _scroll,
-                        reverse: true,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: c.messages.length,
-                        itemBuilder: (context, index) {
-                          final m = c.messages[c.messages.length - 1 - index];
-                          final time = DateTime.fromMillisecondsSinceEpoch(
-                            m.timestamp,
-                          ).toLocal();
-                          final stamp =
-                              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-                          return Align(
-                            alignment: m.outgoing
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Container(
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.sizeOf(context).width * .8,
-                              ),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: m.outgoing
-                                    ? Theme.of(
-                                        context,
-                                      ).colorScheme.primaryContainer
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SelectableText(
-                                    m.text,
-                                    style: TextStyle(
-                                      color: m.outgoing
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimaryContainer
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.onSurface,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    '$stamp${m.outgoing ? ' · ${m.status}' : ''}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: m.outgoing
-                                              ? Theme.of(
-                                                  context,
-                                                ).colorScheme.onPrimaryContainer
-                                              : Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurface,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                    : _messageList(c),
               ),
             if (!verifying)
               SafeArea(

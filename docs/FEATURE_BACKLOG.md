@@ -3,7 +3,20 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Chats list improvements
+## Current milestone: Local chat search
+
+- [x] Search action in the Chats toolbar, with conversation-name and message results.
+- [x] Case-insensitive literal substring matching, including Unicode text.
+- [x] Search encrypted history in memory, with no extra plaintext index.
+- [x] Debounce typing, cancel obsolete results and refresh on new messages/deletion.
+- [x] Open a conversation or anchor/highlight a matching message; Jump to latest.
+- [x] Search preserves unread counts; lock removes query/results along with routes.
+- [x] Storage, stale-result, live-update, long-history jump and phone-layout checks.
+- [x] All 61 tests pass, clean analysis and fresh Android/browser builds.
+- [ ] User tests local search on a phone and commits this milestone;
+      see [search checklist](SEARCH.md).
+
+## Chats list improvements: implemented and committed
 
 - [x] Latest-message previews, with a You prefix for outgoing text.
 - [x] Last activity time: time today, Yesterday, or an older date.
@@ -14,8 +27,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Database upgrade preserves history; existing messages start read.
 - [x] Migration, persistence, visibility, lock, ordering and enlarged-text checks.
 - [x] All 52 tests pass, clean analysis and fresh Android/browser builds.
-- [ ] User tests the Chats list on phones and commits this milestone;
-      see [Chats list checklist](CHAT_LIST.md).
+- [x] User reviews and commits the Chats list milestone (`c233159`).
+- [ ] Physical phone Chats list testing; see [checklist](CHAT_LIST.md).
 
 ## Themes: implemented and committed
 
@@ -68,7 +81,7 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 - [x] Unread badges, latest-message previews, latest activity timestamps and
       recent-message ordering.
-- [ ] Local conversation and message search.
+- [x] Local conversation and message search.
 - [ ] Saved drafts across navigation and restarts.
 - [ ] Offline outbox, reconnection and retry after verification; distinguish
       queued, delivered and unconfirmed messages; prevent duplicate resends.
@@ -92,7 +105,7 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 1. Chats/Nearby navigation (committed).
 2. Themes (committed).
-3. Chats list previews/unread state (current milestone), then search, drafts
+3. Chats list previews/unread state (committed), local search (current), then drafts
    and conversation management as separate milestones.
 4. Encrypted backups and phone migration.
 5. Reliable reconnection, queued messages and notifications.

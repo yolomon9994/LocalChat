@@ -212,6 +212,72 @@ class LocalStore {
     );
   }
 
+  Future<LocalSearchResults> search(
+    String query, {
+    bool Function()? isCancelled,
+    int limit = 100,
+  }) async {
+    if (limit < 1) throw ArgumentError.value(limit, 'limit');
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty || isCancelled?.call() == true) {
+      return const LocalSearchResults();
+    }
+    final people = await _database.query(
+      'peers',
+      orderBy: 'updated DESC, id ASC',
+    );
+    final names = people
+        .where((p) => (p['name'] as String).toLowerCase().contains(needle))
+        .map(
+          (p) => Conversation(
+            p['id'] as String,
+            p['name'] as String,
+            p['updated'] as int,
+          ),
+        )
+        .toList();
+    final hits = <MessageSearchHit>[];
+    int? before;
+    while (true) {
+      if (isCancelled?.call() == true) return const LocalSearchResults();
+      // Scan ciphertext in small batches. No plaintext index or duplicate body.
+      final rows = await _database.rawQuery('''
+        SELECT m.rowid AS search_rowid, m.*, p.name AS peer_name, p.updated AS peer_updated
+        FROM messages m JOIN peers p ON p.id = m.peer
+        ${before == null ? '' : 'WHERE m.rowid < ?'}
+        ORDER BY m.rowid DESC LIMIT 100
+      ''', before == null ? [] : [before]);
+      if (rows.isEmpty) break;
+      for (final row in rows) {
+        if (isCancelled?.call() == true) return const LocalSearchResults();
+        final message = await _decodeMessage(row);
+        if (!message.text.toLowerCase().contains(needle)) continue;
+        if (hits.length == limit) {
+          return LocalSearchResults(
+            conversations: names,
+            messages: hits,
+            hasMoreMessages: true,
+          );
+        }
+        hits.add(
+          MessageSearchHit(
+            Conversation(
+              message.peerId,
+              row['peer_name'] as String,
+              row['peer_updated'] as int,
+            ),
+            message,
+          ),
+        );
+      }
+      before = rows.last['search_rowid'] as int;
+      // Give UI, new queries and live chat writes time between batches.
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (isCancelled?.call() == true) return const LocalSearchResults();
+    return LocalSearchResults(conversations: names, messages: hits);
+  }
+
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
       await txn.delete('messages');

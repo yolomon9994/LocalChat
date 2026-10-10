@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/models.dart';
 import 'package:local_chat/demo/demo_store.dart';
 import 'package:local_chat/services/chat_controller.dart';
+import 'package:local_chat/services/chat_search_controller.dart';
 
 import 'chat_controller_test.dart' show LinkedTransport, settle;
 
@@ -31,6 +32,27 @@ void main() {
     await ta.bus.close();
     await tb.bus.close();
   });
+
+  test(
+    'Live search updates on received text without marking it read',
+    () async {
+      final search = ChatSearchController(b, debounce: Duration.zero);
+      addTearDown(search.dispose);
+      search.setQuery('fresh');
+      await settle();
+      expect(search.results.messages, isEmpty);
+      await a.sendText('A fresh incoming message');
+      await settle();
+      expect(
+        search.results.messages.single.message.text,
+        'A fresh incoming message',
+      );
+      expect(b.conversations.single.unreadCount, 1);
+      await b.clearHistory();
+      await settle();
+      expect(search.results.messages, isEmpty);
+    },
+  );
 
   test(
     'Receiving off-screen is unread; selection alone does not clear it',

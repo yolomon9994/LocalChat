@@ -1,5 +1,37 @@
 # Validation for v0.1.0
 
+## Local search milestone — 2026-10-10
+
+Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all 61 tests passed (52 existing + 9 search checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning recorded below.
+
+Real SQLite checks cover literal/case/Unicode search, peer/direction scoping,
+unchanged unread state, history deletion, results across multiple ciphertext
+batches, newest-match limits and cancellation. The existing ciphertext-tamper
+test now also confirms that search rejects modified stored message bodies.
+
+Search-controller checks cover obsolete completion/errors, clear/dispose/retry
+and history invalidation. An encrypted in-memory peer exchange verifies that a
+new incoming message refreshes results without being marked read by search.
+Widget checks open name matches, preserve the query on Back, open an older
+message among 180 variable-height messages with direction-specific identity,
+scroll both sides of the match and return to latest. They also exercise deleted
+targets, private-result removal when locked, fresh search after unlocking,
+Unicode snippets and large text/long queries with a phone-sized keyboard layout.
+
+Search stores no plaintext index or query log and introduces no schema change
+or new dependency. It scans/decrypts batches, so large histories take longer;
+the UI limits message matches to the newest 100 and offers query refinement.
+Protocol, native Android implementation and app-lock authentication behavior
+are unchanged. Physical phone layout/lifecycle checks remain user testing;
+follow [the search checklist](SEARCH.md) before committing.
+
 ## Chats list milestone — 2026-10-10
 
 Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.

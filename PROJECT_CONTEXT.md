@@ -14,8 +14,35 @@ background delivery and notifications are also future work.
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
 Navigation was committed as `abe4dc3`, and themes as `b353956`.
-The current milestone is Chats list improvements. Work on one milestone at a
+Chats list improvements were committed as `c233159`; the current milestone is
+local chat search. Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Local search milestone
+
+- Chats has a toolbar Search action. `chat_search_screen.dart` displays
+  separate name and message matches, context snippets, empty/error/retry states
+  and a clear action. Matching is a case-insensitive literal substring;
+  surrounding query whitespace is ignored. Browser behavior matches Android.
+- `LocalStore.search` decrypts ciphertext batches in memory, with cancellation
+  checks and event-loop yields. It returns the newest 100 message matches and
+  a refinement notice if more exist. No plaintext index, schema change or new
+  dependency is introduced. Larger histories require scanning more ciphertext.
+- `chat_search_controller.dart` debounces typing and rejects obsolete results
+  and errors. A `ChatController.historyRevision` signal refreshes search on new
+  messages, verified peer-name updates and history deletion. Search runs outside
+  the serialized protocol queue and does not mark messages read.
+- Selecting a result reloads history; `viewHistory` now returns success and
+  updates selection only after history/summary loads succeed. Failed opens stay
+  on the current screen. A message result passes full peer/id/direction identity.
+- `ChatScreen` anchors the matching message with two lazy slivers, highlights
+  its bubble and offers Jump to latest. Older/newer history remains reachable
+  with variable message heights. Missing/deleted targets show a notice.
+- Locking disposes the search navigator route, query and results and cancels
+  pending work. Returning from a result normally preserves the search query.
+- Added nine search checks and extended ciphertext-authentication coverage.
+  Validation: all 61 tests pass, clean analysis and successful Android/browser builds.
+  Phone checks are in `docs/SEARCH.md`. This milestone remains uncommitted.
 
 ## Chats list milestone
 
@@ -39,7 +66,7 @@ time; the user will stage, commit and push it themselves after testing.
   Added nine storage, controller and list checks and extended existing demo and
   ciphertext-tampering coverage. See `docs/CHAT_LIST.md` for phone checks.
   Validation: all 52 tests pass, clean analysis and successful Android/browser builds.
-  This milestone remains unstaged and uncommitted for the user.
+  The user committed this milestone as `c233159`.
 
 ## Theme milestone
 
@@ -144,7 +171,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the Chats list milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the local search milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

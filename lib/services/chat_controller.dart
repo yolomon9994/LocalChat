@@ -29,6 +29,7 @@ class ChatController extends ChangeNotifier {
   List<ChatMessage> messages = [];
   String? selectedPeer;
   String selectedName = '';
+  int historyRevision = 0;
   Object? _visibleChat;
   bool _appAccessible = true;
   bool _appForeground = true;
@@ -103,6 +104,7 @@ class ChatController extends ChangeNotifier {
     try {
       await store.open();
       conversations = await store.conversations();
+      historyRevision++;
       _subscription = transport.events.listen(
         (event) {
           unawaited(_run(() => _event(event)));
@@ -250,6 +252,7 @@ class ChatController extends ChangeNotifier {
             status: 'received',
           ),
         );
+        historyRevision++;
         await _sendPayload({'type': 'ack', 'id': id});
         await _refresh();
       case 'ack':
@@ -286,6 +289,7 @@ class ChatController extends ChangeNotifier {
       _timeout?.cancel();
       state = 'Encrypted • verified';
       await store.savePeer(connectedPeer!, _session!.peerName!);
+      historyRevision++;
       await _refresh();
     } else {
       state = localVerified
@@ -319,6 +323,7 @@ class ChatController extends ChangeNotifier {
         status: 'sending',
       ),
     );
+    historyRevision++;
     try {
       await _sendPayload({
         'type': 'text',
@@ -352,12 +357,26 @@ class ChatController extends ChangeNotifier {
     conversations = await store.conversations();
   }
 
-  Future<void> viewHistory(Conversation peer) => _run(() async {
-    selectedPeer = peer.id;
-    selectedName = peer.name;
-    await _refresh();
-    notifyListeners();
-  });
+  Future<bool> viewHistory(Conversation peer) async {
+    var opened = false;
+    await _run(() async {
+      error = null;
+      final history = await store.messages(peer.id);
+      final summaries = await store.conversations();
+      selectedPeer = peer.id;
+      selectedName = peer.name;
+      messages = history;
+      conversations = summaries;
+      if (_canReadSelected) {
+        await store.markRead(peer.id);
+        conversations = await store.conversations();
+      }
+      opened = true;
+      notifyListeners();
+    });
+    return opened;
+  }
+
   Future<void> viewConnected() => _run(() async {
     if (connectedPeer == null) return;
     selectedPeer = connectedPeer;
@@ -381,6 +400,7 @@ class ChatController extends ChangeNotifier {
   });
   Future<void> clearHistory() => _run(() async {
     await store.clearHistory();
+    historyRevision++;
     messages = [];
     conversations = [];
     notifyListeners();

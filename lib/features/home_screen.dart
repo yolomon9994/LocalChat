@@ -5,6 +5,7 @@ import '../services/app_lock_controller.dart';
 import '../services/appearance_controller.dart';
 import '../services/chat_controller.dart';
 import 'chat_screen.dart';
+import 'chat_search_screen.dart';
 import 'chats_tab.dart';
 import 'nearby_tab.dart';
 import 'settings_screen.dart';
@@ -46,8 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openHistory(Conversation peer) async {
-    await widget.controller.viewHistory(peer);
-    if (mounted) _chat();
+    final opened = await widget.controller.viewHistory(peer);
+    if (mounted && opened) _chat();
   }
 
   Future<void> _connect(Peer peer) async {
@@ -64,6 +65,19 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('LocalChat'),
           actions: [
+            if (_selectedTab == 0 && c.initialized)
+              IconButton(
+                tooltip: 'Search chats',
+                icon: const Icon(Icons.search),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ChatSearchScreen(
+                      controller: c,
+                      routeObserver: widget.routeObserver,
+                    ),
+                  ),
+                ),
+              ),
             IconButton(
               tooltip: 'Settings',
               icon: const Icon(Icons.tune),

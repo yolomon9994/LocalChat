@@ -93,6 +93,43 @@ class DemoStore extends LocalStore {
   }
 
   @override
+  Future<LocalSearchResults> search(
+    String query, {
+    bool Function()? isCancelled,
+    int limit = 100,
+  }) async {
+    if (limit < 1) throw ArgumentError.value(limit, 'limit');
+    final needle = query.trim().toLowerCase();
+    if (needle.isEmpty || isCancelled?.call() == true) {
+      return const LocalSearchResults();
+    }
+    final people = await conversations();
+    final names = people
+        .where((p) => p.name.toLowerCase().contains(needle))
+        .toList();
+    final hits = <MessageSearchHit>[];
+    var scanned = 0;
+    for (final message in _messages.values.toList().reversed) {
+      if (isCancelled?.call() == true) return const LocalSearchResults();
+      final peer = _people[message.peerId];
+      if (peer != null && message.text.toLowerCase().contains(needle)) {
+        if (hits.length == limit) {
+          return LocalSearchResults(
+            conversations: names,
+            messages: hits,
+            hasMoreMessages: true,
+          );
+        }
+        hits.add(MessageSearchHit(peer, message));
+      }
+      if (++scanned % 100 == 0) await Future<void>.delayed(Duration.zero);
+    }
+    return isCancelled?.call() == true
+        ? const LocalSearchResults()
+        : LocalSearchResults(conversations: names, messages: hits);
+  }
+
+  @override
   Future<void> clearHistory() async {
     _people.clear();
     _messages.clear();
