@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import '../services/app_lock_controller.dart';
+import '../services/appearance_controller.dart';
 import '../services/chat_controller.dart';
 import 'chat_screen.dart';
 import 'chats_tab.dart';
@@ -9,9 +10,15 @@ import 'nearby_tab.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.controller, this.appLock});
+  const HomeScreen({
+    super.key,
+    required this.controller,
+    this.appLock,
+    this.appearance,
+  });
   final ChatController controller;
   final AppLockController? appLock;
+  final AppearanceController? appearance;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -57,8 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.tune),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) =>
-                      SettingsScreen(controller: c, appLock: widget.appLock),
+                  builder: (_) => SettingsScreen(
+                    controller: c,
+                    appLock: widget.appLock,
+                    appearance: widget.appearance,
+                  ),
                 ),
               ),
             ),

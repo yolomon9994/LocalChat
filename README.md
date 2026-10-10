@@ -14,10 +14,13 @@ Android-first Flutter app for nearby, encrypted, one-to-one text conversations o
 - Separate Chats and Nearby tabs with bottom navigation; Settings in the toolbar.
 - Optional six-digit app PIN, biometric unlock on supported Android phones,
   automatic locking on launch/background, and manual Lock now in Settings.
+- Light, dark and follow-system themes with mint, blue, purple and amber palettes;
+  choose them in Settings → Appearance. Android remembers your choices.
 
 See [app lock setup and testing](docs/APP_LOCK.md) and the
 [feature backlog](docs/FEATURE_BACKLOG.md) for planned additions.
-See [Chats / Nearby navigation](docs/NAVIGATION.md) for this milestone's phone checks.
+See [Chats / Nearby navigation](docs/NAVIGATION.md) and
+[theme setup and testing](docs/THEMES.md) for phone checks.
 
 Bluetooth, media, group chat, relaying, iOS, background delivery, retransmission and notifications are future work. Version 0.1 only operates while both apps remain open. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
@@ -59,6 +62,7 @@ Chats is the default tab and lists saved conversations and the active-chat short
 The simulated friend sends a welcome message, acknowledges your messages and
 replies automatically. You can disconnect, reopen history, switch demo friends,
 rename your profile and delete history in Settings.
+You can also try every theme in Settings → Appearance; browser choices reset on reload.
 
 The persistent demo notice appears on every screen. Devices, peer confirmation,
 messages and delivery status are simulated inside the browser tab: **no real

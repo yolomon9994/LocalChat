@@ -4,6 +4,7 @@ import 'package:local_chat/features/chat_screen.dart';
 import 'package:local_chat/features/settings_screen.dart';
 import 'package:local_chat/main.dart';
 import 'package:local_chat/services/chat_controller.dart';
+import 'package:local_chat/services/appearance_controller.dart';
 import 'chat_controller_test.dart' show LinkedTransport, MemoryStore;
 import 'lock_test_support.dart';
 
@@ -30,7 +31,11 @@ void main() {
     addTearDown(c.dispose);
     final lock = testLock();
     addTearDown(lock.dispose);
-    await tester.pumpWidget(LocalChatApp(controller: c, appLock: lock));
+    final appearance = AppearanceController(MemoryAppearanceStorage());
+    addTearDown(appearance.dispose);
+    await tester.pumpWidget(
+      LocalChatApp(controller: c, appLock: lock, appearance: appearance),
+    );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.byTooltip('Settings'));

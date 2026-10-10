@@ -3,15 +3,27 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Chats / Nearby navigation
+## Current milestone: Themes
+
+- [x] Light, dark and follow-system modes in Settings → Appearance.
+- [x] Mint, blue, purple and amber palettes across tabs, chats, Settings and lock.
+- [x] Save Android choices independently of chat history; temporary browser choices.
+- [x] Readable theme colors for chat bubbles and connection/demo notices.
+- [x] Automated persistence, failure recovery, system mode, navigation, lock,
+      contrast and small-screen checks.
+- [x] All 43 tests pass, clean analysis and fresh Android/browser builds.
+- [ ] User tests themes on a phone and commits this milestone;
+      see [theme checklist](THEMES.md).
+
+## Chats / Nearby navigation: implemented and committed
 
 - [x] Default Chats tab with saved conversations and an active-chat shortcut.
 - [x] Separate Nearby tab with discovery, scanning and connection controls.
 - [x] Bottom navigation; Settings remains in the toolbar on either tab.
 - [x] Keep connection state and separate scroll positions when switching tabs.
 - [x] Automated navigation checks (36 passing tests), clean analysis and fresh Android/browser builds.
-- [ ] User tests the new navigation on a phone and commits this milestone;
-      see [phone checklist](NAVIGATION.md).
+- [x] User reviews and commits the navigation milestone (`abe4dc3`).
+- [ ] Physical phone navigation testing; see [phone checklist](NAVIGATION.md).
 
 ## App lock: implemented and committed
 
@@ -30,8 +42,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [ ] Group chats: create/invite, member list, verification, per-member delivery.
       Start with a nearby host that must remain connected; plan group encryption
       and membership changes before changing the current one-peer protocol.
-- [ ] Theme modes: light, dark, and follow system.
-- [ ] Color palettes: mint, blue, purple, amber; persist the selection.
+- [x] Theme modes: light, dark, and follow system.
+- [x] Color palettes: mint, blue, purple, amber; persist the Android selection.
 - [x] Bottom navigation with separate Chats and Nearby screens; toolbar Settings.
 - [ ] Portable chat export/import: password-encrypted archive, transferable
       without Internet, import preview, safe merging and duplicate detection.
@@ -63,8 +75,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 ## Proposed order after app lock
 
-1. Chats/Nearby navigation (current milestone).
-2. Themes, as a separate milestone after navigation is tested and committed.
+1. Chats/Nearby navigation (committed).
+2. Themes (current milestone).
 3. Chat management, search, unread state and drafts.
 4. Encrypted backups and phone migration.
 5. Reliable reconnection, queued messages and notifications.

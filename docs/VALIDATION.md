@@ -1,5 +1,29 @@
 # Validation for v0.1.0
 
+## Theme milestone — 2026-10-10
+
+Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all 43 tests passed (36 existing + 7 theme checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning recorded below.
+
+Theme checks cover saved mode/palette restoration, malformed/unreadable
+preferences, failed-save recovery, system brightness and fixed-mode overrides.
+Widget checks change appearance through Settings and retain the current route,
+unsaved name edit and selected tab, then check themed locking/unlocking.
+All eight light/dark palette combinations meet 4.5:1 text contrast for actual
+incoming/outgoing bubbles and for connection/demo notice color pairs. Controls
+also fit a 320 × 568 screen at 1.5× text size without layout exceptions.
+
+Tests use memory preference storage and platform-brightness test values.
+Real Android persistence, system-theme changes and visual checks remain phone
+testing; follow [the theme checklist](THEMES.md) before committing. No new
+dependencies, protocol, chat-storage or native Android changes were introduced.
+
 ## Chats / Nearby navigation milestone — 2026-10-10
 
 Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.

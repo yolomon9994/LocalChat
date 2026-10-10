@@ -13,8 +13,27 @@ background delivery and notifications are also future work.
 
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
-The current milestone is Chats/Nearby bottom navigation. Work on one milestone
+Navigation was committed as `abe4dc3`; the current milestone is themes.
+Work on one milestone
 at a time; the user will stage, commit and push it themselves after testing.
+
+## Theme milestone
+
+- Settings → Appearance offers Light, Dark and Follow system, plus Mint, Blue,
+  Purple and Amber palettes. Defaults remain Dark/Mint until the user changes them.
+- `appearance_controller.dart` saves a versioned preference separately in
+  secure storage on Android. Browser demo preferences stay in memory and reset
+  on reload. Loading failure uses defaults with a recoverable Settings error;
+  a failed save preserves the current selection and offers retry.
+- `main.dart` loads appearance before displaying the app and supplies both
+  Material 3 brightness themes. Preferences are independent of the lock gate.
+  Theme changes preserve pushed routes, Settings edits and selected tabs.
+- Incoming/outgoing chat text, bubble backgrounds and connection/demo notices
+  use matching ColorScheme colors. The lock screen uses the same appearance.
+- Added seven checks for persistence, storage errors, device brightness,
+  navigation/lock coverage, eight-theme message contrast and enlarged text.
+  Validation: all 43 tests pass, clean analysis, successful Android/browser builds.
+  Phone checks are in `docs/THEMES.md`. This milestone remains uncommitted.
 
 ## Chats / Nearby navigation milestone
 
@@ -27,10 +46,9 @@ at a time; the user will stage, commit and push it themselves after testing.
   state. Returning from a chat or Settings keeps the selected tab.
 - App locking removes the entire shell, including both tabs; unlocking starts
   on Chats. Chat protocol and storage remain owned by the same controller.
-- Themes remain the next separate milestone after navigation is committed.
 - Validation: clean analysis, 36 passing tests, successful browser and Android
   debug APK builds. Phone navigation checks are in `docs/NAVIGATION.md`; the
-  changes remain unstaged and uncommitted for the user.
+  milestone was committed by the user as `abe4dc3`.
 
 ## App lock milestone
 
@@ -102,7 +120,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the navigation milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the theme milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

@@ -10,6 +10,7 @@ import 'services/transport.dart';
 import 'features/home_screen.dart';
 import 'features/app_lock_screen.dart';
 import 'services/app_lock_controller.dart';
+import 'services/appearance_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,9 +23,15 @@ ChatController createController() => kIsWeb
     : ChatController(WifiDirectTransport(), LocalStore());
 
 class LocalChatApp extends StatefulWidget {
-  const LocalChatApp({super.key, required this.controller, this.appLock});
+  const LocalChatApp({
+    super.key,
+    required this.controller,
+    this.appLock,
+    this.appearance,
+  });
   final ChatController controller;
   final AppLockController? appLock;
+  final AppearanceController? appearance;
   @override
   State<LocalChatApp> createState() => _LocalChatAppState();
 }
@@ -35,6 +42,10 @@ class _LocalChatAppState extends State<LocalChatApp>
       widget.appLock ??
       AppLockController.platform(isDemo: widget.controller.isDemo);
   bool _startedChat = false;
+  late final AppearanceController _appearance =
+      widget.appearance ??
+      AppearanceController.platform(isDemo: widget.controller.isDemo);
+  late final Listenable _changes = Listenable.merge([_lock, _appearance]);
   ChatController get controller => widget.controller;
 
   @override
@@ -43,6 +54,7 @@ class _LocalChatAppState extends State<LocalChatApp>
     WidgetsBinding.instance.addObserver(this);
     _lock.addListener(_accessChanged);
     unawaited(_lock.initialize());
+    unawaited(_appearance.initialize());
   }
 
   void _accessChanged() {
@@ -61,19 +73,22 @@ class _LocalChatAppState extends State<LocalChatApp>
     WidgetsBinding.instance.removeObserver(this);
     _lock.removeListener(_accessChanged);
     if (widget.appLock == null) _lock.dispose();
+    if (widget.appearance == null) _appearance.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: _lock,
+    listenable: _changes,
     builder: (context, _) => MaterialApp(
       title: 'LocalChat',
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
         // Remove the whole Navigator while locked. Pushed routes, dialogs,
         // keyboard shortcuts and the system back button cannot expose a chat.
-        final content = _lock.canAccess
+        final content = _appearance.loading
+            ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+            : _lock.canAccess
             ? child!
             : Navigator(
                 key: const ValueKey('lock-navigator'),
@@ -92,15 +107,22 @@ class _LocalChatAppState extends State<LocalChatApp>
                 children: [
                   Material(
                     color: Theme.of(context).colorScheme.tertiaryContainer,
-                    child: const SafeArea(
-                      bottom: false,
-                      child: Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Text(
-                          'BROWSER DEMO — simulated devices and messages. '
-                          'No real Wi-Fi Direct communication. '
-                          'History and settings reset on reload.',
-                          textAlign: TextAlign.center,
+                    child: DefaultTextStyle.merge(
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onTertiaryContainer,
+                      ),
+                      child: const SafeArea(
+                        bottom: false,
+                        child: Padding(
+                          padding: EdgeInsets.all(10),
+                          child: Text(
+                            'BROWSER DEMO — simulated devices and messages. '
+                            'No real Wi-Fi Direct communication. '
+                            'History and settings reset on reload.',
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
                     ),
@@ -110,21 +132,14 @@ class _LocalChatAppState extends State<LocalChatApp>
               )
             : content;
       },
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff48d8b0),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xff101716),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-          filled: true,
-        ),
-        appBarTheme: const AppBarTheme(centerTitle: false),
+      themeMode: _appearance.mode,
+      theme: buildAppTheme(_appearance.palette, Brightness.light),
+      darkTheme: buildAppTheme(_appearance.palette, Brightness.dark),
+      home: HomeScreen(
+        controller: controller,
+        appLock: _lock,
+        appearance: _appearance,
       ),
-      home: HomeScreen(controller: controller, appLock: _lock),
     ),
   );
 }

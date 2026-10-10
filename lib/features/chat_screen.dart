@@ -136,6 +136,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       ? 'Demo chat • simulated peer and delivery acknowledgements'
                       : 'Verified connection • messages are encrypted',
                   textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
                 ),
               ),
             if (!verifying)
@@ -175,19 +178,41 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ? Theme.of(
                                         context,
                                       ).colorScheme.primaryContainer
-                                    : const Color(0xff26302e),
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.surfaceContainerHigh,
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  SelectableText(m.text),
+                                  SelectableText(
+                                    m.text,
+                                    style: TextStyle(
+                                      color: m.outgoing
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimaryContainer
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                    ),
+                                  ),
                                   const SizedBox(height: 5),
                                   Text(
                                     '$stamp${m.outgoing ? ' · ${m.status}' : ''}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelSmall,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: m.outgoing
+                                              ? Theme.of(
+                                                  context,
+                                                ).colorScheme.onPrimaryContainer
+                                              : Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurface,
+                                        ),
                                   ),
                                 ],
                               ),

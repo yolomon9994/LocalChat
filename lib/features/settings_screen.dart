@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import '../services/chat_controller.dart';
 import '../services/app_lock_controller.dart';
 import 'app_lock_settings.dart';
+import '../services/appearance_controller.dart';
+import 'appearance_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.controller, this.appLock});
+  const SettingsScreen({
+    super.key,
+    required this.controller,
+    this.appLock,
+    this.appearance,
+  });
   final ChatController controller;
   final AppLockController? appLock;
+  final AppearanceController? appearance;
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -51,6 +59,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 28),
         if (widget.appLock != null) AppLockSettings(lock: widget.appLock!),
+        if (widget.appearance != null)
+          AppearanceSettings(appearance: widget.appearance!),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.lock_outline),
