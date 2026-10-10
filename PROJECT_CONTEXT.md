@@ -14,9 +14,41 @@ background delivery and notifications are also future work.
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
 Navigation was committed as `abe4dc3`, and themes as `b353956`.
-Chats list improvements were committed as `c233159`; the current milestone is
-local chat search. Work on one milestone at a
+Chats list improvements were committed as `c233159`, and local search as
+`a2c7aa3`; the current milestone is saved message drafts. Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Saved drafts milestone
+
+- Every selected conversation has its own composer draft. Offline history
+  allows editing; Send remains gated on an active, verified connection. Drafts
+  preserve whitespace, newlines and Unicode exactly; sending trims as before.
+- `LocalStore` schema 3 adds `drafts(peer, body)`. Draft text is encrypted with
+  the existing history key using XChaCha20-Poly1305 and domain-separated AAD
+  `JSON(["LocalChat/draft/1", peer])`. Empty drafts delete their record. Version
+  1/2 upgrades preserve messages, identity and read state. Drafts are excluded
+  from search, previews, activity sorting and unread state.
+- `draft_controller.dart` belongs to `ChatController`, rather than a route.
+  It loads per peer and serializes/coalesces writes outside the protocol queue.
+  Edits update memory immediately and enqueue persistence without a debounce.
+  Storage failures keep edits in memory with generic retry notices; a failed
+  load disables editing until retried so saved text is not overwritten.
+- `sendText` returns a per-operation success boolean and captures the selected
+  peer and matching draft revision. It clears only that revision after the
+  transport accepts the frame, even after navigating away or locking. Newer
+  edits, other peers and failed/invalid sends keep their drafts. Transport
+  acceptance does not mean delivered; existing acknowledgements still decide
+  delivery status. There is no offline outbox or automatic resend.
+- History deletion runs on the draft write queue and transactionally clears
+  messages, drafts and peers. A generation invalidates queued older edits;
+  cached drafts and open composers reset only after successful deletion.
+  Deleted offline conversations are deselected; the active session can continue.
+- Locking disposes the composer route; reopening after unlocking restores its
+  saved text. Plaintext can remain in controller memory under the existing app
+  lock model. Browser drafts use `DemoStore` memory and reset with the tab.
+- All 73 tests pass, static analysis is clean and Android/browser builds succeed;
+  results are in `docs/VALIDATION.md`. Phone testing is in `docs/DRAFTS.md`. Changes remain
+  uncommitted for the user.
 
 ## Local search milestone
 
@@ -42,7 +74,7 @@ time; the user will stage, commit and push it themselves after testing.
   pending work. Returning from a result normally preserves the search query.
 - Added nine search checks and extended ciphertext-authentication coverage.
   Validation: all 61 tests pass, clean analysis and successful Android/browser builds.
-  Phone checks are in `docs/SEARCH.md`. This milestone remains uncommitted.
+  Phone checks are in `docs/SEARCH.md`. The user committed this as `a2c7aa3`.
 
 ## Chats list milestone
 
@@ -171,7 +203,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the local search milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the saved drafts milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

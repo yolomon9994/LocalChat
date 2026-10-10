@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
@@ -18,6 +19,49 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with RouteAware {
   ModalRoute<dynamic>? _route;
+  String? _draftPeer;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_chatChanged);
+    widget.controller.drafts.addListener(_draftChanged);
+    _chatChanged();
+  }
+
+  void _chatChanged() {
+    final peer = widget.controller.selectedPeer;
+    if (peer == _draftPeer) return;
+    _draftPeer = peer;
+    _text.clear();
+    if (peer != null) {
+      _restoreDraft();
+      unawaited(widget.controller.drafts.load(peer));
+    }
+  }
+
+  void _restoreDraft() {
+    final peer = _draftPeer;
+    final text = peer == null ? '' : widget.controller.drafts.textFor(peer);
+    if (_text.text != text) {
+      _text.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+  }
+
+  void _draftChanged() {
+    if (!mounted) return;
+    _restoreDraft();
+    final peer = _draftPeer;
+    if (peer != null &&
+        !widget.controller.drafts.isLoaded(peer) &&
+        widget.controller.drafts.errorFor(peer) == null) {
+      unawaited(widget.controller.drafts.load(peer));
+    }
+    setState(() {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -53,14 +97,15 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   late bool _showTarget = widget.focusMessage != null;
   bool _sending = false;
   Future<void> _send() async {
-    if (_sending || _text.text.trim().isEmpty) return;
+    if (_sending || !widget.controller.canSend || _text.text.trim().isEmpty) {
+      return;
+    }
     final text = _text.text;
     setState(() {
       _sending = true;
     });
     await widget.controller.sendText(text);
     if (!mounted) return;
-    if (widget.controller.error == null) _text.clear();
     setState(() {
       _sending = false;
     });
@@ -68,6 +113,8 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
 
   @override
   void dispose() {
+    widget.controller.removeListener(_chatChanged);
+    widget.controller.drafts.removeListener(_draftChanged);
     widget.routeObserver?.unsubscribe(this);
     widget.controller.setChatVisible(this, false);
     _text.dispose();
@@ -193,6 +240,10 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
       final c = widget.controller;
       final current = c.selectedPeer == c.connectedPeer;
       final verifying = c.code != null && !c.ready && current;
+      final draftReady = _draftPeer != null && c.drafts.isLoaded(_draftPeer!);
+      final draftError = _draftPeer == null
+          ? null
+          : c.drafts.errorFor(_draftPeer!);
       return Scaffold(
         appBar: AppBar(
           title: Column(
@@ -324,6 +375,27 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                     : _messageList(c),
               ),
             if (!verifying)
+              if (draftError != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          draftError,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => c.drafts.retry(_draftPeer!),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+            if (!verifying)
               SafeArea(
                 top: false,
                 child: Padding(
@@ -333,8 +405,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                     children: [
                       Expanded(
                         child: TextField(
+                          key: const ValueKey('message-composer'),
                           controller: _text,
-                          enabled: c.canSend && !_sending,
+                          enabled: draftReady && !_sending,
                           minLines: 1,
                           maxLines: 5,
                           maxLength: 4096,
@@ -342,16 +415,20 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                           decoration: InputDecoration(
                             hintText: c.canSend
                                 ? 'Message…'
-                                : 'Connect and verify first',
+                                : 'Draft a message…',
                             counterText: '',
                           ),
                           onSubmitted: (_) => _send(),
+                          onChanged: (text) =>
+                              c.drafts.setText(_draftPeer!, text),
                         ),
                       ),
                       const SizedBox(width: 10),
                       IconButton.filled(
                         tooltip: 'Send',
-                        onPressed: c.canSend && !_sending ? _send : null,
+                        onPressed: c.canSend && draftReady && !_sending
+                            ? _send
+                            : null,
                         icon: _sending
                             ? const SizedBox(
                                 height: 20,

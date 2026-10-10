@@ -5,12 +5,14 @@ import '../core/local_store.dart';
 import '../core/models.dart';
 import '../core/secure_session.dart';
 import 'transport.dart';
+import 'draft_controller.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(this.transport, this.store, {this.isDemo = false});
   final bool isDemo;
   final Transport transport;
   final LocalStore store;
+  late final drafts = DraftController(store);
   StreamSubscription<Map<String, dynamic>>? _subscription;
   Future<void> _queue = Future<void>.value();
   SecureSession? _session;
@@ -302,54 +304,77 @@ class ChatController extends ChangeNotifier {
     await transport.send(jsonEncode(await _session!.encrypt(payload)));
   }
 
-  Future<void> sendText(String text) => _run(() async {
-    error = null;
-    if (!canSend) throw StateError('Verify both phones before sending');
-    text = text.trim();
-    if (text.isEmpty || utf8.encode(text).length > 4096) {
-      throw StateError('Messages must be 1–4096 UTF-8 bytes');
+  Future<bool> sendText(String text) async {
+    final intendedPeer = selectedPeer;
+    final draftRevision =
+        intendedPeer == null ||
+            !drafts.isLoaded(intendedPeer) ||
+            drafts.textFor(intendedPeer) != text
+        ? null
+        : drafts.revisionFor(intendedPeer);
+    var sent = false;
+    await _run(() async {
+      error = null;
+      if (!canSend ||
+          selectedPeer != intendedPeer ||
+          !_appAccessible ||
+          !_appForeground) {
+        throw StateError('Verify both phones before sending');
+      }
+      text = text.trim();
+      if (text.isEmpty || utf8.encode(text).length > 4096) {
+        throw StateError('Messages must be 1–4096 UTF-8 bytes');
+      }
+      final id = randomId();
+      final peer = connectedPeer!;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      await store.savePeer(peer, _session!.peerName!);
+      await store.saveMessage(
+        ChatMessage(
+          id: id,
+          peerId: peer,
+          text: text,
+          timestamp: timestamp,
+          outgoing: true,
+          status: 'sending',
+        ),
+      );
+      historyRevision++;
+      try {
+        await _sendPayload({
+          'type': 'text',
+          'id': id,
+          'timestamp': timestamp,
+          'text': text,
+        });
+        sent = true;
+        _ackTimers[id] = Timer(const Duration(seconds: 30), () {
+          unawaited(
+            _run(() async {
+              _ackTimers.remove(id);
+              await store.setStatus(id, peer, 'unconfirmed');
+              await _refresh();
+              notifyListeners();
+            }),
+          );
+        });
+      } catch (_) {
+        await store.setStatus(id, peer, 'unconfirmed');
+        await _disconnect();
+        rethrow;
+      } finally {
+        await _refresh();
+        notifyListeners();
+      }
+    });
+    // A route may have closed, locked, or switched peers during the send.
+    // Clear only the captured draft; newer edits belong to another send.
+    if (sent && intendedPeer != null && draftRevision != null) {
+      await drafts.clearAfterSend(intendedPeer, draftRevision);
     }
-    final id = randomId();
-    final peer = connectedPeer!;
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    await store.savePeer(peer, _session!.peerName!);
-    await store.saveMessage(
-      ChatMessage(
-        id: id,
-        peerId: peer,
-        text: text,
-        timestamp: timestamp,
-        outgoing: true,
-        status: 'sending',
-      ),
-    );
-    historyRevision++;
-    try {
-      await _sendPayload({
-        'type': 'text',
-        'id': id,
-        'timestamp': timestamp,
-        'text': text,
-      });
-      _ackTimers[id] = Timer(const Duration(seconds: 30), () {
-        unawaited(
-          _run(() async {
-            _ackTimers.remove(id);
-            await store.setStatus(id, peer, 'unconfirmed');
-            await _refresh();
-            notifyListeners();
-          }),
-        );
-      });
-    } catch (_) {
-      await store.setStatus(id, peer, 'unconfirmed');
-      await _disconnect();
-      rethrow;
-    } finally {
-      await _refresh();
-      notifyListeners();
-    }
-  });
+    return sent;
+  }
+
   Future<void> _refresh() async {
     if (selectedPeer != null) messages = await store.messages(selectedPeer!);
     // Only clear read state after the visible history has decrypted successfully.
@@ -399,10 +424,14 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   });
   Future<void> clearHistory() => _run(() async {
-    await store.clearHistory();
+    await drafts.clearHistory();
     historyRevision++;
     messages = [];
     conversations = [];
+    // An offline conversation no longer exists after deletion. Keep only the
+    // active session selected, so a draft cannot be left in an unreachable chat.
+    selectedPeer = connectedPeer;
+    selectedName = connectedPeer == null ? '' : _session!.peerName!;
     notifyListeners();
   });
   Future<void> _reset() async {
@@ -437,6 +466,7 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    drafts.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {
       timer.cancel();

@@ -35,7 +35,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -47,6 +47,7 @@ class LocalStore {
           'CREATE INDEX message_peer_time ON messages(peer, timestamp)',
         );
         await _createSummaryIndexes(db);
+        await _createDraftTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -56,6 +57,7 @@ class LocalStore {
           );
           await _createSummaryIndexes(db);
         }
+        if (oldVersion < 3) await _createDraftTable(db);
       },
     );
     // A process termination leaves delivery unknown, never silently "delivered".
@@ -69,6 +71,47 @@ class LocalStore {
     await db.execute(
       'CREATE INDEX message_peer_unread ON messages(peer, outgoing, is_read)',
     );
+  }
+
+  static Future<void> _createDraftTable(Database db) => db.execute(
+    'CREATE TABLE drafts (peer TEXT PRIMARY KEY, body TEXT NOT NULL)',
+  );
+
+  Future<String> draft(String peer) async {
+    final rows = await _database.query(
+      'drafts',
+      where: 'peer = ?',
+      whereArgs: [peer],
+      limit: 1,
+    );
+    if (rows.isEmpty) return '';
+    final bytes = base64Decode(rows.single['body'] as String);
+    final clear = await _cipher.decrypt(
+      SecretBox(
+        bytes.sublist(40),
+        nonce: bytes.sublist(0, 24),
+        mac: Mac(bytes.sublist(24, 40)),
+      ),
+      secretKey: _historyKey,
+      aad: utf8.encode(jsonEncode(['LocalChat/draft/1', peer])),
+    );
+    return utf8.decode(clear);
+  }
+
+  Future<void> saveDraft(String peer, String text) async {
+    if (text.isEmpty) {
+      await _database.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
+      return;
+    }
+    final box = await _cipher.encrypt(
+      utf8.encode(text),
+      secretKey: _historyKey,
+      aad: utf8.encode(jsonEncode(['LocalChat/draft/1', peer])),
+    );
+    await _database.insert('drafts', {
+      'peer': peer,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> rename(String value) async {
@@ -281,6 +324,7 @@ class LocalStore {
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
       await txn.delete('messages');
+      await txn.delete('drafts');
       await txn.delete('peers');
     });
   }

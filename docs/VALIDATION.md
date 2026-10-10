@@ -1,5 +1,42 @@
 # Validation for v0.1.0
 
+## Saved drafts milestone — 2026-10-10
+
+Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all 73 tests passed (61 existing + 12 new checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning recorded below.
+
+Real SQLite checks cover encrypted exact-text draft restoration after reopening,
+fresh nonces, peer-bound authentication, tampering, empty draft deletion,
+unchanged activity/unread state, search exclusion, history deletion and upgrades
+from schema 1 and 2 to 3. Unicode drafts can remain saved even when their UTF-8
+bytes exceed the send limit and need editing before sending.
+
+Draft-controller checks cover per-peer and per-revision isolation, failed
+load/save/delete, retry, pending writes around history deletion, restoration
+in a new controller and completion after disposal. Encrypted linked-peer tests
+verify successful send cleanup, preservation after write/validation failures,
+newer edits during a send and wrong-peer prevention after a queued selection
+change. The pending-send fixture drains its acknowledgement before teardown.
+
+Widget checks cover offline editing with Send disabled, exact restoration on
+Back and peer switches, locking/unlocking, clearing open composers, deselecting
+deleted offline chats, errors/retry with a 320 × 568 enlarged-text keyboard
+layout, and navigating away during a successful send. Existing lock, theme,
+search, unread, navigation, demo and protocol regressions continue to pass.
+
+No new dependencies, wire payloads or native Android changes were introduced.
+Draft text uses the existing history key with domain-separated AAD. Draft
+persistence is asynchronous and failed saves are visible/retryable; abrupt
+termination before the latest write completes can lose that edit. Browser
+drafts reset on reload. Physical Android restart/upgrade/lifecycle checks remain
+user testing; follow [the draft checklist](DRAFTS.md) before committing.
+
 ## Local search milestone — 2026-10-10
 
 Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.

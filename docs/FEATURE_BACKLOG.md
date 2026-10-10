@@ -3,7 +3,22 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Local chat search
+## Current milestone: Saved message drafts
+
+- [x] Separate drafts for each conversation, editable while offline.
+- [x] Restore exact text after navigation, locking and Android app restarts.
+- [x] Encrypt Android draft bodies; temporary browser drafts reset on reload.
+- [x] Keep drafts after validation/send failures; clear only the sent revision
+      after transport accepts the message, even if its chat route has closed.
+- [x] Draft load/save errors have a retry action; failed loads prevent overwriting.
+- [x] Delete all chat history also removes saved drafts and the open composer.
+- [x] Database upgrades preserve messages/read state; typing does not reorder
+      conversations, change unread counts or appear in message search.
+- [x] All 73 tests pass, clean analysis and fresh Android/browser builds.
+- [ ] User tests drafts on a phone and commits this milestone;
+      see [draft checklist](DRAFTS.md).
+
+## Local chat search: implemented and committed
 
 - [x] Search action in the Chats toolbar, with conversation-name and message results.
 - [x] Case-insensitive literal substring matching, including Unicode text.
@@ -13,7 +28,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Search preserves unread counts; lock removes query/results along with routes.
 - [x] Storage, stale-result, live-update, long-history jump and phone-layout checks.
 - [x] All 61 tests pass, clean analysis and fresh Android/browser builds.
-- [ ] User tests local search on a phone and commits this milestone;
+- [x] User reviews and commits the local search milestone (`a2c7aa3`).
+- [ ] Physical phone local search testing;
       see [search checklist](SEARCH.md).
 
 ## Chats list improvements: implemented and committed
@@ -82,7 +98,7 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Unread badges, latest-message previews, latest activity timestamps and
       recent-message ordering.
 - [x] Local conversation and message search.
-- [ ] Saved drafts across navigation and restarts.
+- [x] Saved drafts across navigation and restarts (Android); temporary browser drafts.
 - [ ] Offline outbox, reconnection and retry after verification; distinguish
       queued, delivered and unconfirmed messages; prevent duplicate resends.
 - [ ] Pin, archive and delete individual conversations.
@@ -105,8 +121,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 1. Chats/Nearby navigation (committed).
 2. Themes (committed).
-3. Chats list previews/unread state (committed), local search (current), then drafts
-   and conversation management as separate milestones.
+3. Chats list previews/unread state and local search (committed), drafts (current),
+   then conversation management as a separate milestone.
 4. Encrypted backups and phone migration.
 5. Reliable reconnection, queued messages and notifications.
 6. Group chat and attachments.

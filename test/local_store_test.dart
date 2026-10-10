@@ -314,7 +314,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 2);
+      expect(await upgraded.getVersion(), 3);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -332,11 +332,101 @@ void main() {
     'History deletion removes conversations and messages but keeps identity',
     () async {
       await store.saveMessage(message());
+      await store.saveDraft('alice', 'Unsent text');
       final key = (await store.identity.extractPublicKey()).bytes;
       await store.clearHistory();
       expect(await store.conversations(), isEmpty);
       expect(await store.messages('alice'), isEmpty);
+      expect(await store.draft('alice'), '');
       expect((await store.identity.extractPublicKey()).bytes, key);
+    },
+  );
+
+  test(
+    'Drafts encrypt exact per-peer text and survive reopening without affecting chats',
+    () async {
+      const text = '  Private draft سلام 👋\nsecond line  ';
+      await store.saveMessage(message(outgoing: false));
+      final before = (await store.conversations()).single;
+      await store.saveDraft('alice', text);
+      await store.saveDraft('bob', 'A different draft');
+      expect(await store.draft('missing'), '');
+      final db = await openDatabase(databasePath);
+      final rows = await db.query('drafts');
+      expect(rows.length, 2);
+      expect(
+        rows.map((r) => r['body']),
+        everyElement(isNot(contains('draft'))),
+      );
+      final firstBody = rows.first['body'];
+      await store.saveDraft('alice', text);
+      expect(
+        (await db.query(
+          'drafts',
+          where: 'peer = ?',
+          whereArgs: ['alice'],
+        )).single['body'],
+        isNot(firstBody),
+      );
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect(await store.draft('alice'), text);
+      expect(await store.draft('bob'), 'A different draft');
+      // The composer counts characters, while send validation counts bytes.
+      // Even an oversized-to-send Unicode draft must remain recoverable.
+      await store.saveDraft('bob', '👋' * 2500);
+      expect(await store.draft('bob'), '👋' * 2500);
+      final after = (await store.conversations()).single;
+      expect(after.updated, before.updated);
+      expect(after.unreadCount, 1);
+      expect((await store.search('Private draft')).messages, isEmpty);
+      await store.saveDraft('alice', '');
+      expect(await store.draft('alice'), '');
+      expect(await store.draft('bob'), '👋' * 2500);
+    },
+  );
+
+  test(
+    'Draft authentication rejects tampering and ciphertext moved between peers',
+    () async {
+      await store.saveDraft('alice', 'Secret draft');
+      final db = await openDatabase(databasePath);
+      final body = (await db.query('drafts')).single['body'] as String;
+      await db.insert('drafts', {'peer': 'bob', 'body': body});
+      await expectLater(
+        store.draft('bob'),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+      final bytes = base64Decode(body)..[24] ^= 1;
+      await db.update(
+        'drafts',
+        {'body': base64Encode(bytes)},
+        where: 'peer = ?',
+        whereArgs: ['alice'],
+      );
+      await expectLater(
+        store.draft('alice'),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+    },
+  );
+
+  test(
+    'Version 2 upgrade adds drafts and preserves encrypted history and read state',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      final db = await openDatabase(databasePath);
+      await db.execute('DROP TABLE drafts');
+      await db.setVersion(2);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect((await store.messages('alice')).single.text, message().text);
+      expect((await store.conversations()).single.unreadCount, 1);
+      expect(await store.draft('alice'), '');
+      await store.saveDraft('alice', 'After upgrade');
+      expect(await store.draft('alice'), 'After upgrade');
     },
   );
 }

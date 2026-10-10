@@ -39,6 +39,15 @@ It does not store a plaintext index, search query log or additional message copy
 Opening search results uses the existing app-lock and visible-conversation read
 gates. Locking removes search routes and cancels pending result updates.
 
+Drafts use the same history key with fresh random nonces and a separate AAD
+domain: UTF-8 JSON `["LocalChat/draft/1", peerId]`. SQLite stores only the
+peer ID and encrypted draft body. Moving ciphertext between peers or modifying
+it fails authentication. Drafts do not enter message search or create plaintext
+preview copies. A serialized draft queue orders saves, send cleanup and history
+deletion. Clearing history deletes drafts too, subject to the same forensic-wipe
+limits as messages. Draft plaintext can remain in process memory while locked;
+the existing UI access-control boundary applies. Browser drafts are memory only.
+
 Android cloud backup and device transfer are excluded to avoid moving a database without its secure-storage keys. Uninstalling loses identity and chat history. Clearing history deletes database records, not a guaranteed forensic wipe of SQLite journals or flash storage. A device lock and OS security are still required.
 
 ## Implementation boundaries

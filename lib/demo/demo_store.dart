@@ -7,6 +7,19 @@ class DemoStore extends LocalStore {
   final _people = <String, Conversation>{};
   final _messages = <(String, String, bool), ChatMessage>{};
   final _unread = <(String, String, bool)>{};
+  final _drafts = <String, String>{};
+
+  @override
+  Future<String> draft(String peer) async => _drafts[peer] ?? '';
+
+  @override
+  Future<void> saveDraft(String peer, String text) async {
+    if (text.isEmpty) {
+      _drafts.remove(peer);
+    } else {
+      _drafts[peer] = text;
+    }
+  }
 
   @override
   Future<void> open() async {
@@ -134,6 +147,7 @@ class DemoStore extends LocalStore {
     _people.clear();
     _messages.clear();
     _unread.clear();
+    _drafts.clear();
   }
 
   @override

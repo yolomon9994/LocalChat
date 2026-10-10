@@ -114,8 +114,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Delete history?'),
                 content: Text(
                   widget.controller.isDemo
-                      ? 'This clears the temporary messages in this demo tab.'
-                      : 'This permanently deletes saved messages on this phone.',
+                      ? 'This clears the temporary messages and drafts in this demo tab.'
+                      : 'This permanently deletes saved messages and drafts on this phone.',
                 ),
                 actions: [
                   TextButton(
