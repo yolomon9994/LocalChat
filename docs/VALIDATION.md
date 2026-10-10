@@ -1,5 +1,28 @@
 # Validation for v0.1.0
 
+## Chats / Nearby navigation milestone — 2026-10-10
+
+Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all 36 tests passed (33 existing + 3 navigation checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning recorded below.
+
+Navigation checks cover the empty Chats shortcut without starting discovery,
+Settings from either tab, selected-tab retention, independent scroll positions,
+inactive-tab accessibility, app locking from Nearby and returning to Chats.
+The existing 320 × 568 demo screen test now sends a message, switches tabs,
+reopens the connected conversation and active-chat shortcut, disconnects and
+reopens saved history, and checks the persistent Browser Demo notice.
+
+No protocol, transport, storage or native Android implementation changed in
+this milestone. Automated discovery/chat checks still use the simulated peer;
+physical phone navigation, pairing and lifecycle checks remain user testing.
+Follow [the navigation checklist](NAVIGATION.md) before committing.
+
 ## App lock milestone — 2026-10-10
 
 Checked on Windows with Flutter 3.38.7 / Dart 3.10.7, Java 21 and the installed

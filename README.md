@@ -11,11 +11,13 @@ Android-first Flutter app for nearby, encrypted, one-to-one text conversations o
 - XChaCha20-Poly1305 encrypted text and acknowledgements; reject replayed/modified frames.
 - Encrypted local message bodies in SQLite; identity/history keys held by secure storage.
 - Delivery status, connection state, saved conversations, disconnect and history deletion.
+- Separate Chats and Nearby tabs with bottom navigation; Settings in the toolbar.
 - Optional six-digit app PIN, biometric unlock on supported Android phones,
   automatic locking on launch/background, and manual Lock now in Settings.
 
 See [app lock setup and testing](docs/APP_LOCK.md) and the
 [feature backlog](docs/FEATURE_BACKLOG.md) for planned additions.
+See [Chats / Nearby navigation](docs/NAVIGATION.md) for this milestone's phone checks.
 
 Bluetooth, media, group chat, relaying, iOS, background delivery, retransmission and notifications are future work. Version 0.1 only operates while both apps remain open. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
@@ -51,8 +53,9 @@ flutter pub get
 flutter run -d chrome
 ```
 
-Web runs automatically use **Browser Demo** mode. Tap **Go nearby**, choose
+Web runs automatically use **Browser Demo** mode. Open **Nearby**, tap **Go nearby**, choose
 **Ava (Demo)** or **Noah (Demo)**, then tap **Codes match** to explore the chat.
+Chats is the default tab and lists saved conversations and the active-chat shortcut.
 The simulated friend sends a welcome message, acknowledges your messages and
 replies automatically. You can disconnect, reopen history, switch demo friends,
 rename your profile and delete history in Settings.
@@ -73,7 +76,7 @@ to demo mode. See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for session context.
 
 1. Install the same APK on both phones. Keep them near one another.
 2. Turn off mobile data. Disconnect from your router, leaving Wi-Fi on. Airplane mode with Wi-Fi manually re-enabled is another test; some phones disable Wi-Fi Direct in airplane mode.
-3. Open LocalChat on both phones. Choose different names in Settings, then tap **Go nearby** on each.
+3. Open LocalChat on both phones. Choose different names in Settings, then open **Nearby** and tap **Go nearby** on each.
 4. Allow **Nearby devices** on Android 13+, or Location on older versions. On Android 12 and earlier, also enable the Location system toggle.
 5. Scan again if necessary. Tap the other LocalChat phone and accept Android's pairing prompt on the receiving phone.
 6. Compare all five security-code groups in person. Both phones must tap **Codes match**. If the codes differ, disconnect.

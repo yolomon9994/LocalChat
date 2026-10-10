@@ -40,8 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   content: Text(
                     widget.controller.error ??
                         (widget.controller.isDemo
-                            ? 'Demo name saved until reload. Tap Go nearby to continue.'
-                            : 'Name saved. Tap Go nearby to advertise it.'),
+                            ? 'Demo name saved until reload. Open Nearby and tap Go nearby to continue.'
+                            : 'Name saved. Open Nearby and tap Go nearby to advertise it.'),
                   ),
                 ),
               );

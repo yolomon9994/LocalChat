@@ -106,7 +106,10 @@ void main() {
     await tester.pumpWidget(LocalChatApp(controller: c));
     await tester.pumpAndSettle();
     expect(find.textContaining('BROWSER DEMO'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('nearby-destination')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Go nearby'), 100);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Go nearby'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Ava (Demo)'), 100);
@@ -125,6 +128,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('simulated peer and delivery'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.enterText(find.byType(TextField), 'A message between tabs');
+    await tester.tap(find.byTooltip('Send'));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(
+      c.conversations.map((peer) => peer.name),
+      contains('Ava (Demo)'),
+      reason: 'State: ${c.state}; error: ${c.error}',
+    );
+    expect(
+      c.messages.where((message) => message.outgoing).single.status,
+      'delivered',
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      1,
+    );
+    await tester.tap(find.byKey(const ValueKey('chats-destination')));
+    await tester.pumpAndSettle();
+    expect(find.text('Your chats'), findsOneWidget);
+    expect(find.text('Nearby devices'), findsNothing);
+    expect(c.ready, isTrue);
+    await tester.scrollUntilVisible(
+      find.text('Ava (Demo)'),
+      100,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('chats-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ava (Demo)'));
+    await tester.pumpAndSettle();
+    expect(find.text('A message between tabs'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      0,
+    );
+    await tester.ensureVisible(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('A message between tabs'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await c.disconnect();
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Ava (Demo)'),
+      100,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('chats-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ava (Demo)'));
+    await tester.pumpAndSettle();
+    expect(find.text('A message between tabs'), findsOneWidget);
+    expect(c.canSend, isFalse);
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Settings'));

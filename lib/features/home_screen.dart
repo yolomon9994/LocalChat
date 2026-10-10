@@ -1,26 +1,53 @@
 import 'package:flutter/material.dart';
-import '../services/chat_controller.dart';
+
+import '../core/models.dart';
 import '../services/app_lock_controller.dart';
+import '../services/chat_controller.dart';
 import 'chat_screen.dart';
+import 'chats_tab.dart';
+import 'nearby_tab.dart';
 import 'settings_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.controller, this.appLock});
   final ChatController controller;
   final AppLockController? appLock;
-  void _chat(BuildContext context) {
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedTab = 0;
+
+  void _chat() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ChatScreen(controller: controller),
+        builder: (_) => ChatScreen(controller: widget.controller),
       ),
     );
   }
 
+  Future<void> _openConnected() async {
+    await widget.controller.viewConnected();
+    if (mounted && widget.controller.connectedPeer != null) _chat();
+  }
+
+  Future<void> _openHistory(Conversation peer) async {
+    await widget.controller.viewHistory(peer);
+    if (mounted) _chat();
+  }
+
+  Future<void> _connect(Peer peer) async {
+    await widget.controller.connect(peer);
+    if (mounted) _chat();
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
+    listenable: widget.controller,
     builder: (context, _) {
-      final c = controller;
+      final c = widget.controller;
       return Scaffold(
         appBar: AppBar(
           title: const Text('LocalChat'),
@@ -31,7 +58,7 @@ class HomeScreen extends StatelessWidget {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) =>
-                      SettingsScreen(controller: c, appLock: appLock),
+                      SettingsScreen(controller: c, appLock: widget.appLock),
                 ),
               ),
             ),
@@ -39,58 +66,11 @@ class HomeScreen extends StatelessWidget {
         ),
         body: c.loading
             ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: const EdgeInsets.all(20),
+            : Column(
                 children: [
-                  Text(
-                    'Stay close. Stay connected.',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    c.isDemo
-                        ? 'Explore the interface with simulated friends. Tap Go nearby to find demo devices.'
-                        : 'Text nearby friends with Wi-Fi Direct. No router, account, or mobile data needed.',
-                  ),
-                  const SizedBox(height: 24),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            c.ready ? Icons.lock : Icons.wifi_tethering,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  c.profileName,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                Text(c.isDemo ? 'Demo • ${c.state}' : c.state),
-                              ],
-                            ),
-                          ),
-                          if (c.connectedPeer != null)
-                            TextButton(
-                              onPressed: () async {
-                                await c.viewConnected();
-                                if (context.mounted) _chat(context);
-                              },
-                              child: const Text('Open'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
                   if (c.error != null)
                     Card(
+                      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                       color: Theme.of(context).colorScheme.errorContainer,
                       child: Padding(
                         padding: const EdgeInsets.all(12),
@@ -106,114 +86,49 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                  const SizedBox(height: 20),
-                  if (!c.initialized)
-                    FilledButton(
-                      onPressed: c.initialize,
-                      child: const Text('Retry setup'),
-                    )
-                  else if (!c.started)
-                    FilledButton.icon(
-                      onPressed: c.start,
-                      icon: const Icon(Icons.radar),
-                      label: const Text('Go nearby'),
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Nearby devices',
-                            style: Theme.of(context).textTheme.titleLarge,
+                  Expanded(
+                    child: !c.initialized
+                        ? Center(
+                            child: FilledButton(
+                              onPressed: c.initialize,
+                              child: const Text('Retry setup'),
+                            ),
+                          )
+                        : IndexedStack(
+                            index: _selectedTab,
+                            children: [
+                              ChatsTab(
+                                controller: c,
+                                onFindDevices: () =>
+                                    setState(() => _selectedTab = 1),
+                                onOpenConnected: _openConnected,
+                                onOpenHistory: _openHistory,
+                              ),
+                              NearbyTab(controller: c, onConnect: _connect),
+                            ],
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Scan again',
-                          onPressed: c.scanning ? null : c.scan,
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ],
-                    ),
-                  if (c.scanning) const LinearProgressIndicator(),
-                  if (c.started && c.peers.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.devices, size: 48),
-                          const SizedBox(height: 12),
-                          Text(
-                            c.isDemo
-                                ? 'Looking for simulated devices'
-                                : 'Looking for LocalChat phones',
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            c.isDemo
-                                ? 'Demo friends will appear shortly.'
-                                : 'Open LocalChat and tap Go nearby on both phones.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  for (final peer in c.peers)
-                    Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.person_outline),
-                        ),
-                        title: Text(peer.name),
-                        subtitle: Text(
-                          c.isDemo
-                              ? 'Simulated device • tap to connect'
-                              : 'Nearby • tap to connect',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: c.state == 'Connecting'
-                            ? null
-                            : () async {
-                                await c.connect(peer);
-                                if (context.mounted) _chat(context);
-                              },
-                      ),
-                    ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Conversations',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  if (c.conversations.isEmpty)
-                    const Text('Your verified conversations will appear here.'),
-                  for (final peer in c.conversations)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(
-                        child: Icon(Icons.chat_bubble_outline),
-                      ),
-                      title: Text(peer.name),
-                      subtitle: Text(
-                        peer.id == c.connectedPeer
-                            ? 'Connected'
-                            : c.isDemo
-                            ? 'In-memory demo history'
-                            : 'Saved on this phone',
-                      ),
-                      onTap: () async {
-                        await c.viewHistory(peer);
-                        if (context.mounted) _chat(context);
-                      },
-                    ),
-                  const SizedBox(height: 32),
-                  Text(
-                    c.isDemo
-                        ? 'This browser preview does not discover or communicate with real phones. Use Android devices to test Wi-Fi Direct.'
-                        : 'Keep the app open while chatting. Wi-Fi must be on. Some older Android phones also require Location to be on.',
-                    style: const TextStyle(color: Colors.white54),
                   ),
                 ],
               ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedTab,
+          onDestinationSelected: (index) =>
+              setState(() => _selectedTab = index),
+          destinations: const [
+            NavigationDestination(
+              key: ValueKey('chats-destination'),
+              icon: Icon(Icons.chat_bubble_outline),
+              selectedIcon: Icon(Icons.chat_bubble),
+              label: 'Chats',
+            ),
+            NavigationDestination(
+              key: ValueKey('nearby-destination'),
+              icon: Icon(Icons.radar_outlined),
+              selectedIcon: Icon(Icons.radar),
+              label: 'Nearby',
+            ),
+          ],
+        ),
       );
     },
   );

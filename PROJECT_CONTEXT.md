@@ -12,8 +12,25 @@ Images and videos are planned later. Bluetooth, group chat, relaying, iOS,
 background delivery and notifications are also future work.
 
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
-The user chose app lock first, then testing and a user-performed commit before
-starting another feature. Do not stage, commit or push this milestone for them.
+The user chose app lock first and committed it as `df3c2b3`.
+The current milestone is Chats/Nearby bottom navigation. Work on one milestone
+at a time; the user will stage, commit and push it themselves after testing.
+
+## Chats / Nearby navigation milestone
+
+- `HomeScreen` is a stateful shell with Material 3 bottom navigation. Chats is
+  the default tab; `chats_tab.dart` shows saved history and an active-chat Open
+  action. Its empty state links to Nearby without starting discovery.
+- `nearby_tab.dart` holds the profile/connection state, Go nearby, scanning,
+  permissions/discovery instructions and device connection actions.
+- Switching tabs preserves independent scroll positions and existing transport
+  state. Returning from a chat or Settings keeps the selected tab.
+- App locking removes the entire shell, including both tabs; unlocking starts
+  on Chats. Chat protocol and storage remain owned by the same controller.
+- Themes remain the next separate milestone after navigation is committed.
+- Validation: clean analysis, 36 passing tests, successful browser and Android
+  debug APK builds. Phone navigation checks are in `docs/NAVIGATION.md`; the
+  changes remain unstaged and uncommitted for the user.
 
 ## App lock milestone
 
@@ -67,15 +84,15 @@ Android debug APK build and verified APK signature with Flutter 3.35.7 /
 Dart 3.9.2, Java 17, Android SDK 36 (minimum API 24). This Windows environment
 currently has Flutter 3.38.7 / Dart 3.10.7.
 
-Browser demo checks cover discovery, mandatory confirmation before send,
+The original browser demo checks covered discovery, mandatory confirmation before send,
 simulated replies/delivery, fresh verification on reconnect, per-peer history,
 live history deletion, rename/reset behavior and persistent demo labelling on
-small screens. This change passed `flutter analyze`, all 23 tests, and the
+small screens. That milestone passed `flutter analyze`, all 23 tests, and the
 JavaScript web build. A headless Chrome smoke check exercised discovery,
 verification, sending, simulated delivery and replies. The separate Chrome
 test runner has a CanvasKit asset-serving issue in this installed Windows SDK.
-Android rebuild is blocked here by the missing Android SDK. See
-docs/VALIDATION.md for full results and limitations.
+The Android SDK is now installed and the app-lock milestone built successfully.
+See docs/VALIDATION.md for current results and historical limitations.
 
 Still outstanding: physical two-phone discovery, pairing and messaging,
 vendor/API compatibility, Android permission/lifecycle behavior, platform key
@@ -85,7 +102,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before this milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the navigation milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.
