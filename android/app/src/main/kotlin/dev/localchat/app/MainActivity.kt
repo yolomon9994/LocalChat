@@ -14,7 +14,8 @@ import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
+import android.view.WindowManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -33,7 +34,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Android transport only. All message cryptography and verification live in Dart. */
-class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
+class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private var sink: EventChannel.EventSink? = null
     private var manager: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
@@ -64,6 +65,18 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Protect the initial window until Flutter has read persisted settings.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/privacy").setMethodCallHandler { call, result ->
+            if (call.method == "setSecure") {
+                if (call.argument<Boolean>("enabled") == true) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+                result.success(null)
+            } else result.notImplemented()
+        }
         manager = getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
         channel = manager?.initialize(this, mainLooper) {
             active = false

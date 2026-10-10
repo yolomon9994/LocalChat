@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../services/chat_controller.dart';
+import '../services/app_lock_controller.dart';
+import 'app_lock_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.controller});
+  const SettingsScreen({super.key, required this.controller, this.appLock});
   final ChatController controller;
+  final AppLockController? appLock;
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -47,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: const Text('Save name'),
         ),
         const SizedBox(height: 28),
+        if (widget.appLock != null) AppLockSettings(lock: widget.appLock!),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.lock_outline),

@@ -11,12 +11,17 @@ Android-first Flutter app for nearby, encrypted, one-to-one text conversations o
 - XChaCha20-Poly1305 encrypted text and acknowledgements; reject replayed/modified frames.
 - Encrypted local message bodies in SQLite; identity/history keys held by secure storage.
 - Delivery status, connection state, saved conversations, disconnect and history deletion.
+- Optional six-digit app PIN, biometric unlock on supported Android phones,
+  automatic locking on launch/background, and manual Lock now in Settings.
+
+See [app lock setup and testing](docs/APP_LOCK.md) and the
+[feature backlog](docs/FEATURE_BACKLOG.md) for planned additions.
 
 Bluetooth, media, group chat, relaying, iOS, background delivery, retransmission and notifications are future work. Version 0.1 only operates while both apps remain open. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 
-Install Flutter stable (validated with **3.35.7 / Dart 3.9.2**), Android Studio with Android SDK 36 and Java 17. Enable Developer options and USB debugging on a physical Android phone (Android 7/API 24 or newer, with Wi-Fi Direct support).
+Install Flutter stable **3.38.0 or newer / Dart 3.10.0 or newer** (the app-lock milestone uses `local_auth` 3.0.2), Android Studio with Android SDK 36 and Java 17 or newer. Enable Developer options and USB debugging on a physical Android phone (Android 7/API 24 or newer, with Wi-Fi Direct support).
 
 ```bash
 flutter doctor

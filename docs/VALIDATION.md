@@ -1,5 +1,39 @@
 # Validation for v0.1.0
 
+## App lock milestone — 2026-10-10
+
+Checked on Windows with Flutter 3.38.7 / Dart 3.10.7, Java 21 and the installed
+Android SDK. `local_auth` 3.0.2 requires Flutter >=3.38.0 / Dart >=3.10.0; the
+project's declared minimums and README now reflect that dependency.
+
+- `flutter analyze`: no issues.
+- `flutter test`: 33 tests passed (23 existing + 10 app-lock checks).
+- `flutter build web --no-wasm-dry-run`: successful JavaScript browser build.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful testing APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+  Rebuilt successfully after the lock-screen navigation fix.
+
+App-lock tests cover the actual production PIN KDF, configuration persistence,
+current-PIN authorization for security changes, persistent wrong-PIN cooldowns,
+storage/configuration failure behavior, biometric cancellation/failure/fallback,
+pending authentication invalidation on backgrounding, startup withholding chat
+storage, pushed-route removal, system Back behavior, PIN confirmation, manual
+locking and the persistent browser-demo notice on a 320 × 568 screen.
+
+Controller/UI tests use memory storage and biometric test doubles. They do not
+validate a real Android sensor, Android secure-storage persistence, Recents
+privacy or vendor-specific lifecycle behavior. Complete `APP_LOCK.md`'s phone
+checklist before the user commits this milestone. No physical phone validation
+or fresh APK signature verification has been performed for this milestone.
+
+The first Android build emitted Kotlin incremental-cache warnings because the
+Pub cache is on C: and the project is on I:. Gradle's fallback compilation
+completed successfully; the final rebuild succeeded without changing build
+configuration. The web build also emitted an optional Cupertino icon-font
+warning; this app's interface uses the bundled Material icons.
+
+## Original validation
+
 Validated with Flutter 3.35.7 / Dart 3.9.2, Java 17, Android compile/target SDK 36 and minimum SDK 24.
 
 - `flutter analyze`: no issues.

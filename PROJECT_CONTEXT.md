@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-04. The workspace is authoritative; read README.md,
+Updated: 2026-10-10. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -10,6 +10,26 @@ It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first and text only.
 Images and videos are planned later. Bluetooth, group chat, relaying, iOS,
 background delivery and notifications are also future work.
+
+The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
+The user chose app lock first, then testing and a user-performed commit before
+starting another feature. Do not stage, commit or push this milestone for them.
+
+## App lock milestone
+
+- Optional six-digit app PIN, biometric unlock on supported Android phones,
+  immediate launch/background locking, manual Lock now and PIN-authorized edits.
+- `app_lock_controller.dart` stores a salted PBKDF2 verifier and persisted
+  attempt/cooldown state in secure storage. Browser configuration is temporary.
+- `main.dart` reads lock settings before chat initialization and replaces every
+  app route while locked. Unlock returns to home; existing transport can remain.
+- Android now uses FlutterFragmentActivity, AppCompat themes, USE_BIOMETRIC and
+  a privacy channel for FLAG_SECURE while app lock is enabled.
+- This is UI access control; existing database keys are not bound to biometrics
+  or re-encrypted with the PIN. Read `docs/APP_LOCK.md` for limits and phone checks.
+- Physical fingerprint, lifecycle and secure-storage checks remain required.
+- Uses `local_auth` 3.0.2; minimum Flutter is now 3.38.0 / Dart 3.10.0.
+- Automated suite: 33 passing tests. See `docs/VALIDATION.md` for build results.
 
 ## Android implementation
 
@@ -65,7 +85,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; intended repository: `LocalChat`. The user reports this project
-has not been pushed yet. Do not publish or push without a user request.
-No open-source license has been selected. Existing workspace changes in
-`android/gradlew` and `pubspec.lock` predate the browser-preview work.
+`yolomon9994`; repository: `LocalChat`. Before this milestone, the working tree
+was clean and `main` matched the locally recorded `origin/main`. Do not stage,
+commit, publish or push without a new user request; the user will commit this
+milestone themselves. No open-source license has been selected.

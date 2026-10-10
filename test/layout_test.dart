@@ -5,6 +5,7 @@ import 'package:local_chat/features/settings_screen.dart';
 import 'package:local_chat/main.dart';
 import 'package:local_chat/services/chat_controller.dart';
 import 'chat_controller_test.dart' show LinkedTransport, MemoryStore;
+import 'lock_test_support.dart';
 
 class PreviewController extends ChatController {
   PreviewController() : super(LinkedTransport(), MemoryStore()) {
@@ -27,7 +28,10 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final c = PreviewController();
     addTearDown(c.dispose);
-    await tester.pumpWidget(LocalChatApp(controller: c));
+    final lock = testLock();
+    addTearDown(lock.dispose);
+    await tester.pumpWidget(LocalChatApp(controller: c, appLock: lock));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();

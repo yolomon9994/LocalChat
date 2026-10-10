@@ -38,6 +38,19 @@ Android cloud backup and device transfer are excluded to avoid moving a database
 
 ## Implementation boundaries
 
+Optional app lock gates startup before chat storage is opened and hides all
+application routes on launch/background until the user authenticates. A salted
+PBKDF2-HMAC-SHA256 verifier and PIN attempt/cooldown state use secure storage;
+the PIN is not stored in plaintext. Android biometrics use the OS biometric-only
+prompt, with the LocalChat PIN as fallback. `FLAG_SECURE` is enabled while app
+lock is configured to block screenshots and hide Recents previews.
+
+This is UI access control, not additional PIN encryption of the database or
+biometric-bound storage keys. An established connection may remain active while
+locked, and unlocked data can remain in process memory. Android biometric,
+lifecycle, secure-storage and screenshot behavior requires physical phone
+testing. See [app lock testing](APP_LOCK.md).
+
 Wi-Fi Direct communication uses Android's `INTERNET` permission because TCP sockets require it. There is no application API endpoint, telemetry SDK, account service or backend. The group owner listens on port 45873. The listener is not an identity check: the signed handshake plus mandatory code comparison is the application-layer gate. A nearby attacker could occupy the single connection and cause denial of service.
 
 Foreground UI operation only; OS suspension can interrupt transport. No assurance of background delivery. This release has no heartbeat or automatic reconnect; idle socket failure may become visible only when sending or when Android reports group loss.

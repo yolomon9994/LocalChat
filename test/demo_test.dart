@@ -104,6 +104,7 @@ void main() {
     await c.initialize();
     addTearDown(c.dispose);
     await tester.pumpWidget(LocalChatApp(controller: c));
+    await tester.pumpAndSettle();
     expect(find.textContaining('BROWSER DEMO'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Go nearby'), 100);
     await tester.tap(find.text('Go nearby'));

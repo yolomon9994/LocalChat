@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../services/chat_controller.dart';
+import '../services/app_lock_controller.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.controller});
+  const HomeScreen({super.key, required this.controller, this.appLock});
   final ChatController controller;
+  final AppLockController? appLock;
   void _chat(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -28,7 +30,8 @@ class HomeScreen extends StatelessWidget {
               icon: const Icon(Icons.tune),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => SettingsScreen(controller: c),
+                  builder: (_) =>
+                      SettingsScreen(controller: c, appLock: appLock),
                 ),
               ),
             ),
