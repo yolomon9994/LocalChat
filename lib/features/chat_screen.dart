@@ -2,13 +2,44 @@ import 'package:flutter/material.dart';
 import '../services/chat_controller.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, required this.controller});
+  const ChatScreen({super.key, required this.controller, this.routeObserver});
   final ChatController controller;
+  final RouteObserver<ModalRoute<dynamic>>? routeObserver;
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with RouteAware {
+  ModalRoute<dynamic>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (_route != route) {
+      widget.routeObserver?.unsubscribe(this);
+      _route = route;
+      if (route != null) widget.routeObserver?.subscribe(this, route);
+    }
+    _showWhenCurrent();
+  }
+
+  void _showWhenCurrent() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.controller.setChatVisible(this, _route?.isCurrent ?? true);
+      }
+    });
+  }
+
+  @override
+  void didPush() => _showWhenCurrent();
+  @override
+  void didPopNext() => _showWhenCurrent();
+  @override
+  void didPushNext() => widget.controller.setChatVisible(this, false);
+  @override
+  void didPop() => widget.controller.setChatVisible(this, false);
   final _text = TextEditingController();
   final _scroll = ScrollController();
   bool _sending = false;
@@ -28,6 +59,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    widget.routeObserver?.unsubscribe(this);
+    widget.controller.setChatVisible(this, false);
     _text.dispose();
     _scroll.dispose();
     super.dispose();

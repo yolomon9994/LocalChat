@@ -46,18 +46,25 @@ class _LocalChatAppState extends State<LocalChatApp>
       widget.appearance ??
       AppearanceController.platform(isDemo: widget.controller.isDemo);
   late final Listenable _changes = Listenable.merge([_lock, _appearance]);
+  final _routes = RouteObserver<ModalRoute<dynamic>>();
   ChatController get controller => widget.controller;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    controller.setAppAccess(_lock.canAccess);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    controller.setAppForeground(
+      lifecycle == null || lifecycle == AppLifecycleState.resumed,
+    );
     _lock.addListener(_accessChanged);
     unawaited(_lock.initialize());
     unawaited(_appearance.initialize());
   }
 
   void _accessChanged() {
+    controller.setAppAccess(_lock.canAccess);
     if (_lock.canAccess && !_startedChat) {
       _startedChat = true;
       unawaited(controller.initialize());
@@ -65,12 +72,16 @@ class _LocalChatAppState extends State<LocalChatApp>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) =>
-      _lock.lifecycle(state);
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Stop read marking immediately, before locked routes are disposed.
+    controller.setAppForeground(state == AppLifecycleState.resumed);
+    _lock.lifecycle(state);
+  }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    controller.setAppAccess(false);
     _lock.removeListener(_accessChanged);
     if (widget.appLock == null) _lock.dispose();
     if (widget.appearance == null) _appearance.dispose();
@@ -83,6 +94,7 @@ class _LocalChatAppState extends State<LocalChatApp>
     builder: (context, _) => MaterialApp(
       title: 'LocalChat',
       debugShowCheckedModeBanner: false,
+      navigatorObservers: [_routes],
       builder: (context, child) {
         // Remove the whole Navigator while locked. Pushed routes, dialogs,
         // keyboard shortcuts and the system back button cannot expose a chat.
@@ -139,6 +151,7 @@ class _LocalChatAppState extends State<LocalChatApp>
         controller: controller,
         appLock: _lock,
         appearance: _appearance,
+        routeObserver: _routes,
       ),
     ),
   );

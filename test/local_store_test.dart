@@ -22,11 +22,13 @@ void main() {
   databaseFactory = createDatabaseFactoryFfi(noIsolate: true);
   late LocalStore store;
   late String databasePath;
+  late DateTime clock;
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
     databasePath = path.join(await getDatabasesPath(), 'localchat.db');
     await deleteDatabase(databasePath);
-    store = LocalStore();
+    clock = DateTime(2026, 10, 10, 9);
+    store = LocalStore(now: () => clock);
     await store.open();
     await store.savePeer('alice', 'Alice');
   });
@@ -95,7 +97,148 @@ void main() {
       store.messages('alice'),
       throwsA(isA<SecretBoxAuthenticationError>()),
     );
+    await expectLater(
+      store.conversations(),
+      throwsA(isA<SecretBoxAuthenticationError>()),
+    );
   });
+
+  test(
+    'Unread summaries persist, deduplicate and clear only the opened peer',
+    () async {
+      await store.savePeer('bob', 'Bob');
+      await store.saveMessage(message(outgoing: false));
+      await store.saveMessage(message());
+      await store.saveMessage(message(peer: 'bob', outgoing: false));
+      await store.saveMessage(message(outgoing: false));
+      var summaries = await store.conversations();
+      expect(summaries.singleWhere((p) => p.id == 'alice').unreadCount, 1);
+      expect(
+        summaries.singleWhere((p) => p.id == 'alice').latestMessage!.outgoing,
+        isTrue,
+      );
+      expect(summaries.singleWhere((p) => p.id == 'bob').unreadCount, 1);
+      final db = await openDatabase(databasePath);
+      expect(
+        (await db.query(
+          'messages',
+        )).every((row) => !(row['body'] as String).contains('Private text')),
+        isTrue,
+      );
+      expect(
+        (await db.rawQuery('PRAGMA table_info(peers)')).map((r) => r['name']),
+        isNot(contains('preview')),
+      );
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      summaries = await store.conversations();
+      expect(summaries.map((p) => p.unreadCount), everyElement(1));
+      expect(
+        summaries.singleWhere((p) => p.id == 'alice').latestMessage!.text,
+        'Private text سلام 👋',
+      );
+      await store.markRead('alice');
+      await store.saveMessage(message(outgoing: false)); // Must remain read.
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      summaries = await store.conversations();
+      expect(summaries.singleWhere((p) => p.id == 'alice').unreadCount, 0);
+      expect(summaries.singleWhere((p) => p.id == 'bob').unreadCount, 1);
+    },
+  );
+
+  test(
+    'Latest local message activity orders chats; names, acknowledgements and duplicates do not',
+    () async {
+      await store.saveMessage(message());
+      final aliceTime = (await store.conversations()).single.updated;
+      clock = clock.add(const Duration(minutes: 1));
+      await store.savePeer('bob', 'Bob');
+      await store.saveMessage(message(peer: 'bob', outgoing: false));
+      clock = clock.add(const Duration(minutes: 1));
+      await store.savePeer('alice', 'Renamed Alice');
+      await store.savePeer('empty', 'No messages');
+      await store.setStatus('id-1', 'alice', 'delivered');
+      await store.markRead('bob');
+      await store.saveMessage(message());
+      var summaries = await store.conversations();
+      expect(summaries.map((p) => p.id), ['bob', 'alice', 'empty']);
+      expect(summaries[1].updated, aliceTime);
+      expect(summaries[1].name, 'Renamed Alice');
+      expect(summaries[2].latestMessage, isNull);
+      // Sender timestamps may be wrong. The last saved message is still latest.
+      await store.saveMessage(
+        ChatMessage(
+          id: 'new',
+          peerId: 'alice',
+          text: 'New arrival',
+          timestamp: 0,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      summaries = await store.conversations();
+      expect(summaries.first.id, 'alice');
+      expect(summaries.first.latestMessage!.text, 'New arrival');
+      expect(summaries.first.updated, clock.millisecondsSinceEpoch);
+    },
+  );
+
+  test(
+    'Version 1 upgrade preserves encrypted history and initializes old messages as read',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      final db = await openDatabase(databasePath);
+      final oldMessage = Map<String, Object?>.from(
+        (await db.query('messages')).single,
+      )..remove('is_read');
+      final oldPeer = (await db.query('peers')).single;
+      final key = (await store.identity.extractPublicKey()).bytes;
+      await store.close();
+      await deleteDatabase(databasePath);
+      final legacy = await openDatabase(
+        databasePath,
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute(
+            'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
+          );
+          await db.execute(
+            'CREATE TABLE messages (id TEXT NOT NULL, peer TEXT NOT NULL, body TEXT NOT NULL, timestamp INTEGER NOT NULL, outgoing INTEGER NOT NULL, status TEXT NOT NULL, PRIMARY KEY(peer, id, outgoing))',
+          );
+          await db.execute(
+            'CREATE INDEX message_peer_time ON messages(peer, timestamp)',
+          );
+          await db.insert('peers', oldPeer);
+          await db.insert('messages', oldMessage);
+        },
+      );
+      await legacy.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      expect((await store.identity.extractPublicKey()).bytes, key);
+      expect(
+        (await store.messages('alice')).single.text,
+        'Private text سلام 👋',
+      );
+      expect((await store.conversations()).single.unreadCount, 0);
+      final upgraded = await openDatabase(databasePath);
+      expect(await upgraded.getVersion(), 2);
+      await store.saveMessage(
+        ChatMessage(
+          id: 'after-upgrade',
+          peerId: 'alice',
+          text: 'New unread',
+          timestamp: 2,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      expect((await store.conversations()).single.unreadCount, 1);
+    },
+  );
   test(
     'History deletion removes conversations and messages but keeps identity',
     () async {

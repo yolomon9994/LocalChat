@@ -288,10 +288,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(HomeScreen), findsOneWidget);
     expect(store.opens, 1);
-    chat.selectedPeer = 'saved';
-    chat.selectedName = 'Private friend';
-    chat.messages = [
-      ChatMessage(
+    await store.savePeer('saved', 'Private friend');
+    await store.saveMessage(
+      const ChatMessage(
         id: 'private',
         peerId: 'saved',
         text: 'Private message content',
@@ -299,7 +298,8 @@ void main() {
         outgoing: true,
         status: 'delivered',
       ),
-    ];
+    );
+    await chat.viewHistory((await store.conversations()).single);
     unawaited(
       Navigator.of(tester.element(find.byType(HomeScreen))).push(
         MaterialPageRoute<void>(builder: (_) => ChatScreen(controller: chat)),

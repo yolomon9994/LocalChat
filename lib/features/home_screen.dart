@@ -15,10 +15,12 @@ class HomeScreen extends StatefulWidget {
     required this.controller,
     this.appLock,
     this.appearance,
+    this.routeObserver,
   });
   final ChatController controller;
   final AppLockController? appLock;
   final AppearanceController? appearance;
+  final RouteObserver<ModalRoute<dynamic>>? routeObserver;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -30,7 +32,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _chat() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ChatScreen(controller: widget.controller),
+        builder: (_) => ChatScreen(
+          controller: widget.controller,
+          routeObserver: widget.routeObserver,
+        ),
       ),
     );
   }

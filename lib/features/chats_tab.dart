@@ -3,6 +3,35 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
 
+String formatConversationTime(int timestamp, {DateTime? now}) {
+  final time = DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal();
+  final today = now ?? DateTime.now();
+  final date = DateTime(time.year, time.month, time.day);
+  final currentDate = DateTime(today.year, today.month, today.day);
+  if (date == currentDate) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+  if (date == DateTime(today.year, today.month, today.day - 1)) {
+    return 'Yesterday';
+  }
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final label = '${months[time.month - 1]} ${time.day}';
+  return time.year == today.year ? label : '$label, ${time.year}';
+}
+
 class ChatsTab extends StatelessWidget {
   const ChatsTab({
     super.key,
@@ -85,20 +114,53 @@ class ChatsTab extends StatelessWidget {
           for (final peer in c.conversations)
             Card(
               child: ListTile(
+                key: ValueKey('conversation-${peer.id}'),
                 leading: const CircleAvatar(
                   child: Icon(Icons.chat_bubble_outline),
                 ),
-                title: Text(peer.name),
-                subtitle: Text(
-                  peer.id == c.connectedPeer
-                      ? c.ready
-                            ? 'Connected'
-                            : 'Verify connection'
-                      : c.isDemo
-                      ? 'In-memory demo history'
-                      : 'Saved on this phone',
+                title: Text(
+                  peer.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: peer.unreadCount > 0
+                      ? const TextStyle(fontWeight: FontWeight.bold)
+                      : null,
                 ),
-                trailing: const Icon(Icons.chevron_right),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      peer.latestMessage == null
+                          ? 'No messages yet'
+                          : '${peer.latestMessage!.outgoing ? 'You: ' : ''}${peer.latestMessage!.text.replaceAll(RegExp(r'\s+'), ' ').trim()}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (peer.latestMessage != null)
+                      Text(
+                        formatConversationTime(peer.updated),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                  ],
+                ),
+                trailing: peer.unreadCount > 0
+                    ? Semantics(
+                        label:
+                            '${peer.unreadCount} unread ${peer.unreadCount == 1 ? 'message' : 'messages'}',
+                        child: ExcludeSemantics(
+                          child: Badge(
+                            key: ValueKey('unread-${peer.id}'),
+                            label: Text(
+                              peer.unreadCount > 99
+                                  ? '99+'
+                                  : '${peer.unreadCount}',
+                            ),
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.chevron_right),
                 onTap: () => onOpenHistory(peer),
               ),
             ),

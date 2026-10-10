@@ -29,11 +29,60 @@ class ChatController extends ChangeNotifier {
   List<ChatMessage> messages = [];
   String? selectedPeer;
   String selectedName = '';
+  Object? _visibleChat;
+  bool _appAccessible = true;
+  bool _appForeground = true;
   String get profileName => store.name;
   String? get code => _session?.verificationCode;
   String? get connectedPeer => _session?.peerId;
   bool get ready => localVerified && remoteVerified && _session != null;
   bool get canSend => ready && selectedPeer == connectedPeer;
+
+  bool get _canReadSelected =>
+      initialized &&
+      _visibleChat != null &&
+      _appAccessible &&
+      _appForeground &&
+      selectedPeer != null &&
+      (selectedPeer != connectedPeer || ready);
+
+  // Selection/connection alone does not mean a conversation is being read.
+  // Route tokens keep disposal of an old screen from hiding a newer one.
+  void setChatVisible(Object screen, bool visible) {
+    if (visible) {
+      if (identical(_visibleChat, screen)) return;
+      _visibleChat = screen;
+      _readVisible();
+    } else if (identical(_visibleChat, screen)) {
+      _visibleChat = null;
+    }
+  }
+
+  void setAppAccess(bool accessible) {
+    if (_appAccessible == accessible) return;
+    _appAccessible = accessible;
+    _readVisible();
+  }
+
+  void setAppForeground(bool foreground) {
+    if (_appForeground == foreground) return;
+    _appForeground = foreground;
+    _readVisible();
+    // Refresh relative activity labels after time spent outside the app.
+    if (foreground) notifyListeners();
+  }
+
+  void _readVisible() {
+    if (!_canReadSelected) return;
+    unawaited(
+      _run(() async {
+        // Recheck after earlier frame writes, lock or navigation events.
+        if (!_canReadSelected) return;
+        await _refresh();
+        notifyListeners();
+      }),
+    );
+  }
 
   // One queue owns protocol counters, writes and state. Async stream listeners
   // otherwise overlap when several socket frames arrive in the same read.
@@ -297,8 +346,10 @@ class ChatController extends ChangeNotifier {
     }
   });
   Future<void> _refresh() async {
-    conversations = await store.conversations();
     if (selectedPeer != null) messages = await store.messages(selectedPeer!);
+    // Only clear read state after the visible history has decrypted successfully.
+    if (_canReadSelected) await store.markRead(selectedPeer!);
+    conversations = await store.conversations();
   }
 
   Future<void> viewHistory(Conversation peer) => _run(() async {

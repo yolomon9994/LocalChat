@@ -1,5 +1,39 @@
 # Validation for v0.1.0
 
+## Chats list milestone — 2026-10-10
+
+Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all 52 tests passed (43 existing + 9 new checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning recorded below.
+
+Real SQLite tests cover a version-1 upgrade with preserved encrypted history
+and identity, old messages initialized as read, persistent unread/read state,
+duplicate handling, previews and message-only ordering. The ciphertext-tamper
+check also verifies that summaries reject altered message bodies.
+
+Controller checks exchange encrypted frames through an in-memory transport
+and verify that selection alone does not clear unread counts, visible incoming
+messages remain read, lock/foreground gates preserve unread messages, queued
+reads recheck access, verification hides history and viewing another peer does
+not clear the active peer's unread count. Widget checks cover route opening/back,
+dialogs, backgrounding with lock disabled, locking/unlocking, badge semantics,
+date labels and long previews at 320 × 568 with 1.5× text. Existing demo coverage
+now also checks unread peer/direction scoping and deduplication.
+
+The existing lock privacy test now seeds its private message in demo storage
+before opening the route, so the new read refresh can load actual saved history.
+Its startup withholding, route removal and locked-content assertions remain.
+
+Secure storage, transport and lifecycle checks use doubles; physical Android
+upgrade/persistence and two-phone receipt checks remain user testing. Follow
+[the Chats list checklist](CHAT_LIST.md) before committing. No new dependencies,
+wire protocol or native Android implementation changes were introduced.
+
 ## Theme milestone — 2026-10-10
 
 Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.

@@ -22,8 +22,16 @@ class ChatMessage {
 }
 
 class Conversation {
-  const Conversation(this.id, this.name, this.updated);
+  const Conversation(
+    this.id,
+    this.name,
+    this.updated, {
+    this.latestMessage,
+    this.unreadCount = 0,
+  });
   final String id;
   final String name;
   final int updated;
+  final ChatMessage? latestMessage;
+  final int unreadCount;
 }

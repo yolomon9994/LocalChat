@@ -215,6 +215,7 @@ void main() {
     final store = DemoStore();
     await store.open();
     for (final peer in ['a', 'b']) {
+      await store.savePeer(peer, peer);
       for (final outgoing in [true, false]) {
         await store.saveMessage(
           ChatMessage(
@@ -236,5 +237,27 @@ void main() {
     expect(a.firstWhere((m) => m.outgoing).status, 'delivered');
     expect(a.firstWhere((m) => !m.outgoing).status, 'received');
     expect(b.every((m) => m.status == 'received'), isTrue);
+    expect(
+      (await store.conversations()).map((p) => p.unreadCount),
+      everyElement(1),
+    );
+    await store.markRead('a');
+    await store.saveMessage(
+      const ChatMessage(
+        id: 'same-id',
+        peerId: 'a',
+        text: 'duplicate',
+        timestamp: 2,
+        outgoing: false,
+        status: 'received',
+      ),
+    );
+    final summaries = await store.conversations();
+    expect(summaries.singleWhere((p) => p.id == 'a').unreadCount, 0);
+    expect(summaries.singleWhere((p) => p.id == 'b').unreadCount, 1);
+    expect(
+      summaries.singleWhere((p) => p.id == 'a').latestMessage!.text,
+      'a/false',
+    );
   });
 }

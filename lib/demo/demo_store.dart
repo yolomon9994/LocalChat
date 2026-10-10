@@ -6,6 +6,7 @@ import '../core/models.dart';
 class DemoStore extends LocalStore {
   final _people = <String, Conversation>{};
   final _messages = <(String, String, bool), ChatMessage>{};
+  final _unread = <(String, String, bool)>{};
 
   @override
   Future<void> open() async {
@@ -18,23 +19,58 @@ class DemoStore extends LocalStore {
 
   @override
   Future<void> savePeer(String id, String name) async {
-    _people[id] = Conversation(id, name, DateTime.now().millisecondsSinceEpoch);
+    _people[id] = Conversation(
+      id,
+      name,
+      _people[id]?.updated ?? DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   @override
-  Future<List<Conversation>> conversations() async =>
-      _people.values.toList()..sort((a, b) => b.updated.compareTo(a.updated));
+  Future<List<Conversation>> conversations() async {
+    final result = <Conversation>[];
+    for (final peer in _people.values) {
+      final history = _messages.values
+          .where((m) => m.peerId == peer.id)
+          .toList();
+      result.add(
+        Conversation(
+          peer.id,
+          peer.name,
+          peer.updated,
+          latestMessage: history.isEmpty ? null : history.last,
+          unreadCount: _unread.where((key) => key.$1 == peer.id).length,
+        ),
+      );
+    }
+    return result..sort((a, b) {
+      if ((a.latestMessage == null) != (b.latestMessage == null)) {
+        return a.latestMessage == null ? 1 : -1;
+      }
+      final activity = b.updated.compareTo(a.updated);
+      return activity != 0 ? activity : a.id.compareTo(b.id);
+    });
+  }
 
   @override
   Future<void> saveMessage(ChatMessage message) async {
-    _messages.putIfAbsent((
-      message.peerId,
-      message.id,
-      message.outgoing,
-    ), () => message);
+    final key = (message.peerId, message.id, message.outgoing);
+    if (_messages.containsKey(key)) return;
+    _messages[key] = message;
+    if (!message.outgoing) _unread.add(key);
     final peer = _people[message.peerId];
-    if (peer != null) await savePeer(peer.id, peer.name);
+    if (peer != null) {
+      _people[peer.id] = Conversation(
+        peer.id,
+        peer.name,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+    }
   }
+
+  @override
+  Future<void> markRead(String peer) async =>
+      _unread.removeWhere((key) => key.$1 == peer);
 
   @override
   Future<List<ChatMessage>> messages(String peer) async =>
@@ -60,6 +96,7 @@ class DemoStore extends LocalStore {
   Future<void> clearHistory() async {
     _people.clear();
     _messages.clear();
+    _unread.clear();
   }
 
   @override

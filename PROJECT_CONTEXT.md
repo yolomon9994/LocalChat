@@ -13,9 +13,33 @@ background delivery and notifications are also future work.
 
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
-Navigation was committed as `abe4dc3`; the current milestone is themes.
-Work on one milestone
-at a time; the user will stage, commit and push it themselves after testing.
+Navigation was committed as `abe4dc3`, and themes as `b353956`.
+The current milestone is Chats list improvements. Work on one milestone at a
+time; the user will stage, commit and push it themselves after testing.
+
+## Chats list milestone
+
+- `Conversation` carries its latest decrypted message and unread count.
+  Chats shows a two-line preview, You prefix for outgoing messages, local
+  activity time/date and a badge (99+ visually, full count for accessibility).
+- `LocalStore` schema version 2 adds per-message `is_read`, with existing
+  version-1 history initialized as read. Message bodies remain encrypted;
+  previews decrypt the last locally saved message rather than storing a
+  plaintext copy. Read state is local unencrypted metadata, not a read receipt.
+- Summary queries use indexed last-message and unread lookups. New message
+  writes update local activity atomically; duplicate writes, peer name updates,
+  read marking and delivery acknowledgements do not reorder conversations.
+  Chats with messages precede empty conversations.
+- `ChatScreen` uses the root ModalRoute observer to report actual visibility.
+  `ChatController` gates read marking on that visibility, foreground state,
+  unlocked access and readable history (verification hides active history).
+  The protocol queue rechecks these gates before marking read. `main.dart`
+  updates access/foreground gates immediately on locking and lifecycle changes.
+- Demo storage has matching summary/read behavior, with its usual reload reset.
+  Added nine storage, controller and list checks and extended existing demo and
+  ciphertext-tampering coverage. See `docs/CHAT_LIST.md` for phone checks.
+  Validation: all 52 tests pass, clean analysis and successful Android/browser builds.
+  This milestone remains unstaged and uncommitted for the user.
 
 ## Theme milestone
 
@@ -33,7 +57,7 @@ at a time; the user will stage, commit and push it themselves after testing.
 - Added seven checks for persistence, storage errors, device brightness,
   navigation/lock coverage, eight-theme message contrast and enlarged text.
   Validation: all 43 tests pass, clean analysis, successful Android/browser builds.
-  Phone checks are in `docs/THEMES.md`. This milestone remains uncommitted.
+  Phone checks are in `docs/THEMES.md`. The user committed this as `b353956`.
 
 ## Chats / Nearby navigation milestone
 
@@ -120,7 +144,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the theme milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the Chats list milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

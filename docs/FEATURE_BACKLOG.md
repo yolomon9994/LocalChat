@@ -3,7 +3,21 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Themes
+## Current milestone: Chats list improvements
+
+- [x] Latest-message previews, with a You prefix for outgoing text.
+- [x] Last activity time: time today, Yesterday, or an older date.
+- [x] Persistent unread counts for incoming messages; open a visible, unlocked
+      conversation to clear its badge. Incoming messages while reading stay read.
+- [x] Most recent local message activity first; reconnecting, renaming, delivery
+      acknowledgements and duplicate messages keep the existing order.
+- [x] Database upgrade preserves history; existing messages start read.
+- [x] Migration, persistence, visibility, lock, ordering and enlarged-text checks.
+- [x] All 52 tests pass, clean analysis and fresh Android/browser builds.
+- [ ] User tests the Chats list on phones and commits this milestone;
+      see [Chats list checklist](CHAT_LIST.md).
+
+## Themes: implemented and committed
 
 - [x] Light, dark and follow-system modes in Settings → Appearance.
 - [x] Mint, blue, purple and amber palettes across tabs, chats, Settings and lock.
@@ -12,8 +26,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Automated persistence, failure recovery, system mode, navigation, lock,
       contrast and small-screen checks.
 - [x] All 43 tests pass, clean analysis and fresh Android/browser builds.
-- [ ] User tests themes on a phone and commits this milestone;
-      see [theme checklist](THEMES.md).
+- [x] User reviews and commits the theme milestone (`b353956`).
+- [ ] Physical phone theme testing; see [theme checklist](THEMES.md).
 
 ## Chats / Nearby navigation: implemented and committed
 
@@ -52,7 +66,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 ## Suggested quality-of-life features
 
-- [ ] Unread badges, latest-message previews, and latest activity timestamps.
+- [x] Unread badges, latest-message previews, latest activity timestamps and
+      recent-message ordering.
 - [ ] Local conversation and message search.
 - [ ] Saved drafts across navigation and restarts.
 - [ ] Offline outbox, reconnection and retry after verification; distinguish
@@ -76,8 +91,9 @@ Work on one feature at a time; validate it before the user commits and starts th
 ## Proposed order after app lock
 
 1. Chats/Nearby navigation (committed).
-2. Themes (current milestone).
-3. Chat management, search, unread state and drafts.
+2. Themes (committed).
+3. Chats list previews/unread state (current milestone), then search, drafts
+   and conversation management as separate milestones.
 4. Encrypted backups and phone migration.
 5. Reliable reconnection, queued messages and notifications.
 6. Group chat and attachments.

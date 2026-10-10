@@ -30,6 +30,9 @@ class MemoryStore extends LocalStore {
   }
 
   @override
+  Future<void> markRead(String peer) async {}
+
+  @override
   Future<void> setStatus(String id, String peer, String status) async {
     final m = saved[id];
     if (m != null && m.peerId == peer && m.outgoing) {

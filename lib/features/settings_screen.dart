@@ -86,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: Text(
             widget.controller.isDemo
                 ? 'Messages and settings live in memory in this browser tab. Reloading resets them. The demo does not use SQLite or secure storage.'
-                : 'Message text is encrypted locally. Names, timestamps and delivery status are not encrypted in the database.',
+                : 'Message text is encrypted locally. Names, timestamps, delivery status and read state are not encrypted in the database.',
           ),
         ),
         ListTile(
