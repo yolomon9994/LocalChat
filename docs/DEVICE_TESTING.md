@@ -2,6 +2,9 @@
 
 These tests require physical hardware and are **not marked as passed** by the automated protocol tests. Record phone model, Android version and outcomes when testing.
 
+For encrypted file export/import, merging and identity transfer, also follow
+the [backup phone checklist](BACKUPS.md).
+
 | Case | Expected behavior |
 |---|---|
 | Fresh install on Android 13+ | Nearby device permission requested, no Location runtime request |

@@ -15,9 +15,49 @@ The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
 Navigation was committed as `abe4dc3`, and themes as `b353956`.
 Chats list improvements were committed as `c233159`, and local search as
-`a2c7aa3`; drafts were committed as `9e90550`. The current milestone is
-conversation management. Work on one milestone at a
+`a2c7aa3`; drafts were committed as `9e90550`, and conversation management as
+`8f55377`. The current milestone is encrypted backups and phone migration.
+Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Encrypted backups and phone migration milestone
+
+- Settings → Chat backups exports/imports password-protected `.lcbackup` files.
+  Includes messages, read/delivery state, drafts, pin/archive choices and private
+  identity seed. Native SAF streams only encrypted bytes, bounds input size and
+  requests no broad storage permission. Browser uses `package:web` file APIs.
+- `core/chat_backup.dart` validates version-1 JSON before merging, verifies the
+  seed/public identity relationship, bounds records and references, and uses
+  PBKDF2-HMAC-SHA256 (600k, 256-bit) plus XChaCha20-Poly1305. Fresh 16-byte salt,
+  24-byte nonce; authenticated magic/version/salt. Limit 20 MiB + 65-byte envelope.
+- Preview shows additions, duplicates/conflicts and retained drafts. The final
+  transaction recalculates counts. Existing names/flags/messages/state/nonempty
+  drafts win. Dedupe keys include peer/id/direction. `sending` imports as
+  `unconfirmed`; importing neither sends nor acknowledges. Bodies are encrypted
+  again with the destination history key; settings/display name stay local.
+- Default history-only import retains identity. User explicitly chose support
+  for transferring identity to an empty phone too. That checkbox requires no
+  chats/messages/drafts, stops transport and tells the user to retire the old
+  phone. Fresh verification is still required on reconnect.
+- Schema 5 adds `backup_receipt(id)` only. Vault `identity_import_pending_v1`
+  records old/new seeds and operation ID before a migration transaction; a
+  receipt commits with the merge. Recovery chooses new seed when committed,
+  old seed otherwise. A failed final vault write blocks controller messaging
+  until restart recovery; cleanup removes the vault journal before the receipt.
+- Backup operations use the protocol queue and draft queue. Pending saves settle
+  before snapshots. Import refreshes draft cache without overwriting newer edits,
+  plus conversation/historyRevision state for search. Draft errors block backups.
+- `BackupScreen` drops password fields/decrypted preview on background/disposal.
+  Only selected ciphertext is retained in ChatController across system-picker
+  locking; after unlock return to backups and enter password again. Import
+  access tokens reject confirmations from an earlier unlock. A confirmed atomic
+  import can finish while hidden. Demo/native archives cannot be mixed.
+- Tests include crypto tampering/password/KDF, payload bounds, merges, rollback,
+  journal recovery/vault failure, schema upgrades, concurrent draft edits, screen
+  flows, explicit migration, native channel, phone text size and lock/picker flow.
+  See `docs/BACKUPS.md` for hardware checks and `docs/VALIDATION.md` for results.
+  All 99 tests pass, static analysis is clean and fresh Android/browser builds
+  succeed. Changes remain uncommitted for the user; hardware checks are pending.
 
 ## Conversation management milestone
 
@@ -46,8 +86,8 @@ time; the user will stage, commit and push it themselves after testing.
 - Menu state stays with keyed chat cards when pinning changes order. Archive
   routes and deletion dialogs use the existing lock-covered navigator. Error
   banners have a scrollable height limit so large text leaves room for the list.
-- Phone checks are in `docs/CONVERSATION_MANAGEMENT.md`. Changes are uncommitted
-  for the user's testing/commit; validation results are in `docs/VALIDATION.md`.
+- Phone checks are in `docs/CONVERSATION_MANAGEMENT.md`. Committed as `8f55377`;
+  validation results are in `docs/VALIDATION.md`.
   All 82 tests pass, static analysis is clean and Android/browser builds succeed.
 
 ## Saved drafts milestone

@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
+import 'package:local_chat/core/chat_backup.dart';
+import 'package:local_chat/demo/demo_store.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqlite3/open.dart';
@@ -317,7 +319,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 4);
+      expect(await upgraded.getVersion(), 5);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -547,6 +549,248 @@ void main() {
       expect(await store.setArchived('alice', true), isTrue);
     },
   );
+  Future<BackupData> incomingBackup() async {
+    final demo = DemoStore();
+    await demo.open();
+    await demo.savePeer('alice', 'Backup Alice');
+    await demo.savePeer('bob', 'Backup Bob');
+    await demo.setPinned('alice', true);
+    await demo.setArchived('bob', true);
+    await demo.saveMessage(message());
+    await demo.saveMessage(message(outgoing: false));
+    await demo.saveMessage(message(peer: 'bob', outgoing: false));
+    await demo.saveDraft('alice', 'Imported draft');
+    await demo.saveDraft('bob', 'Other imported draft سلام 👋');
+    final data = await demo.exportBackup();
+    return BackupData.parse({...data.toJson(), 'demo': false});
+  }
+
+  test(
+    'Backup merges by peer/id/direction, retains existing state and re-encrypts bodies',
+    () async {
+      await store.saveMessage(message());
+      await store.setStatus('id-1', 'alice', 'delivered');
+      await store.saveDraft('alice', 'Existing draft');
+      final seed = (await store.exportBackup()).seed;
+      final incoming = await incomingBackup();
+      final result = await store.importBackup(incoming);
+      expect(result.newChats, 1);
+      expect(result.newMessages, 2);
+      expect(result.duplicates, 1);
+      expect(result.keptDrafts, 1);
+      expect((await store.exportBackup()).seed, seed);
+      expect(await store.draft('alice'), 'Existing draft');
+      expect(await store.draft('bob'), 'Other imported draft سلام 👋');
+      final peers = await store.conversations();
+      expect(peers.singleWhere((p) => p.id == 'alice').pinned, isFalse);
+      expect(peers.singleWhere((p) => p.id == 'alice').name, 'Alice');
+      expect(peers.singleWhere((p) => p.id == 'bob').archived, isTrue);
+      expect(peers.singleWhere((p) => p.id == 'bob').unreadCount, 1);
+      expect((await store.messages('alice')).first.status, 'delivered');
+      final db = await openDatabase(databasePath);
+      expect(
+        (await db.query(
+          'messages',
+        )).every((r) => !(r['body'] as String).contains('Private')),
+        isTrue,
+      );
+      final repeat = await store.importBackup(incoming);
+      expect(repeat.newMessages, 0);
+      expect(repeat.duplicates, 3);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect((await store.exportBackup()).seed, seed);
+      expect(await store.draft('bob'), 'Other imported draft سلام 👋');
+    },
+  );
+
+  test(
+    'Import rolls back every record on an insert failure; invalid contents never mutate',
+    () async {
+      final incoming = await incomingBackup();
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_import BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'test'); END",
+      );
+      await expectLater(store.importBackup(incoming), throwsA(anything));
+      expect((await store.conversations()).single.id, 'alice');
+      expect(await store.messages('alice'), isEmpty);
+      expect(await store.draft('bob'), '');
+      final originalIdentity = (await store.exportBackup()).seed;
+      await store.clearHistory();
+      await expectLater(
+        store.importBackup(incoming, moveIdentity: true),
+        throwsA(anything),
+      );
+      expect(await store.conversations(), isEmpty);
+      expect((await store.exportBackup()).seed, originalIdentity);
+      expect(
+        await const FlutterSecureStorage().read(
+          key: 'identity_import_pending_v1',
+        ),
+        isNull,
+      );
+      await store.savePeer('alice', 'Alice');
+      await db.execute('DROP TRIGGER fail_import');
+      final invalid = BackupData(
+        seed: incoming.seed,
+        owner: incoming.owner,
+        name: incoming.name,
+        created: incoming.created,
+        demo: false,
+        peers: incoming.peers,
+        messages: [
+          {...incoming.messages.first, 'peer': 'missing'},
+        ],
+        drafts: [],
+      );
+      await expectLater(store.importBackup(invalid), throwsFormatException);
+      expect((await store.conversations()).single.id, 'alice');
+    },
+  );
+
+  test(
+    'Identity migration requires an empty store and survives restart with destination history key',
+    () async {
+      final incoming = await incomingBackup();
+      await expectLater(
+        store.importBackup(incoming, moveIdentity: true),
+        throwsFormatException,
+      );
+      expect((await store.conversations()).single.id, 'alice');
+      await store.clearHistory();
+      const vault = FlutterSecureStorage();
+      final historyKey = await vault.read(key: 'history_key_v1');
+      await store.importBackup(incoming, moveIdentity: true);
+      expect((await store.exportBackup()).seed, incoming.seed);
+      expect(await vault.read(key: 'identity_import_pending_v1'), isNull);
+      expect(await vault.read(key: 'history_key_v1'), historyKey);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect((await store.exportBackup()).seed, incoming.seed);
+      expect((await store.messages('bob')).single.text, message().text);
+      expect(await store.draft('bob'), 'Other imported draft سلام 👋');
+    },
+  );
+
+  test(
+    'Crash journal uses committed identity or rolls back an uncommitted identity',
+    () async {
+      final incoming = await incomingBackup();
+      final old = (await store.exportBackup()).seed;
+      const vault = FlutterSecureStorage();
+      for (final committed in [false, true]) {
+        await vault.write(key: 'identity_seed_v1', value: old);
+        await vault.write(
+          key: 'identity_import_pending_v1',
+          value: jsonEncode({
+            'id': 'migration-test',
+            'old': old,
+            'new': incoming.seed,
+          }),
+        );
+        final db = await openDatabase(databasePath);
+        if (committed) {
+          await db.insert('backup_receipt', {'id': 'migration-test'});
+        }
+        await store.close();
+        store = LocalStore();
+        await store.open();
+        expect(
+          (await store.exportBackup()).seed,
+          committed ? incoming.seed : old,
+        );
+        expect(await vault.read(key: 'identity_import_pending_v1'), isNull);
+        expect(
+          await (await openDatabase(databasePath)).query('backup_receipt'),
+          isEmpty,
+        );
+      }
+    },
+  );
+
+  test(
+    'Version 4 upgrade preserves encrypted chats, flags and drafts',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      await store.saveDraft('alice', 'Version four draft');
+      await store.setArchived('alice', true);
+      await store.setPinned('alice', true);
+      final seed = (await store.exportBackup()).seed;
+      final db = await openDatabase(databasePath);
+      await db.execute('DROP TABLE backup_receipt');
+      await db.setVersion(4);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final p = (await store.conversations()).single;
+      expect(p.pinned && p.archived, isTrue);
+      expect(p.unreadCount, 1);
+      expect(await store.draft('alice'), 'Version four draft');
+      expect((await store.exportBackup()).seed, seed);
+      expect(await (await openDatabase(databasePath)).getVersion(), 5);
+    },
+  );
+  test(
+    'A failed final vault write leaves a committed migration recoverable on restart',
+    () async {
+      final incoming = await incomingBackup();
+      await store.clearHistory();
+      await store.close();
+      store = LocalStore(vault: FailIdentityWrite(incoming.seed));
+      await store.open();
+      await expectLater(
+        store.importBackup(incoming, moveIdentity: true),
+        throwsStateError,
+      );
+      expect(store.identityRecoveryRequired, isTrue);
+      expect((await store.conversations()).length, 2);
+      expect(
+        await const FlutterSecureStorage().read(
+          key: 'identity_import_pending_v1',
+        ),
+        isNotNull,
+      );
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect(store.identityRecoveryRequired, isFalse);
+      expect((await store.exportBackup()).seed, incoming.seed);
+      expect((await store.messages('bob')).single.text, message().text);
+    },
+  );
+}
+
+class FailIdentityWrite extends FlutterSecureStorage {
+  FailIdentityWrite(this.seed);
+  final String seed;
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (key == 'identity_seed_v1' && value == seed) {
+      throw StateError('Test vault write failure');
+    }
+    await super.write(
+      key: key,
+      value: value,
+      iOptions: iOptions,
+      aOptions: aOptions,
+      lOptions: lOptions,
+      webOptions: webOptions,
+      mOptions: mOptions,
+      wOptions: wOptions,
+    );
+  }
 }
 
 Future<void> legacyPeerTable(Database db) => db.transaction((txn) async {

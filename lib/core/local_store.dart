@@ -4,15 +4,19 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 import 'models.dart';
+import 'chat_backup.dart';
 
 class LocalStore {
-  LocalStore({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  LocalStore({DateTime Function()? now, FlutterSecureStorage? vault})
+    : _now = now ?? DateTime.now,
+      _vault = vault ?? const FlutterSecureStorage();
   final DateTime Function() _now;
-  static const _vault = FlutterSecureStorage();
+  final FlutterSecureStorage _vault;
   late Database _database;
   late SecretKey _historyKey;
   late SimpleKeyPair identity;
   String name = 'LocalChat user';
+  bool identityRecoveryRequired = false;
   final _cipher = Xchacha20.poly1305Aead();
 
   Future<void> open() async {
@@ -35,7 +39,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -49,6 +53,7 @@ class LocalStore {
         await _createSummaryIndexes(db);
         await _createDraftTable(db);
         await _addManagementColumns(db);
+        await db.execute('CREATE TABLE backup_receipt (id TEXT PRIMARY KEY)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -60,12 +65,203 @@ class LocalStore {
         }
         if (oldVersion < 3) await _createDraftTable(db);
         if (oldVersion < 4) await _addManagementColumns(db);
+        if (oldVersion < 5) {
+          await db.execute(
+            'CREATE TABLE IF NOT EXISTS backup_receipt (id TEXT PRIMARY KEY)',
+          );
+        }
       },
     );
+    await _recoverIdentity();
     // A process termination leaves delivery unknown, never silently "delivered".
     await _database.update('messages', {
       'status': 'unconfirmed',
     }, where: "status = 'sending'");
+  }
+
+  /// SQLite commit receipts resolve crashes between database and vault writes.
+  Future<void> _recoverIdentity() async {
+    final pending = await _vault.read(key: 'identity_import_pending_v1');
+    if (pending == null) {
+      identityRecoveryRequired = false;
+      await _database.delete('backup_receipt');
+      return;
+    }
+    identityRecoveryRequired = true;
+    final record = jsonDecode(pending) as Map;
+    final committed = (await _database.query(
+      'backup_receipt',
+      where: 'id = ?',
+      whereArgs: [record['id']],
+    )).isNotEmpty;
+    final seed = record[committed ? 'new' : 'old'] as String;
+    if (await _vault.read(key: 'identity_seed_v1') != seed) {
+      await _vault.write(key: 'identity_seed_v1', value: seed);
+    }
+    identity = await Ed25519().newKeyPairFromSeed(base64Decode(seed));
+    identityRecoveryRequired = false;
+    // Cleanup is optional. Never remove a receipt before its vault journal.
+    try {
+      await _vault.delete(key: 'identity_import_pending_v1');
+      await _database.delete('backup_receipt');
+    } catch (_) {
+      /* A later open repeats the same committed recovery. */
+    }
+  }
+
+  Future<BackupData> _snapshot(DatabaseExecutor db) async {
+    final peers = await db.query('peers', orderBy: 'rowid ASC');
+    final messages = await db.query('messages', orderBy: 'rowid ASC');
+    final drafts = await db.query('drafts');
+    final seed = base64Encode(await identity.extractPrivateKeyBytes());
+    final owner = (await Sha256().hash(
+      (await identity.extractPublicKey()).bytes,
+    )).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final result = <Map<String, Object?>>[];
+    for (final row in messages) {
+      final m = await _decodeMessage(row);
+      result.add({
+        'id': m.id,
+        'peer': m.peerId,
+        'text': m.text,
+        'timestamp': m.timestamp,
+        'outgoing': m.outgoing,
+        'status': m.status,
+        'read': row['is_read'] == 1,
+      });
+    }
+    final draftResult = <Map<String, Object?>>[];
+    for (final d in drafts) {
+      draftResult.add({'peer': d['peer'], 'text': await _decodeDraft(d)});
+    }
+    return BackupData(
+      seed: seed,
+      owner: owner,
+      name: name,
+      created: _now().millisecondsSinceEpoch,
+      demo: false,
+      peers: peers
+          .map(
+            (p) => <String, Object?>{
+              'id': p['id'],
+              'name': p['name'],
+              'updated': p['updated'],
+              'pinned': p['pinned'] == 1,
+              'archived': p['archived'] == 1,
+            },
+          )
+          .toList(),
+      messages: result,
+      drafts: draftResult,
+    );
+  }
+
+  Future<BackupData> exportBackup() => _database.transaction(_snapshot);
+
+  Future<BackupMerge> importBackup(
+    BackupData data, {
+    bool moveIdentity = false,
+  }) async {
+    // Validate even callers that bypass the file decoder.
+    data = await BackupData.parse(data.toJson());
+    await _recoverIdentity();
+    if (moveIdentity) {
+      final current = await exportBackup();
+      if (current.peers.isNotEmpty ||
+          current.messages.isNotEmpty ||
+          current.drafts.isNotEmpty) {
+        throw const FormatException(
+          'Identity transfer requires an empty destination phone.',
+        );
+      }
+      final token = base64Encode(
+        await (await _cipher.newSecretKey()).extractBytes(),
+      );
+      identityRecoveryRequired = true;
+      await _vault.write(
+        key: 'identity_import_pending_v1',
+        value: jsonEncode({'id': token, 'old': current.seed, 'new': data.seed}),
+      );
+    }
+    late BackupMerge result;
+    try {
+      result = await _database.transaction((txn) async {
+        final current = await _snapshot(txn);
+        if (moveIdentity &&
+            (current.peers.isNotEmpty ||
+                current.messages.isNotEmpty ||
+                current.drafts.isNotEmpty)) {
+          throw const FormatException(
+            'Identity transfer requires an empty destination phone.',
+          );
+        }
+        final plan = planBackup(current, data);
+        for (final p in plan.data.peers) {
+          await txn.insert('peers', {
+            'id': p['id'],
+            'name': p['name'],
+            'updated': p['updated'],
+            'pinned': p['pinned'] == true ? 1 : 0,
+            'archived': p['archived'] == true ? 1 : 0,
+          });
+        }
+        final peerActivity = {
+          for (final p in data.peers) p['id']: p['updated'] as int,
+        };
+        for (final m in plan.data.messages) {
+          final direction = m['outgoing'] == true ? 1 : 0;
+          final box = await _cipher.encrypt(
+            utf8.encode(m['text'] as String),
+            secretKey: _historyKey,
+            aad: utf8.encode('${m['peer']}/${m['id']}/$direction'),
+          );
+          await txn.insert('messages', {
+            'id': m['id'],
+            'peer': m['peer'],
+            'body': base64Encode([
+              ...box.nonce,
+              ...box.mac.bytes,
+              ...box.cipherText,
+            ]),
+            'timestamp': m['timestamp'],
+            'outgoing': direction,
+            'status': m['status'],
+            'is_read': direction == 1 || m['read'] == true ? 1 : 0,
+          });
+          await txn.rawUpdate(
+            'UPDATE peers SET updated = MAX(updated, ?) WHERE id = ?',
+            [peerActivity[m['peer']], m['peer']],
+          );
+        }
+        for (final d in plan.data.drafts) {
+          final box = await _cipher.encrypt(
+            utf8.encode(d['text'] as String),
+            secretKey: _historyKey,
+            aad: utf8.encode(jsonEncode(['LocalChat/draft/1', d['peer']])),
+          );
+          await txn.insert('drafts', {
+            'peer': d['peer'],
+            'body': base64Encode([
+              ...box.nonce,
+              ...box.mac.bytes,
+              ...box.cipherText,
+            ]),
+          });
+        }
+        if (moveIdentity) {
+          final pending =
+              jsonDecode(
+                    (await _vault.read(key: 'identity_import_pending_v1'))!,
+                  )
+                  as Map;
+          await txn.insert('backup_receipt', {'id': pending['id']});
+        }
+        return plan;
+      });
+    } finally {
+      if (moveIdentity) await _recoverIdentity();
+    }
+    return result;
   }
 
   static Future<void> _createSummaryIndexes(Database db) async {
@@ -121,7 +317,11 @@ class LocalStore {
       limit: 1,
     );
     if (rows.isEmpty) return '';
-    final bytes = base64Decode(rows.single['body'] as String);
+    return _decodeDraft(rows.single);
+  }
+
+  Future<String> _decodeDraft(Map<String, Object?> row) async {
+    final bytes = base64Decode(row['body'] as String);
     final clear = await _cipher.decrypt(
       SecretBox(
         bytes.sublist(40),
@@ -129,7 +329,7 @@ class LocalStore {
         mac: Mac(bytes.sublist(24, 40)),
       ),
       secretKey: _historyKey,
-      aad: utf8.encode(jsonEncode(['LocalChat/draft/1', peer])),
+      aad: utf8.encode(jsonEncode(['LocalChat/draft/1', row['peer']])),
     );
     return utf8.decode(clear);
   }

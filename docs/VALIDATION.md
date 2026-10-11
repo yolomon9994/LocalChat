@@ -1,5 +1,51 @@
 # Validation for v0.1.0
 
+## Encrypted backups and phone migration — 2026-10-11
+
+Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
+
+- `flutter pub get`: succeeded; existing `web` 1.1.1 is now a direct dependency.
+- `flutter analyze`: no issues.
+- `flutter test`: all **99 tests passed** (82 existing + 17 backup checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  fresh successful APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, including the
+  browser file APIs; same optional Cupertino font warning as prior builds.
+- `git -c core.safecrlf=false diff --check`: clean.
+
+Six codec/draft checks cover password round-trip, fresh salts/nonces, wrong
+password and salt/nonce/tag/body tampering, real production PBKDF2 encryption
+and decryption, early size/header/version/password rejection, duplicate/orphan/
+malformed/oversized records and identity consistency, conflict retention,
+explicit demo migration, native/demo separation, and draft edits/deletions
+queued during an import. Most UI/state checks use a fast test KDF; the production
+600,000-iteration KDF is exercised separately without that test double.
+
+Six additional real SQLite checks cover peer/id/direction dedupe, existing
+message/name/flags/status/draft preservation, unread state, fresh destination
+ciphertext and restart persistence, whole-merge rollback (also with identity
+transfer), invalid data rejection, empty-only migration and retained history
+key, committed/uncommitted crash-journal recovery, schema-4-to-5 preservation,
+and a failed final vault write recovered by reopening. Earlier schema-1/2/3
+upgrade fixtures now finish at schema 5. Vault tests use secure-storage doubles,
+and do not claim Android Keystore hardware validation.
+
+Five screen/controller/channel checks cover export confirmation, wrong-password
+feedback, preview/cancel/import, duplicate repeat imports, identity retention,
+disabled transfer on populated destinations, explicit transfer at 320 × 568
+with 1.8× phone text, picker completion after lock disposes its route, empty
+password after unlock, lock hiding preview, rejection of old unlock tokens,
+draft cache/search revision/unread refresh, encrypted platform-channel payloads,
+picker cancellation and file size limits. Screen checks use memory transport,
+storage and file-picker doubles. The browser file implementation is compiled;
+an actual browser download/upload was not exercised in this milestone.
+
+Physical Android file providers, picker lifecycle, secure-storage migration,
+offline phone-to-phone file transfer and reconnection under the transferred
+identity remain pending. Follow [BACKUPS.md](BACKUPS.md)'s phone checklist before
+the user's commit. No hardware test or independent security audit is claimed.
+Changes are intentionally uncommitted; the user handles Git themselves.
+
 ## Conversation management milestone — 2026-10-11
 
 Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.

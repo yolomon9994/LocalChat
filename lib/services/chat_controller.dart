@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../core/local_store.dart';
 import '../core/models.dart';
+import '../core/chat_backup.dart';
+import 'backup_files.dart';
 import '../core/secure_session.dart';
 import 'transport.dart';
 import 'draft_controller.dart';
@@ -13,6 +15,19 @@ class ChatController extends ChangeNotifier {
   final Transport transport;
   final LocalStore store;
   late final drafts = DraftController(store);
+  late final backupFiles = createBackupFiles();
+  // Only encrypted file bytes survive the system picker closing locked routes.
+  Uint8List? pendingBackup;
+  String? backupNotice;
+  bool get appAccessible => _appAccessible;
+  bool get appForeground => _appForeground;
+  int accessRevision = 0;
+  void backupFilePicked(Uint8List? bytes, {String? notice}) {
+    pendingBackup = bytes;
+    backupNotice = notice;
+    notifyListeners();
+  }
+
   StreamSubscription<Map<String, dynamic>>? _subscription;
   Future<void> _queue = Future<void>.value();
   SecureSession? _session;
@@ -64,7 +79,72 @@ class ChatController extends ChangeNotifier {
   void setAppAccess(bool accessible) {
     if (_appAccessible == accessible) return;
     _appAccessible = accessible;
+    accessRevision++;
     _readVisible();
+  }
+
+  Future<BackupData> backupSnapshot() async {
+    late BackupData result;
+    Object? failure;
+    await _run(() async {
+      try {
+        if (!initialized || !_appAccessible || !_appForeground) {
+          throw const FormatException('Unlock the app before backing up.');
+        }
+        result = await drafts.exportBackup();
+      } catch (e) {
+        failure = e;
+      }
+    });
+    if (failure != null) throw failure!;
+    return result;
+  }
+
+  Future<BackupMerge> restoreBackup(
+    BackupData data, {
+    bool moveIdentity = false,
+    required int accessToken,
+  }) async {
+    late BackupMerge result;
+    Object? failure;
+    await _run(() async {
+      try {
+        if (!initialized ||
+            !_appAccessible ||
+            !_appForeground ||
+            accessToken != accessRevision) {
+          throw const FormatException(
+            'Unlock the app and preview the backup again.',
+          );
+        }
+        if (moveIdentity) {
+          await transport.stop();
+          started = false;
+          await _reset();
+          selectedPeer = null;
+          selectedName = '';
+        }
+        result = await drafts.importBackup(data, moveIdentity: moveIdentity);
+        conversations = await store.conversations();
+        if (selectedPeer != null) {
+          messages = await store.messages(selectedPeer!);
+        }
+        historyRevision++;
+        notifyListeners();
+      } catch (e) {
+        if (store.identityRecoveryRequired) {
+          initialized = false;
+          await transport.stop();
+          await _reset();
+          error =
+              'Identity recovery needs a restart. Close and reopen LocalChat before connecting.';
+          notifyListeners();
+        }
+        failure = e;
+      }
+    });
+    if (failure != null) throw failure!;
+    return result;
   }
 
   void setAppForeground(bool foreground) {
@@ -168,6 +248,7 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> _event(Map<String, dynamic> event) async {
+    if (store.identityRecoveryRequired) return;
     switch (event['type']) {
       case 'peers':
         peers = (event['peers'] as List)

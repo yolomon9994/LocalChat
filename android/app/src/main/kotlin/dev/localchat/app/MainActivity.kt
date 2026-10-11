@@ -1,6 +1,7 @@
 package dev.localchat.app
 
 import android.Manifest
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -21,6 +22,7 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetSocketAddress
@@ -53,6 +55,8 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private var request: WifiP2pDnsSdServiceRequest? = null
     private var permissionResult: MethodChannel.Result? = null
     private var pendingName = "LocalChat user"
+    private var backupResult: MethodChannel.Result? = null
+    private var backupBytes: ByteArray? = null
     private val peers = linkedMapOf<String, Map<String, String>>()
     private var scanEpoch = 0
     private var scanEnd: Runnable? = null
@@ -61,12 +65,40 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         private const val PORT = 45873
         private const val MAX_FRAME = 65536
         private const val PERMISSION_REQUEST = 1904
+        private const val BACKUP_PICK = 1905
+        private const val BACKUP_SAVE = 1906
+        private const val MAX_BACKUP = 20 * 1024 * 1024 + 65
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Protect the initial window until Flutter has read persisted settings.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/backup").setMethodCallHandler { call, result ->
+            if (call.method != "pick" && call.method != "save") {
+                result.notImplemented()
+            } else if (backupResult != null) {
+                result.error("BACKUP_BUSY", "A file picker is already open.", null)
+            } else {
+                try {
+                    val saving = call.method == "save"
+                    val bytes = if (saving) call.argument<ByteArray>("bytes") else null
+                    if (saving) require(bytes != null && bytes.size in 66..MAX_BACKUP)
+                    val intent = Intent(if (saving) Intent.ACTION_CREATE_DOCUMENT else Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = if (saving) "application/octet-stream" else "*/*"
+                        if (saving) putExtra(Intent.EXTRA_TITLE, call.argument<String>("name") ?: "localchat.lcbackup")
+                    }
+                    backupBytes = bytes
+                    backupResult = result
+                    startActivityForResult(intent, if (saving) BACKUP_SAVE else BACKUP_PICK)
+                } catch (_: Exception) {
+                    backupBytes = null
+                    backupResult = null
+                    result.error("BACKUP_PICKER", "Could not open the system file picker.", null)
+                }
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/privacy").setMethodCallHandler { call, result ->
             if (call.method == "setSecure") {
                 if (call.argument<Boolean>("enabled") == true) {
@@ -129,6 +161,52 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) { sink = events }
+    @Deprecated("Used for the Flutter platform channel file picker")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != BACKUP_PICK && requestCode != BACKUP_SAVE) return
+        val result = backupResult ?: return
+        val bytes = backupBytes
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            backupResult = null; backupBytes = null
+            result.success(if (requestCode == BACKUP_SAVE) false else null)
+            return
+        }
+        backupBytes = null
+        io.execute {
+            try {
+                val value: Any = if (requestCode == BACKUP_SAVE) {
+                    contentResolver.openOutputStream(uri, "w")!!.use { stream ->
+                        stream.write(bytes!!); stream.flush()
+                    }
+                    true
+                } else {
+                    contentResolver.openInputStream(uri)!!.use { stream ->
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val count = stream.read(buffer)
+                            if (count < 0) break
+                            require(output.size() + count <= MAX_BACKUP)
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    }
+                }
+                main.post {
+                    if (backupResult === result) { backupResult = null; result.success(value) }
+                }
+            } catch (_: Exception) {
+                main.post {
+                    if (backupResult === result) {
+                        backupResult = null
+                        result.error("BACKUP_IO", "Could not read or save the backup (maximum 20 MB).", null)
+                    }
+                }
+            }
+        }
+    }
     override fun onCancel(arguments: Any?) { sink = null }
     private fun emit(type: String, vararg fields: Pair<String, Any?>) {
         main.post { sink?.success(mapOf("type" to type, *fields)) }
@@ -389,6 +467,9 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         if (registered) { unregisterReceiver(receiver); registered = false }
     }
     override fun onDestroy() {
+        backupResult?.error("CANCELLED", "Activity closed. Choose the file again.", null)
+        backupResult = null
+        backupBytes = null
         stop()
         permissionResult?.error("CANCELLED", "Activity closed", null)
         permissionResult = null

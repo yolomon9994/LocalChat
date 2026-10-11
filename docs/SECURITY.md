@@ -61,6 +61,23 @@ Android cloud backup and device transfer are excluded to avoid moving a database
 
 ## Implementation boundaries
 
+Manual backups use a separate password-derived key (PBKDF2-HMAC-SHA256, 600,000
+iterations, 256 bits), fresh salt/nonce and XChaCha20-Poly1305. The versioned
+header is authenticated; file and payload limits are enforced. Only encrypted
+bytes go through the native file picker/browser download. The encrypted archive
+includes the private identity seed: possession of the file and password allows
+identity impersonation. There is no password recovery. Import authenticates and
+validates before preview, then re-encrypts text with destination history keys.
+Existing records win conflicts; database writes form one transaction.
+
+Identity transfer is explicit and limited to empty destinations. A vault journal
+and transactional database receipt recover interrupted identity writes on open.
+The old phone must stop using that identity. History-only imports retain the
+destination identity and do not themselves authenticate any nearby peer.
+Passwords/previews lose their UI references on background or route disposal;
+encrypted selection can survive system-picker locking. Managed-memory erasure
+is not guaranteed. See [backup format and tests](BACKUPS.md).
+
 Optional app lock gates startup before chat storage is opened and hides all
 application routes on launch/background until the user authenticates. A salted
 PBKDF2-HMAC-SHA256 verifier and PIN attempt/cooldown state use secure storage;

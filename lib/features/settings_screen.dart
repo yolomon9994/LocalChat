@@ -4,6 +4,7 @@ import '../services/app_lock_controller.dart';
 import 'app_lock_settings.dart';
 import '../services/appearance_controller.dart';
 import 'appearance_settings.dart';
+import 'backup_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -61,6 +62,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (widget.appLock != null) AppLockSettings(lock: widget.appLock!),
         if (widget.appearance != null)
           AppearanceSettings(appearance: widget.appearance!),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.backup_outlined),
+          title: const Text('Chat backups'),
+          subtitle: const Text('Encrypted export, import and phone migration'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: widget.controller.initialized
+              ? () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => BackupScreen(controller: widget.controller),
+                  ),
+                )
+              : null,
+        ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.lock_outline),

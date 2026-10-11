@@ -3,7 +3,21 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Conversation management
+## Current milestone: Encrypted backups and phone migration
+
+- [x] Settings export to a password-encrypted, versioned `.lcbackup` file.
+- [x] Include messages, drafts, unread state and pin/archive choices.
+- [x] Local Android system file picker and browser demo file download/selection.
+- [x] Validate/decrypt before preview; confirmed merge preserves existing data.
+- [x] Duplicate/conflict handling; fresh destination encryption and atomic rollback.
+- [x] History-only import plus explicit identity transfer to an empty phone.
+- [x] Recover interrupted identity switches with vault journal/SQLite receipt.
+- [x] Lock clears passwords/previews; encrypted selection survives picker locking.
+- [x] All 99 tests pass, clean analysis and fresh Android/browser builds;
+      see [backup checklist](BACKUPS.md).
+- [ ] Physical phone testing and user's commit.
+
+## Conversation management: implemented and committed
 
 - [x] Per-chat menu with Pin/Unpin, Archive/Unarchive and confirmed Delete.
 - [x] Persist Android pin/archive choices; pinned chats precede other chats.
@@ -14,8 +28,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Prevent pending draft saves and stale search results from restoring deleted data.
 - [x] Database upgrades preserve encrypted history, drafts, identity and unread state.
 - [x] All 82 tests pass, clean analysis and fresh Android/browser builds.
-- [ ] User tests conversation management on a phone and commits;
-      see [conversation management checklist](CONVERSATION_MANAGEMENT.md).
+- [x] User commits conversation management (`8f55377`).
+- [ ] Physical phone testing; see [conversation management checklist](CONVERSATION_MANAGEMENT.md).
 
 ## Saved message drafts: implemented and committed
 
@@ -103,10 +117,10 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Theme modes: light, dark, and follow system.
 - [x] Color palettes: mint, blue, purple, amber; persist the Android selection.
 - [x] Bottom navigation with separate Chats and Nearby screens; toolbar Settings.
-- [ ] Portable chat export/import: password-encrypted archive, transferable
+- [x] Portable chat export/import: password-encrypted archive, transferable
       without Internet, import preview, safe merging and duplicate detection.
-      Re-encrypt imported history with destination keys. Decide explicitly
-      whether a phone migration also transfers the messaging identity.
+      Re-encrypt imported history with destination keys. Explicit identity
+      transfer is available on an empty destination; history-only import retains identity.
 
 ## Suggested quality-of-life features
 
@@ -130,15 +144,15 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
 - [ ] Group delivery behavior when members leave or the host disconnects.
-- [ ] Backup format versioning, validation and explicit identity-migration flow.
+- [x] Backup format versioning, validation and explicit identity-migration flow.
 
 ## Proposed order after app lock
 
 1. Chats/Nearby navigation (committed).
 2. Themes (committed).
 3. Chats list previews/unread state, local search and drafts (committed),
-   conversation management (current).
-4. Encrypted backups and phone migration.
+   conversation management (committed).
+4. Encrypted backups and phone migration (current).
 5. Reliable reconnection, queued messages and notifications.
 6. Group chat and attachments.
 

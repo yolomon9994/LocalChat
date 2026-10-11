@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
+import '../core/chat_backup.dart';
 import '../core/local_store.dart';
 import '../core/models.dart';
 
@@ -8,6 +10,113 @@ class DemoStore extends LocalStore {
   final _messages = <(String, String, bool), ChatMessage>{};
   final _unread = <(String, String, bool)>{};
   final _drafts = <String, String>{};
+
+  @override
+  Future<BackupData> exportBackup() async {
+    final seed = base64Encode(await identity.extractPrivateKeyBytes());
+    final owner = (await Sha256().hash(
+      (await identity.extractPublicKey()).bytes,
+    )).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return BackupData(
+      seed: seed,
+      owner: owner,
+      name: name,
+      created: DateTime.now().millisecondsSinceEpoch,
+      demo: true,
+      peers: _people.values
+          .map(
+            (p) => <String, Object?>{
+              'id': p.id,
+              'name': p.name,
+              'updated': p.updated,
+              'pinned': p.pinned,
+              'archived': p.archived,
+            },
+          )
+          .toList(),
+      messages: _messages.entries
+          .map(
+            (e) => <String, Object?>{
+              'id': e.value.id,
+              'peer': e.value.peerId,
+              'text': e.value.text,
+              'timestamp': e.value.timestamp,
+              'outgoing': e.value.outgoing,
+              'status': e.value.status,
+              'read': !_unread.contains(e.key),
+            },
+          )
+          .toList(),
+      drafts: _drafts.entries
+          .map((e) => <String, Object?>{'peer': e.key, 'text': e.value})
+          .toList(),
+    );
+  }
+
+  @override
+  Future<BackupMerge> importBackup(
+    BackupData data, {
+    bool moveIdentity = false,
+  }) async {
+    data = await BackupData.parse(data.toJson());
+    final current = await exportBackup();
+    if (moveIdentity &&
+        (current.peers.isNotEmpty ||
+            current.messages.isNotEmpty ||
+            current.drafts.isNotEmpty)) {
+      throw const FormatException(
+        'Identity transfer requires an empty destination phone.',
+      );
+    }
+    final plan = planBackup(current, data);
+    final pair = moveIdentity
+        ? await Ed25519().newKeyPairFromSeed(base64Decode(data.seed))
+        : identity;
+    for (final p in plan.data.peers) {
+      _people[p['id'] as String] = Conversation(
+        p['id'] as String,
+        p['name'] as String,
+        p['updated'] as int,
+        pinned: p['pinned'] as bool,
+        archived: p['archived'] as bool,
+      );
+    }
+    final activityByPeer = {
+      for (final p in data.peers) p['id']: p['updated'] as int,
+    };
+    for (final m in plan.data.messages) {
+      final key = (
+        m['peer'] as String,
+        m['id'] as String,
+        m['outgoing'] as bool,
+      );
+      _messages[key] = ChatMessage(
+        id: key.$2,
+        peerId: key.$1,
+        text: m['text'] as String,
+        timestamp: m['timestamp'] as int,
+        outgoing: key.$3,
+        status: m['status'] as String,
+      );
+      if (!key.$3 && m['read'] == false) _unread.add(key);
+      final p = _people[key.$1]!;
+      final activity = activityByPeer[key.$1]!;
+      if (activity > p.updated) {
+        _people[p.id] = Conversation(
+          p.id,
+          p.name,
+          activity,
+          pinned: p.pinned,
+          archived: p.archived,
+        );
+      }
+    }
+    for (final d in plan.data.drafts) {
+      _drafts[d['peer'] as String] = d['text'] as String;
+    }
+    identity = pair;
+    return plan;
+  }
 
   @override
   Future<String> draft(String peer) async => _drafts[peer] ?? '';

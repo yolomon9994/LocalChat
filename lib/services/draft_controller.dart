@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/local_store.dart';
+import '../core/chat_backup.dart';
 
 /// Owns draft writes beyond a chat route's lifetime. The separate queue keeps
 /// typing off the protocol queue and orders saves, send cleanup and deletion.
@@ -24,6 +25,47 @@ class DraftController extends ChangeNotifier {
   String? errorFor(String peer) => _errors[peer];
   int revisionFor(String peer) => _revisions[peer] ?? 0;
   Future<void> get settled => _queue;
+  Future<BackupData> exportBackup() async {
+    late BackupData data;
+    await _enqueue(() async {
+      if (_errors.isNotEmpty) {
+        throw const FormatException(
+          'Resolve draft save/load errors before exporting.',
+        );
+      }
+      data = await store.exportBackup();
+    });
+    return data;
+  }
+
+  Future<BackupMerge> importBackup(
+    BackupData data, {
+    bool moveIdentity = false,
+  }) async {
+    late BackupMerge result;
+    await _enqueue(() async {
+      if (_errors.isNotEmpty) {
+        throw const FormatException(
+          'Resolve draft save/load errors before importing.',
+        );
+      }
+      final revisions = Map<String, int>.from(_revisions);
+      result = await store.importBackup(data, moveIdentity: moveIdentity);
+      for (final draft in result.data.drafts) {
+        final peer = draft['peer'] as String;
+        // Preserve edits made while storage work was in flight.
+        if (_loaded.contains(peer) &&
+            textFor(peer).isEmpty &&
+            revisionFor(peer) == (revisions[peer] ?? 0)) {
+          _text[peer] = draft['text'] as String;
+          _revisions[peer] = ++_nextRevision;
+        }
+      }
+      _notify();
+    });
+    return result;
+  }
+
   void _notify() {
     if (!_disposed) notifyListeners();
   }
