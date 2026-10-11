@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
+import 'outgoing_message_actions.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -97,14 +98,14 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   late bool _showTarget = widget.focusMessage != null;
   bool _sending = false;
   Future<void> _send() async {
-    if (_sending || !widget.controller.canSend || _text.text.trim().isEmpty) {
+    if (_sending || !widget.controller.canSubmit || _text.text.trim().isEmpty) {
       return;
     }
     final text = _text.text;
     setState(() {
       _sending = true;
     });
-    await widget.controller.sendText(text);
+    await widget.controller.sendText(text, queueIfOffline: true);
     if (!mounted) return;
     setState(() {
       _sending = false;
@@ -184,6 +185,12 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                 context,
               ).textTheme.labelSmall?.copyWith(color: foreground),
             ),
+            if (message.outgoing &&
+                (message.status == 'queued' || message.status == 'unconfirmed'))
+              OutgoingMessageActions(
+                controller: widget.controller,
+                message: message,
+              ),
           ],
         ),
       ),
@@ -259,6 +266,8 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                     ? 'Demo • ${current ? c.state : 'Saved conversation'}'
                     : current
                     ? c.state
+                    : c.queuedCount > 0
+                    ? 'Saved conversation • ${c.queuedCount} queued'
                     : 'Saved conversation',
                 style: Theme.of(context).textTheme.bodySmall,
                 maxLines: 1,
@@ -284,11 +293,20 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
         body: Column(
           children: [
             if (c.error != null)
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  c.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * .2,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      c.error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             if (_showTarget && !verifying && !c.messages.any(_isTarget))
@@ -396,6 +414,20 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   ),
                 ),
             if (!verifying)
+              if (c.outboxPaused)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Expanded(child: Text('Queued sending is paused.')),
+                      TextButton(
+                        onPressed: c.resumeOutbox,
+                        child: const Text('Resume outbox'),
+                      ),
+                    ],
+                  ),
+                ),
+            if (!verifying)
               SafeArea(
                 top: false,
                 child: Padding(
@@ -415,7 +447,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                           decoration: InputDecoration(
                             hintText: c.canSend
                                 ? 'Message…'
-                                : 'Draft a message…',
+                                : 'Message to queue…',
                             counterText: '',
                           ),
                           onSubmitted: (_) => _send(),
@@ -425,8 +457,8 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                       ),
                       const SizedBox(width: 10),
                       IconButton.filled(
-                        tooltip: 'Send',
-                        onPressed: c.canSend && draftReady && !_sending
+                        tooltip: c.canSend ? 'Send' : 'Queue message',
+                        onPressed: c.canSubmit && draftReady && !_sending
                             ? _send
                             : null,
                         icon: _sending
@@ -437,7 +469,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Icon(Icons.send),
+                            : Icon(
+                                c.canSend ? Icons.send : Icons.schedule_send,
+                              ),
                       ),
                     ],
                   ),

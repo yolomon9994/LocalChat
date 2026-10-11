@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/local_store.dart';
 import '../core/chat_backup.dart';
+import '../core/models.dart';
 
 /// Owns draft writes beyond a chat route's lifetime. The separate queue keeps
 /// typing off the protocol queue and orders saves, send cleanup and deletion.
@@ -25,6 +26,34 @@ class DraftController extends ChangeNotifier {
   String? errorFor(String peer) => _errors[peer];
   int revisionFor(String peer) => _revisions[peer] ?? 0;
   Future<void> get settled => _queue;
+  Future<void> acceptOutgoing(
+    ChatMessage message, {
+    int? draftRevision,
+    String? draftText,
+    bool Function()? canAccept,
+  }) {
+    final peer = message.peerId, generation = _generation(message.peerId);
+    return _enqueue(() async {
+      if (generation != _generation(peer) || canAccept?.call() == false) {
+        throw const FormatException('This conversation has been deleted.');
+      }
+      final clear =
+          draftRevision != null &&
+          isLoaded(peer) &&
+          revisionFor(peer) == draftRevision &&
+          textFor(peer) == draftText;
+      await store.saveOutgoingMessage(message, clearDraft: clear);
+      if (clear &&
+          generation == _generation(peer) &&
+          revisionFor(peer) == draftRevision) {
+        _text[peer] = '';
+        _revisions[peer] = ++_nextRevision;
+        _errors.remove(peer);
+        _notify();
+      }
+    });
+  }
+
   Future<BackupData> exportBackup() async {
     late BackupData data;
     await _enqueue(() async {

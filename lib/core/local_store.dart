@@ -39,7 +39,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -54,6 +54,7 @@ class LocalStore {
         await _createDraftTable(db);
         await _addManagementColumns(db);
         await db.execute('CREATE TABLE backup_receipt (id TEXT PRIMARY KEY)');
+        await _createOutboxIndex(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -70,6 +71,7 @@ class LocalStore {
             'CREATE TABLE IF NOT EXISTS backup_receipt (id TEXT PRIMARY KEY)',
           );
         }
+        if (oldVersion < 6) await _createOutboxIndex(db);
       },
     );
     await _recoverIdentity();
@@ -271,6 +273,10 @@ class LocalStore {
     );
   }
 
+  static Future<void> _createOutboxIndex(Database db) => db.execute(
+    'CREATE INDEX IF NOT EXISTS message_outbox ON messages(peer, outgoing, status)',
+  );
+
   static Future<void> _createDraftTable(Database db) => db.execute(
     'CREATE TABLE drafts (peer TEXT PRIMARY KEY, body TEXT NOT NULL)',
   );
@@ -377,7 +383,9 @@ class LocalStore {
       SELECT p.id AS peer_id, p.name, p.updated, p.pinned, p.archived,
              m.id, m.peer, m.body, m.timestamp, m.outgoing, m.status,
              (SELECT COUNT(*) FROM messages u
-              WHERE u.peer = p.id AND u.outgoing = 0 AND u.is_read = 0) AS unread_count
+              WHERE u.peer = p.id AND u.outgoing = 0 AND u.is_read = 0) AS unread_count,
+             (SELECT COUNT(*) FROM messages q
+              WHERE q.peer = p.id AND q.outgoing = 1 AND q.status = 'queued') AS queued_count
       FROM peers p
       LEFT JOIN messages m ON m.rowid =
         (SELECT rowid FROM messages WHERE peer = p.id ORDER BY rowid DESC LIMIT 1)
@@ -394,13 +402,30 @@ class LocalStore {
           unreadCount: row['unread_count'] as int,
           pinned: row['pinned'] == 1,
           archived: row['archived'] == 1,
+          queuedCount: row['queued_count'] as int,
         ),
       );
     }
     return result;
   }
 
-  Future<void> saveMessage(ChatMessage message) async {
+  Future<void> saveMessage(ChatMessage message) => _saveMessage(message);
+
+  /// Message acceptance and removal of its composer draft commit together.
+  Future<void> saveOutgoingMessage(
+    ChatMessage message, {
+    bool clearDraft = false,
+  }) {
+    if (!message.outgoing || message.status != 'queued') {
+      throw ArgumentError('Expected a queued outgoing message');
+    }
+    return _saveMessage(message, clearDraft: clearDraft);
+  }
+
+  Future<void> _saveMessage(
+    ChatMessage message, {
+    bool clearDraft = false,
+  }) async {
     final box = await _cipher.encrypt(
       utf8.encode(message.text),
       secretKey: _historyKey,
@@ -411,12 +436,18 @@ class LocalStore {
     await _database.transaction((txn) async {
       final existing = await txn.query(
         'messages',
-        columns: ['id'],
         where: 'peer = ? AND id = ? AND outgoing = ?',
         whereArgs: [message.peerId, message.id, message.outgoing ? 1 : 0],
         limit: 1,
       );
-      if (existing.isNotEmpty) return;
+      if (existing.isNotEmpty) {
+        final previous = await _decodeMessage(existing.single);
+        if (previous.text != message.text ||
+            previous.timestamp != message.timestamp) {
+          throw const FormatException('Conflicting message ID');
+        }
+        return;
+      }
       await txn.insert('messages', {
         'id': message.id,
         'peer': message.peerId,
@@ -436,8 +467,55 @@ class LocalStore {
         where: 'id = ?',
         whereArgs: [message.peerId],
       );
+      if (clearDraft) {
+        await txn.delete(
+          'drafts',
+          where: 'peer = ?',
+          whereArgs: [message.peerId],
+        );
+      }
     });
   }
+
+  Future<List<ChatMessage>> queuedMessages(String peer, {int limit = 1}) async {
+    final rows = await _database.query(
+      'messages',
+      where: "peer = ? AND outgoing = 1 AND status = 'queued'",
+      whereArgs: [peer],
+      orderBy: 'rowid ASC',
+      limit: limit,
+    );
+    final result = <ChatMessage>[];
+    for (final row in rows) {
+      result.add(await _decodeMessage(row));
+    }
+    return result;
+  }
+
+  Future<bool> changeOutgoingStatus(
+    String id,
+    String peer,
+    List<String> from,
+    String to,
+  ) async {
+    if (from.isEmpty) return false;
+    return await _database.update(
+          'messages',
+          {'status': to},
+          where:
+              'id = ? AND peer = ? AND outgoing = 1 AND status IN (${List.filled(from.length, '?').join(',')})',
+          whereArgs: [id, peer, ...from],
+        ) ==
+        1;
+  }
+
+  Future<bool> deleteQueuedMessage(String id, String peer) async =>
+      await _database.delete(
+        'messages',
+        where: "id = ? AND peer = ? AND outgoing = 1 AND status = 'queued'",
+        whereArgs: [id, peer],
+      ) ==
+      1;
 
   Future<void> markRead(String peer) => _database
       .update(

@@ -166,6 +166,9 @@ class DemoStore extends LocalStore {
           unreadCount: _unread.where((key) => key.$1 == peer.id).length,
           pinned: peer.pinned,
           archived: peer.archived,
+          queuedCount: history
+              .where((m) => m.outgoing && m.status == 'queued')
+              .length,
         ),
       );
     }
@@ -182,7 +185,14 @@ class DemoStore extends LocalStore {
   @override
   Future<void> saveMessage(ChatMessage message) async {
     final key = (message.peerId, message.id, message.outgoing);
-    if (_messages.containsKey(key)) return;
+    final previous = _messages[key];
+    if (previous != null) {
+      if (previous.text != message.text ||
+          previous.timestamp != message.timestamp) {
+        throw const FormatException('Conflicting message ID');
+      }
+      return;
+    }
     _messages[key] = message;
     if (!message.outgoing) _unread.add(key);
     final peer = _people[message.peerId];
@@ -200,6 +210,45 @@ class DemoStore extends LocalStore {
   @override
   Future<void> markRead(String peer) async =>
       _unread.removeWhere((key) => key.$1 == peer);
+
+  @override
+  Future<void> saveOutgoingMessage(
+    ChatMessage message, {
+    bool clearDraft = false,
+  }) async {
+    await saveMessage(message);
+    if (clearDraft) _drafts.remove(message.peerId);
+  }
+
+  @override
+  Future<List<ChatMessage>> queuedMessages(
+    String peer, {
+    int limit = 1,
+  }) async => _messages.values
+      .where((m) => m.peerId == peer && m.outgoing && m.status == 'queued')
+      .take(limit)
+      .toList();
+
+  @override
+  Future<bool> changeOutgoingStatus(
+    String id,
+    String peer,
+    List<String> from,
+    String to,
+  ) async {
+    final message = _messages[(peer, id, true)];
+    if (message == null || !from.contains(message.status)) return false;
+    await setStatus(id, peer, to);
+    return true;
+  }
+
+  @override
+  Future<bool> deleteQueuedMessage(String id, String peer) async {
+    final key = (peer, id, true);
+    if (_messages[key]?.status != 'queued') return false;
+    _messages.remove(key);
+    return true;
+  }
 
   @override
   Future<List<ChatMessage>> messages(String peer) async =>

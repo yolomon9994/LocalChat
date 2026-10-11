@@ -98,6 +98,7 @@ class BackupData {
       boolean(m, 'read');
       if (!{
         'sending',
+        'queued',
         'delivered',
         'unconfirmed',
         'received',
@@ -163,7 +164,10 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     if (old == null) {
       newMessages.add({
         ...m,
-        'status': m['status'] == 'sending' ? 'unconfirmed' : m['status'],
+        // Restoring an archive never silently schedules a transmission.
+        'status': m['status'] == 'sending' || m['status'] == 'queued'
+            ? 'unconfirmed'
+            : m['status'],
       });
     } else if (old['text'] == m['text'] && old['timestamp'] == m['timestamp']) {
       duplicates++;

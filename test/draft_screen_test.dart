@@ -38,11 +38,11 @@ void main() {
         tester
             .widget<IconButton>(
               find.byWidgetPredicate(
-                (w) => w is IconButton && w.tooltip == 'Send',
+                (w) => w is IconButton && w.tooltip == 'Queue message',
               ),
             )
             .onPressed,
-        isNull,
+        isNotNull,
       );
       await tester.enterText(composer, '  Alice draft سلام 👋\nline two  ');
       await tester.pumpAndSettle();

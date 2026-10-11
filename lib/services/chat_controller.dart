@@ -10,8 +10,14 @@ import 'transport.dart';
 import 'draft_controller.dart';
 
 class ChatController extends ChangeNotifier {
-  ChatController(this.transport, this.store, {this.isDemo = false});
+  ChatController(
+    this.transport,
+    this.store, {
+    this.isDemo = false,
+    this.ackTimeout = const Duration(seconds: 30),
+  });
   final bool isDemo;
+  final Duration ackTimeout;
   final Transport transport;
   final LocalStore store;
   late final drafts = DraftController(store);
@@ -33,6 +39,10 @@ class ChatController extends ChangeNotifier {
   SecureSession? _session;
   Timer? _timeout;
   final Map<String, Timer> _ackTimers = {};
+  final _attemptedIds = <String>{};
+  final _pausedOutboxes = <String>{};
+  bool _drainScheduled = false;
+  bool _disposed = false;
   bool loading = true;
   bool initialized = false;
   bool started = false;
@@ -55,6 +65,16 @@ class ChatController extends ChangeNotifier {
   String? get connectedPeer => _session?.peerId;
   bool get ready => localVerified && remoteVerified && _session != null;
   bool get canSend => ready && selectedPeer == connectedPeer;
+  bool get canSubmit =>
+      initialized &&
+      _appAccessible &&
+      _appForeground &&
+      selectedPeer != null &&
+      (canSend || conversations.any((p) => p.id == selectedPeer));
+  bool get outboxPaused =>
+      selectedPeer != null && _pausedOutboxes.contains(selectedPeer);
+  int get queuedCount =>
+      messages.where((m) => m.outgoing && m.status == 'queued').length;
 
   bool get _canReadSelected =>
       initialized &&
@@ -81,6 +101,7 @@ class ChatController extends ChangeNotifier {
     _appAccessible = accessible;
     accessRevision++;
     _readVisible();
+    if (accessible) _requestDrain();
   }
 
   Future<BackupData> backupSnapshot() async {
@@ -153,6 +174,7 @@ class ChatController extends ChangeNotifier {
     _readVisible();
     // Refresh relative activity labels after time spent outside the app.
     if (foreground) notifyListeners();
+    if (foreground) _requestDrain();
   }
 
   void _readVisible() {
@@ -248,7 +270,7 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> _event(Map<String, dynamic> event) async {
-    if (store.identityRecoveryRequired) return;
+    if (_disposed || store.identityRecoveryRequired) return;
     switch (event['type']) {
       case 'peers':
         peers = (event['peers'] as List)
@@ -343,11 +365,25 @@ class ChatController extends ChangeNotifier {
           throw const FormatException('Invalid acknowledgement');
         }
         final id = payload['id'] as String;
-        final timer = _ackTimers.remove(id);
-        if (timer != null) {
-          timer.cancel();
-          await store.setStatus(id, connectedPeer!, 'delivered');
-          await _refresh();
+        // A late authenticated ACK still confirms a timed-out attempt in this
+        // session. Unknown IDs (including restored history) are never confirmed.
+        if (_attemptedIds.contains(id)) {
+          try {
+            await store.changeOutgoingStatus(id, connectedPeer!, [
+              'sending',
+              'unconfirmed',
+              'queued',
+            ], 'delivered');
+            _attemptedIds.remove(id);
+            _ackTimers.remove(id)?.cancel();
+            historyRevision++;
+            await _refresh();
+            _requestDrain();
+          } catch (_) {
+            _pausedOutboxes.add(connectedPeer!);
+            error =
+                'Could not save delivery confirmation. This message may be unconfirmed.';
+          }
         }
       default:
         throw const FormatException('Unsupported payload type');
@@ -355,7 +391,9 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> confirmCode() => _run(() async {
-    if (code == null || localVerified) return;
+    if (code == null || localVerified || !_appAccessible || !_appForeground) {
+      return;
+    }
     error = null;
     try {
       await _sendPayload({'type': 'verified'});
@@ -374,6 +412,8 @@ class ChatController extends ChangeNotifier {
       await store.savePeer(connectedPeer!, _session!.peerName!);
       historyRevision++;
       await _refresh();
+      _pausedOutboxes.remove(connectedPeer!);
+      _requestDrain();
     } else {
       state = localVerified
           ? 'Waiting for peer verification'
@@ -385,76 +425,293 @@ class ChatController extends ChangeNotifier {
     await transport.send(jsonEncode(await _session!.encrypt(payload)));
   }
 
-  Future<bool> sendText(String text) async {
+  /// True means accepted into local encrypted history, not delivered. The draft
+  /// is removed atomically with acceptance, so a failed write is retried by ID.
+  Future<bool> sendText(String text, {bool queueIfOffline = false}) async {
     final intendedPeer = selectedPeer;
+    final access = accessRevision;
     final draftRevision =
         intendedPeer == null ||
             !drafts.isLoaded(intendedPeer) ||
             drafts.textFor(intendedPeer) != text
         ? null
         : drafts.revisionFor(intendedPeer);
-    var sent = false;
+    var accepted = false;
     await _run(() async {
       error = null;
-      if (!canSend ||
+      if (!initialized ||
+          access != accessRevision ||
           selectedPeer != intendedPeer ||
+          intendedPeer == null ||
           !_appAccessible ||
           !_appForeground) {
-        throw StateError('Verify both phones before sending');
+        throw const FormatException(
+          'Open an unlocked saved chat before sending.',
+        );
       }
+      final savedPeer = (await store.conversations()).any(
+        (p) => p.id == intendedPeer,
+      );
+      if (!canSend && (!queueIfOffline || !savedPeer)) {
+        throw const FormatException('Verify both phones before sending');
+      }
+      final rawText = text;
       text = text.trim();
       if (text.isEmpty || utf8.encode(text).length > 4096) {
         throw StateError('Messages must be 1–4096 UTF-8 bytes');
       }
       final id = randomId();
-      final peer = connectedPeer!;
+      final peer = intendedPeer;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      await store.savePeer(peer, _session!.peerName!);
-      await store.saveMessage(
-        ChatMessage(
-          id: id,
-          peerId: peer,
-          text: text,
-          timestamp: timestamp,
-          outgoing: true,
-          status: 'sending',
-        ),
-      );
+      if (canSend && !savedPeer) {
+        await store.savePeer(peer, _session!.peerName!);
+      }
+      try {
+        await drafts.acceptOutgoing(
+          ChatMessage(
+            id: id,
+            peerId: peer,
+            text: text,
+            timestamp: timestamp,
+            outgoing: true,
+            status: 'queued',
+          ),
+          draftRevision: draftRevision,
+          draftText: rawText,
+          canAccept: () =>
+              initialized &&
+              _appAccessible &&
+              _appForeground &&
+              access == accessRevision,
+        );
+      } catch (_) {
+        throw const FormatException(
+          'Could not save this message. Your draft is kept; please retry.',
+        );
+      }
+      accepted = true;
       historyRevision++;
       try {
-        await _sendPayload({
-          'type': 'text',
-          'id': id,
-          'timestamp': timestamp,
-          'text': text,
-        });
-        sent = true;
-        _ackTimers[id] = Timer(const Duration(seconds: 30), () {
-          unawaited(
-            _run(() async {
-              _ackTimers.remove(id);
-              await store.setStatus(id, peer, 'unconfirmed');
-              await _refresh();
-              notifyListeners();
-            }),
-          );
-        });
-      } catch (_) {
-        await store.setStatus(id, peer, 'unconfirmed');
-        await _disconnect();
-        rethrow;
-      } finally {
         await _refresh();
+      } catch (_) {
+        error =
+            'Message saved locally. Reopen this chat to refresh its history.';
+      } finally {
         notifyListeners();
+        _requestDrain();
       }
     });
-    // A route may have closed, locked, or switched peers during the send.
-    // Clear only the captured draft; newer edits belong to another send.
-    if (sent && intendedPeer != null && draftRevision != null) {
-      await drafts.clearAfterSend(intendedPeer, draftRevision);
-    }
-    return sent;
+    return accepted;
   }
+
+  bool _canDrain(String peer) =>
+      !_disposed &&
+      initialized &&
+      ready &&
+      peer == connectedPeer &&
+      _appAccessible &&
+      _appForeground &&
+      !_pausedOutboxes.contains(peer) &&
+      _ackTimers.length < 4;
+
+  bool _validOutgoing(ChatMessage m) =>
+      m.outgoing &&
+      RegExp(r'^[A-Za-z0-9_-]{24}$').hasMatch(m.id) &&
+      m.text.trim().isNotEmpty &&
+      utf8.encode(m.text).length <= 4096 &&
+      m.timestamp >= 0 &&
+      m.timestamp <= 8640000000000000;
+
+  void _requestDrain() {
+    final peer = connectedPeer;
+    if (peer == null || !_canDrain(peer) || _drainScheduled) return;
+    _drainScheduled = true;
+    unawaited(
+      _run(() async {
+        _drainScheduled = false;
+        await _drainNext();
+      }),
+    );
+  }
+
+  void _watchAcknowledgement(ChatMessage message) {
+    _ackTimers.remove(message.id)?.cancel();
+    late final Timer timer;
+    timer = Timer(ackTimeout, () {
+      unawaited(
+        _run(() async {
+          if (_disposed || !identical(_ackTimers[message.id], timer)) return;
+          _ackTimers.remove(message.id);
+          try {
+            await store.changeOutgoingStatus(message.id, message.peerId, [
+              'sending',
+            ], 'unconfirmed');
+            historyRevision++;
+            await _refresh();
+          } catch (_) {
+            _pausedOutboxes.add(message.peerId);
+            error =
+                'Could not update message status. Reconnect or resume the outbox after resolving storage errors.';
+          }
+          notifyListeners();
+          _requestDrain();
+        }),
+      );
+    });
+    _ackTimers[message.id] = timer;
+  }
+
+  Future<void> _drainNext() async {
+    final peer = connectedPeer;
+    if (peer == null || !_canDrain(peer)) return;
+    ChatMessage? message;
+    try {
+      final pending = await store.queuedMessages(peer);
+      if (pending.isEmpty || !_canDrain(peer)) return;
+      message = pending.first;
+      if (!_validOutgoing(message)) {
+        throw const FormatException('Invalid queued message');
+      }
+      if (!await store.changeOutgoingStatus(message.id, peer, [
+        'queued',
+      ], 'sending')) {
+        return;
+      }
+      // Access can change synchronously while the durable transition awaits IO.
+      if (!_canDrain(peer)) {
+        await store.changeOutgoingStatus(message.id, peer, [
+          'sending',
+        ], 'queued');
+        await _refresh();
+        notifyListeners();
+        return;
+      }
+    } catch (_) {
+      _pausedOutboxes.add(peer);
+      error =
+          'Could not load or update queued messages. Resolve the storage issue, then resume the outbox.';
+      notifyListeners();
+      return;
+    }
+    final outgoing = message;
+    _attemptedIds.add(outgoing.id);
+    _watchAcknowledgement(outgoing);
+    historyRevision++;
+    try {
+      final access = accessRevision;
+      final frame = await _session!.encrypt({
+        'type': 'text',
+        'id': outgoing.id,
+        'timestamp': outgoing.timestamp,
+        'text': outgoing.text,
+      });
+      if (!_appAccessible || !_appForeground || access != accessRevision) {
+        // Encryption consumed a sequence number, so discard this session rather
+        // than transmitting after lock or leaving a gap in its frame sequence.
+        await store.changeOutgoingStatus(outgoing.id, peer, [
+          'sending',
+        ], 'queued');
+        _ackTimers.remove(outgoing.id)?.cancel();
+        _attemptedIds.remove(outgoing.id);
+        await _disconnect();
+        return;
+      }
+      await transport.send(jsonEncode(frame));
+    } catch (_) {
+      error =
+          'Send interrupted. This message is unconfirmed; reconnect and verify before retrying it.';
+      await _disconnect();
+      return;
+    }
+    try {
+      await _refresh();
+    } catch (_) {
+      error = 'Message sent. Reopen this chat to refresh its history.';
+    }
+    notifyListeners();
+    _requestDrain();
+  }
+
+  Future<bool> retryMessage(ChatMessage message) async {
+    var queued = false;
+    final access = accessRevision;
+    await _run(() async {
+      error = null;
+      if (!_appAccessible ||
+          !_appForeground ||
+          access != accessRevision ||
+          selectedPeer != message.peerId ||
+          !initialized ||
+          !_validOutgoing(message)) {
+        error =
+            'Open this chat after unlocking to retry a valid outgoing message.';
+      } else {
+        try {
+          queued = await store.changeOutgoingStatus(
+            message.id,
+            message.peerId,
+            ['unconfirmed'],
+            'queued',
+          );
+          if (!queued) {
+            error = 'This message is no longer unconfirmed.';
+          } else {
+            historyRevision++;
+            await _refresh();
+            _requestDrain();
+          }
+        } catch (_) {
+          error = 'Could not queue this retry. Please try again.';
+        }
+      }
+      notifyListeners();
+    });
+    return queued;
+  }
+
+  Future<bool> cancelQueuedMessage(ChatMessage message) async {
+    var cancelled = false;
+    final access = accessRevision;
+    await _run(() async {
+      error = null;
+      if (!_appAccessible ||
+          !_appForeground ||
+          access != accessRevision ||
+          selectedPeer != message.peerId ||
+          !message.outgoing ||
+          !initialized) {
+        return;
+      }
+      try {
+        cancelled = await store.deleteQueuedMessage(message.id, message.peerId);
+        if (!cancelled) {
+          error = 'This message has already started sending or was removed.';
+        } else {
+          historyRevision++;
+          await _refresh();
+          _requestDrain();
+        }
+      } catch (_) {
+        error = 'Could not cancel this queued message. Please retry.';
+      }
+      notifyListeners();
+    });
+    return cancelled;
+  }
+
+  Future<void> resumeOutbox() => _run(() async {
+    if (!_appAccessible ||
+        !_appForeground ||
+        !initialized ||
+        selectedPeer == null) {
+      return;
+    }
+    _pausedOutboxes.remove(selectedPeer);
+    error = null;
+    await _refresh();
+    notifyListeners();
+    _requestDrain();
+  });
 
   Future<void> _refresh() async {
     if (selectedPeer != null) messages = await store.messages(selectedPeer!);
@@ -509,6 +766,12 @@ class ChatController extends ChangeNotifier {
   });
   Future<void> clearHistory() => _run(() async {
     await drafts.clearHistory();
+    for (final timer in _ackTimers.values) {
+      timer.cancel();
+    }
+    _ackTimers.clear();
+    _attemptedIds.clear();
+    _pausedOutboxes.clear();
     historyRevision++;
     messages = [];
     conversations = [];
@@ -568,15 +831,26 @@ class ChatController extends ChangeNotifier {
   Future<void> _reset() async {
     _timeout?.cancel();
     final peer = connectedPeer;
-    for (final entry in _ackTimers.entries) {
-      entry.value.cancel();
-      if (peer != null) await store.setStatus(entry.key, peer, 'unconfirmed');
-    }
+    final pending = _ackTimers.entries.toList();
     _ackTimers.clear();
+    _attemptedIds.clear();
     _session = null;
     localVerified = false;
     remoteVerified = false;
     state = started ? 'Available nearby' : 'Offline';
+    for (final entry in pending) {
+      entry.value.cancel();
+      if (peer != null) {
+        try {
+          await store.changeOutgoingStatus(entry.key, peer, [
+            'sending',
+          ], 'unconfirmed');
+        } catch (_) {
+          error =
+              'Connection closed. Message status needs recovery; reopen the app before retrying.';
+        }
+      }
+    }
     await _refresh();
   }
 
@@ -596,7 +870,13 @@ class ChatController extends ChangeNotifier {
   }
 
   @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
     drafts.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {

@@ -1,5 +1,48 @@
 # Validation for v0.1.0
 
+## Offline outbox and message retry — 2026-10-11
+
+Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all **118 tests passed** (99 existing + 19 outbox checks).
+- After adding the final post-encryption access check, all **24 targeted tests**
+  in `outbox_test.dart`, `outbox_screen_test.dart` and `chat_controller_test.dart`
+  passed again; final analysis remains clean.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning as earlier milestones. No browser runtime
+  or real radio check is claimed by this compilation.
+- `git -c core.safecrlf=false diff --check`: clean.
+
+Twelve protocol/controller checks cover known-identity offline acceptance,
+validation/storage failures retaining drafts, both-phone verification, queue
+order and archived/unread state, lost ACK and explicit same-ID Retry, late ACK,
+foreground/lock gates including a lock during the durable status write,
+storage pause/resume, cancellation/history deletion, identity-targeted draining
+while viewing another conversation, four-attempt bounds/disconnect recovery,
+and conflicting incoming IDs failing without a false ACK. Linked transports
+exchange actual encrypted protocol frames; they do not test Wi-Fi Direct radio.
+
+Four additional real SQLite checks cover encrypted queued bodies, atomic draft
+cleanup, rollback on failed cleanup, schema-5-to-6 upgrade/restart preservation,
+FIFO insertion ordering, conditional peer/direction/status updates, cancellation
+that cannot undo delivery, and queued backup export/import as unconfirmed.
+Secure-storage doubles do not establish Android Keystore behavior.
+
+Three widget checks cover offline submission/counts, confirmed/declined Cancel,
+Retry preserving another draft, lock removing the Retry dialog, and a 320 × 568
+layout with enlarged text, keyboard insets, long message text and storage feedback.
+The first targeted run exposed a keyboard overflow from an added helper footer;
+that footer was removed and the layout checks now pass. The existing demo
+duplicate fixture was corrected to use identical text/timestamp; conflicting
+records now deliberately fail, matching native behavior.
+
+Physical two-phone delivery, restart/lifecycle, vendor behavior and enlarged
+phone text remain pending. Follow [OUTBOX.md](OUTBOX.md). Changes are intentionally
+uncommitted; the user handles Git themselves.
+
 ## Encrypted backups and phone migration — 2026-10-11
 
 Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
@@ -42,9 +85,9 @@ an actual browser download/upload was not exercised in this milestone.
 
 Physical Android file providers, picker lifecycle, secure-storage migration,
 offline phone-to-phone file transfer and reconnection under the transferred
-identity remain pending. Follow [BACKUPS.md](BACKUPS.md)'s phone checklist before
-the user's commit. No hardware test or independent security audit is claimed.
-Changes are intentionally uncommitted; the user handles Git themselves.
+identity remain pending. Follow [BACKUPS.md](BACKUPS.md)'s phone checklist.
+No hardware test or independent security audit is claimed. The user committed
+the backup milestone as `63eff9f`.
 
 ## Conversation management milestone — 2026-10-11
 

@@ -187,6 +187,12 @@ class ChatsTab extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
+                    if (peer.queuedCount > 0)
+                      Text(
+                        '${peer.queuedCount} queued',
+                        key: ValueKey('queued-${peer.id}'),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                   ],
                 ),
                 trailing: Row(

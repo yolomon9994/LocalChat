@@ -4,6 +4,7 @@ These tests require physical hardware and are **not marked as passed** by the au
 
 For encrypted file export/import, merging and identity transfer, also follow
 the [backup phone checklist](BACKUPS.md).
+For queuing, retry and lifecycle gates, follow the [outbox checklist](OUTBOX.md).
 
 | Case | Expected behavior |
 |---|---|
@@ -15,12 +16,17 @@ the [backup phone checklist](BACKUPS.md).
 | Discovery | Only LocalChat v1 service advertisements appear |
 | Pairing | Receiver accepts the system Wi-Fi Direct invitation |
 | Security code | All five groups match on both phones |
-| Only one phone confirms | Composer remains disabled on both |
+| Only one phone confirms | No text transmission; new peers cannot submit, saved chats can queue |
 | Codes differ | Disconnect; no text exchange |
 | Text and Unicode | Correct text in both directions, including emoji and Urdu |
 | Large text | 4096-byte limit applied; longer UTF-8 payload rejected |
 | Delivery acknowledgement | Sender changes from sending to delivered after peer stores text |
 | Connection dropped before ack | Sender marks message unconfirmed; retains history |
+| Offline outbox | Queue in saved chat, restart, reconnect and verify both; ordered delivery |
+| Unconfirmed retry | Explicit confirmation, original ID retained; no duplicate if receiver retains history |
+| Cancel queued | Confirmed deletion before sending; never sends on later reconnect |
+| Lock/background | New queued attempts pause until unlocked and foregrounded |
+| Imported pending messages | Newly imported queued/sending become unconfirmed; explicit Retry required |
 | Relaunch | Names, identity and encrypted-body history persist; sending leftovers are unconfirmed |
 | Reconnect | Fresh code, mandatory verification, same peer's saved history |
 | Simultaneous sending | Correct order per sender, no nonce/counter race |

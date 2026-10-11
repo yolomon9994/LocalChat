@@ -246,8 +246,8 @@ void main() {
       const ChatMessage(
         id: 'same-id',
         peerId: 'a',
-        text: 'duplicate',
-        timestamp: 2,
+        text: 'a/false',
+        timestamp: 1,
         outgoing: false,
         status: 'received',
       ),

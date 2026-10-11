@@ -2,8 +2,9 @@
 
 Open any saved conversation and type a message. The composer remembers each
 chat's unfinished text separately, including whitespace, newlines and emoji.
-You can write a draft while offline; Send is enabled only for the connected,
-verified peer. Reconnecting still requires comparing the security code.
+You can write a draft while offline and tap **Queue message** in a saved chat.
+Reconnecting still requires comparing the security code on both phones before
+queued text sends. See [outbox and retry](OUTBOX.md).
 
 On Android, draft bodies are encrypted with the chat-history key and restored
 after navigation, locking/unlocking and normal app restarts. Browser Demo uses
@@ -15,11 +16,13 @@ process is killed before its write finishes. A failed save keeps the text in
 the current app session and shows a Retry action. A failed load disables the
 composer until retried so an unreadable saved draft cannot be overwritten.
 
-After a successful transport write, the captured draft is cleared even if you
-have left the chat. Newer edits and other chats' drafts are preserved. Invalid
-or failed sends keep their draft. Transport acceptance is separate from the
-delivery acknowledgement: an unconfirmed message may already have arrived.
-There is no automatic resend or offline outbox.
+After successful local outbox acceptance, the captured draft is cleared in the
+same transaction, even if you have left the chat. Newer edits and other chats'
+drafts are preserved. Invalid text or failed local acceptance keeps its draft.
+A later transport failure leaves the accepted message unconfirmed, available
+for explicit Retry using its original ID; it does not restore a second draft.
+Local acceptance is separate from delivery: an unconfirmed message may already
+have arrived.
 
 Erasing the composer removes that chat's draft. Settings → Delete all chat
 history also removes all drafts and clears any open composer, while keeping
@@ -34,7 +37,8 @@ new chat. An existing connected session can continue with an empty composer.
 - [ ] Type a draft with newlines, surrounding spaces, emoji and non-Latin text.
       Go Back, reopen the chat and check that the text is unchanged.
 - [ ] Create distinct drafts for two peers. Switching chats restores the right one.
-- [ ] Disconnect, reopen saved history and edit its draft; Send stays disabled.
+- [ ] Disconnect, reopen saved history and edit its draft; Queue message is
+      enabled, but nothing transmits until reconnecting and verifying both phones.
 - [ ] Leave the app, unlock it if needed and reopen the chat. The draft returns
       and no composer text appears on the lock screen.
 - [ ] Wait briefly for persistence, close/restart the app and check both drafts.
@@ -45,8 +49,9 @@ new chat. An existing connected session can continue with an empty composer.
       after a successful send, with the outgoing message in history.
 - [ ] A rejected message (for example 1400 `界` characters exceeding the 4096-byte
       send limit) keeps the draft; shorten it and retry successfully.
-- [ ] If a write fails during a disconnect, the draft stays. Inspect unconfirmed
-      history before manually retrying because the message may already have arrived.
+- [ ] If a transport write fails during a disconnect after local acceptance, the
+      draft is cleared and the message becomes unconfirmed. Use its Retry action
+      because the other phone may already have received it.
 - [ ] Erase a draft, restart and confirm it stays empty. Delete all history only
       with disposable test data, then confirm all messages and drafts are gone.
 - [ ] Check multiline drafts with a keyboard, enlarged text and light/dark themes.

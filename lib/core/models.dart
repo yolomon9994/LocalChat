@@ -30,6 +30,7 @@ class Conversation {
     this.unreadCount = 0,
     this.pinned = false,
     this.archived = false,
+    this.queuedCount = 0,
   });
   final String id;
   final String name;
@@ -38,6 +39,7 @@ class Conversation {
   final int unreadCount;
   final bool pinned;
   final bool archived;
+  final int queuedCount;
 }
 
 class MessageSearchHit {

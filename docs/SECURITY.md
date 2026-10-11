@@ -28,7 +28,23 @@ TCP framing is a 4-byte unsigned big-endian byte count followed by UTF-8 JSON, m
 
 Sealed frame fields: `v`, `kind=sealed`, `session`, `seq`, `nonce`, `body`, `tag`. XChaCha20-Poly1305 uses a random 24-byte nonce. The authenticated additional data is UTF-8 JSON of `["LocalChat/frame/1", sessionHashHex, sequence]`. Receive counters advance only after successful authentication and parsing. Sequences must be contiguous; duplicates, reordering, wrong sessions, invalid lengths and authentication failures close the connection. A serialized controller queue prevents concurrent counter/writer races.
 
-Payload types are `verified`, `text` and `ack`. Message IDs, timestamps and content are inside authenticated ciphertext. Text is limited to 4096 UTF-8 bytes. Acknowledgements are also encrypted and sent only after successful decryption and local persistence. There is no automatic retransmission or offline outbox. Unconfirmed messages may already exist on the peer, so manual resend can create another message.
+Payload types are `verified`, `text` and `ack`. Message IDs, timestamps and content are inside authenticated ciphertext. Text is limited to 4096 UTF-8 bytes. Acknowledgements are also encrypted and sent only after successful decryption and local persistence.
+
+Saved chats accept an encrypted offline outbox. Queued messages transmit only
+after both phones verify the current session, for that identity, with the sender
+unlocked and foregrounded. At most four attempts await ACK; after 30 seconds,
+disconnect or restart an attempted message becomes unconfirmed. Unconfirmed
+messages require explicit Retry, preserving ID/text/timestamp. The receiver
+acknowledges an identical existing record without inserting it or changing its
+read state/activity; conflicting text/timestamps close the session. Dedupe only
+lasts while receiver history is retained. New text creates a new ID.
+
+The queued→sending state is persisted before transport submission. A final
+access check follows encryption; a gate change discards the unsent frame and
+session to avoid a sequence gap. Already submitted writes can complete while
+locked, and receiving/ACKs retain the existing app-lock model. ACKs only confirm
+IDs attempted in the current verified session, including late ACKs after timeout.
+There is no automatic reconnect. See [outbox behavior and tests](OUTBOX.md).
 
 ## At-rest data
 
@@ -69,6 +85,8 @@ includes the private identity seed: possession of the file and password allows
 identity impersonation. There is no password recovery. Import authenticates and
 validates before preview, then re-encrypts text with destination history keys.
 Existing records win conflicts; database writes form one transaction.
+Newly imported queued/sending records become unconfirmed and require explicit
+Retry; imports never silently transmit pending messages.
 
 Identity transfer is explicit and limited to empty destinations. A vault journal
 and transactional database receipt recover interrupted identity writes on open.

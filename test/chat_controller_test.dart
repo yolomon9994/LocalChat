@@ -36,6 +36,52 @@ class MemoryStore extends LocalStore {
   }
 
   @override
+  Future<void> saveOutgoingMessage(
+    ChatMessage message, {
+    bool clearDraft = false,
+  }) async {
+    await saveMessage(message);
+    if (clearDraft) draftText.remove(message.peerId);
+  }
+
+  @override
+  Future<List<ChatMessage>> queuedMessages(
+    String peer, {
+    int limit = 1,
+  }) async => saved.values
+      .where((m) => m.peerId == peer && m.outgoing && m.status == 'queued')
+      .take(limit)
+      .toList();
+
+  @override
+  Future<bool> changeOutgoingStatus(
+    String id,
+    String peer,
+    List<String> from,
+    String to,
+  ) async {
+    final m = saved[id];
+    if (m == null ||
+        m.peerId != peer ||
+        !m.outgoing ||
+        !from.contains(m.status)) {
+      return false;
+    }
+    await setStatus(id, peer, to);
+    return true;
+  }
+
+  @override
+  Future<bool> deleteQueuedMessage(String id, String peer) async {
+    final m = saved[id];
+    if (m == null || m.peerId != peer || !m.outgoing || m.status != 'queued') {
+      return false;
+    }
+    saved.remove(id);
+    return true;
+  }
+
+  @override
   Future<void> markRead(String peer) async {}
 
   @override
@@ -184,13 +230,16 @@ void main() {
     final peer = a.selectedPeer!;
     await a.drafts.load(peer);
     a.drafts.setText(peer, 'Keep this');
-    expect(await a.sendText('Keep this'), isFalse);
-    expect(a.drafts.textFor(peer), 'Keep this');
-    expect(await a.store.draft(peer), 'Keep this');
+    expect(
+      await a.sendText('Keep this'),
+      isTrue,
+    ); // Accepted locally, not delivered.
+    expect(a.drafts.textFor(peer), '');
+    expect(await a.store.draft(peer), '');
     await settle();
     expect(a.messages.single.status, 'unconfirmed');
     expect(a.ready, isFalse);
-    expect(a.error, contains('Socket write failed'));
+    expect(a.error, contains('unconfirmed'));
   });
   test(
     'Successful send preserves newer edits made while the write is pending',

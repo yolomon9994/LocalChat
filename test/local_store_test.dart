@@ -319,7 +319,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 5);
+      expect(await upgraded.getVersion(), 6);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -730,7 +730,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 5);
+      expect(await (await openDatabase(databasePath)).getVersion(), 6);
     },
   );
   test(
@@ -759,6 +759,143 @@ void main() {
       expect(store.identityRecoveryRequired, isFalse);
       expect((await store.exportBackup()).seed, incoming.seed);
       expect((await store.messages('bob')).single.text, message().text);
+    },
+  );
+  ChatMessage queued(String id, {int timestamp = 1000}) => ChatMessage(
+    id: id,
+    peerId: 'alice',
+    text: 'Queued private سلام 👋',
+    timestamp: timestamp,
+    outgoing: true,
+    status: 'queued',
+  );
+
+  test(
+    'Outbox acceptance encrypts text, atomically clears the draft and survives schema-5 restart',
+    () async {
+      await store.saveDraft('alice', 'Composer draft');
+      await store.setPinned('alice', true);
+      await store.setArchived('alice', true);
+      final identity = (await store.exportBackup()).seed;
+      await store.saveOutgoingMessage(
+        queued('a' * 24, timestamp: 3000),
+        clearDraft: true,
+      );
+      await store.saveOutgoingMessage(queued('b' * 24, timestamp: 1000));
+      await store.changeOutgoingStatus('b' * 24, 'alice', [
+        'queued',
+      ], 'sending');
+      expect(await store.draft('alice'), '');
+      expect((await store.conversations()).single.queuedCount, 1);
+      final db = await openDatabase(databasePath);
+      expect(
+        (await db.query(
+          'messages',
+        )).every((r) => !(r['body'] as String).contains('Queued private')),
+        isTrue,
+      );
+      await db.execute('DROP INDEX message_outbox');
+      await db.setVersion(5);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final messages = await store.messages('alice');
+      expect(messages.singleWhere((m) => m.id == 'a' * 24).status, 'queued');
+      expect(
+        messages.singleWhere((m) => m.id == 'b' * 24).status,
+        'unconfirmed',
+      );
+      final peer = (await store.conversations()).single;
+      expect(peer.pinned && peer.archived, isTrue);
+      expect(peer.queuedCount, 1);
+      expect((await store.exportBackup()).seed, identity);
+      expect(await (await openDatabase(databasePath)).getVersion(), 6);
+    },
+  );
+
+  test(
+    'Draft cleanup failure rolls back outgoing acceptance and its activity update',
+    () async {
+      await store.saveDraft('alice', 'Keep this draft');
+      final activity = (await store.conversations()).single.updated;
+      clock = clock.add(const Duration(minutes: 1));
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_draft_delete BEFORE DELETE ON drafts BEGIN SELECT RAISE(ABORT, 'test'); END",
+      );
+      await expectLater(
+        store.saveOutgoingMessage(queued('a' * 24), clearDraft: true),
+        throwsA(anything),
+      );
+      expect(await store.messages('alice'), isEmpty);
+      expect(await store.draft('alice'), 'Keep this draft');
+      expect((await store.conversations()).single.updated, activity);
+    },
+  );
+
+  test(
+    'FIFO uses insertion order; status and cancel operations are scoped and cannot undo delivery',
+    () async {
+      await store.savePeer('bob', 'Bob');
+      await store.saveOutgoingMessage(queued('a' * 24, timestamp: 3000));
+      await store.saveOutgoingMessage(queued('b' * 24, timestamp: 1000));
+      await store.saveMessage(
+        ChatMessage(
+          id: 'a' * 24,
+          peerId: 'alice',
+          text: 'Incoming same ID',
+          timestamp: 3000,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      await store.saveMessage(
+        ChatMessage(
+          id: 'a' * 24,
+          peerId: 'bob',
+          text: 'Other peer',
+          timestamp: 3000,
+          outgoing: true,
+          status: 'queued',
+        ),
+      );
+      expect(
+        (await store.queuedMessages('alice', limit: 10)).map((m) => m.id),
+        ['a' * 24, 'b' * 24],
+      );
+      await store.changeOutgoingStatus('a' * 24, 'alice', [
+        'queued',
+      ], 'sending');
+      await store.changeOutgoingStatus('a' * 24, 'alice', [
+        'sending',
+      ], 'delivered');
+      expect(await store.deleteQueuedMessage('a' * 24, 'alice'), isFalse);
+      expect(
+        await store.changeOutgoingStatus('a' * 24, 'alice', [
+          'unconfirmed',
+        ], 'queued'),
+        isFalse,
+      );
+      expect(await store.deleteQueuedMessage('b' * 24, 'alice'), isTrue);
+      final alice = await store.messages('alice');
+      expect(alice.length, 2);
+      expect(alice.singleWhere((m) => !m.outgoing).status, 'received');
+      expect((await store.messages('bob')).single.status, 'queued');
+    },
+  );
+
+  test(
+    'Backups retain queued status in exports but imports never schedule its transmission',
+    () async {
+      await store.saveOutgoingMessage(queued('a' * 24));
+      final backup = await store.exportBackup();
+      expect(backup.messages.single['status'], 'queued');
+      await BackupData.parse(backup.toJson());
+      await store.clearHistory();
+      await store.importBackup(backup);
+      expect((await store.messages('alice')).single.status, 'unconfirmed');
+      expect((await store.conversations()).single.queuedCount, 0);
+      expect(await store.queuedMessages('alice'), isEmpty);
     },
   );
 }

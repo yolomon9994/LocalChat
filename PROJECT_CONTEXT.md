@@ -16,9 +16,36 @@ The user chose app lock first and committed it as `df3c2b3`.
 Navigation was committed as `abe4dc3`, and themes as `b353956`.
 Chats list improvements were committed as `c233159`, and local search as
 `a2c7aa3`; drafts were committed as `9e90550`, and conversation management as
-`8f55377`. The current milestone is encrypted backups and phone migration.
+`8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
+The current milestone is offline outbox and message retry.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Offline outbox and message retry milestone
+
+- Saved chats accept queued text offline; fresh verification on both phones
+  enables automatic draining only for that connected identity, including archived
+  chats and while another chat is selected. No automatic reconnect/background mode.
+- Schema 6 adds `message_outbox(peer,outgoing,status)`. Local acceptance saves an
+  encrypted queued message and removes its captured draft in one transaction.
+  DraftController revision/generation guards preserve newer edits and deletions.
+- Durable queued→sending transition precedes transport. At most four attempts
+  await encrypted ACK, with a 30-second timeout. Disconnect/restart marks attempts
+  unconfirmed and retains unsent queued records. New attempts require unlocked,
+  foreground access; a gate change during encryption discards the session to avoid
+  sequence gaps. In-flight writes/receiving/ACKs retain the existing lock model.
+- Retry is explicit and retains ID/text/timestamp. Duplicate incoming records
+  must match body/timestamp before ACK; identical records retain read state/activity.
+  Only IDs attempted in the current verified session can be ACKed; late ACKs count.
+  Dedupe requires retained receiver history, so this is not exactly-once delivery.
+- UI shows queued counts, Cancel queued and confirmed Retry, plus Resume outbox
+  after storage failures. Unconfirmed messages never resend automatically.
+- Backups accept queued state, but newly imported queued/sending become unconfirmed
+  so imports cannot silently transmit. Older builds reject queued backup records.
+- See `docs/OUTBOX.md` and `docs/VALIDATION.md` for checks/results. Changes remain
+  uncommitted for the user; physical phone tests remain pending.
+  All 118 tests pass, final targeted checks pass, analysis is clean and fresh
+  Android/browser builds succeed.
 
 ## Encrypted backups and phone migration milestone
 
@@ -32,7 +59,7 @@ time; the user will stage, commit and push it themselves after testing.
   24-byte nonce; authenticated magic/version/salt. Limit 20 MiB + 65-byte envelope.
 - Preview shows additions, duplicates/conflicts and retained drafts. The final
   transaction recalculates counts. Existing names/flags/messages/state/nonempty
-  drafts win. Dedupe keys include peer/id/direction. `sending` imports as
+  drafts win. Dedupe keys include peer/id/direction. `sending` and `queued` import as
   `unconfirmed`; importing neither sends nor acknowledges. Bodies are encrypted
   again with the destination history key; settings/display name stay local.
 - Default history-only import retains identity. User explicitly chose support
@@ -57,7 +84,7 @@ time; the user will stage, commit and push it themselves after testing.
   flows, explicit migration, native channel, phone text size and lock/picker flow.
   See `docs/BACKUPS.md` for hardware checks and `docs/VALIDATION.md` for results.
   All 99 tests pass, static analysis is clean and fresh Android/browser builds
-  succeed. Changes remain uncommitted for the user; hardware checks are pending.
+  succeed. User committed this as `63eff9f`; hardware checks are pending.
 
 ## Conversation management milestone
 
@@ -93,7 +120,7 @@ time; the user will stage, commit and push it themselves after testing.
 ## Saved drafts milestone
 
 - Every selected conversation has its own composer draft. Offline history
-  allows editing; Send remains gated on an active, verified connection. Drafts
+  allows editing and queuing; transmission remains gated on a verified connection. Drafts
   preserve whitespace, newlines and Unicode exactly; sending trims as before.
 - `LocalStore` schema 3 adds `drafts(peer, body)`. Draft text is encrypted with
   the existing history key using XChaCha20-Poly1305 and domain-separated AAD
@@ -105,12 +132,11 @@ time; the user will stage, commit and push it themselves after testing.
   Edits update memory immediately and enqueue persistence without a debounce.
   Storage failures keep edits in memory with generic retry notices; a failed
   load disables editing until retried so saved text is not overwritten.
-- `sendText` returns a per-operation success boolean and captures the selected
-  peer and matching draft revision. It clears only that revision after the
-  transport accepts the frame, even after navigating away or locking. Newer
-  edits, other peers and failed/invalid sends keep their drafts. Transport
-  acceptance does not mean delivered; existing acknowledgements still decide
-  delivery status. There is no offline outbox or automatic resend.
+- `sendText` returns a local-acceptance boolean and captures the selected peer
+  and matching draft revision. The outbox milestone now clears that revision
+  atomically when saving a queued message. Newer edits, other peers and failed
+  local acceptance keep their drafts. Local acceptance does not mean delivered;
+  encrypted acknowledgements still decide delivery status.
 - History deletion runs on the draft write queue and transactionally clears
   messages, drafts and peers. A generation invalidates queued older edits;
   cached drafts and open composers reset only after successful deletion.
@@ -232,7 +258,8 @@ time; the user will stage, commit and push it themselves after testing.
   flutter_secure_storage (`local_store.dart`). Metadata remains unencrypted.
 - Material 3 nearby devices, chat, settings, acknowledgements and saved history,
   coordinated by a serialized ChangeNotifier controller (`chat_controller.dart`).
-- Both apps must remain open. No automatic retransmission or offline outbox.
+- Both apps must remain open for transmission. Offline queues wait for a freshly
+  verified connection; unconfirmed attempts require explicit Retry.
 - The protocol is experimental and has not had an independent security audit.
 
 ## Browser preview
@@ -275,7 +302,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before conversation management, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the outbox milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

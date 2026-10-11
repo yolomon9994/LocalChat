@@ -3,7 +3,21 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Encrypted backups and phone migration
+## Current milestone: Offline outbox and message retry
+
+- [x] Queue text in saved chats while disconnected; encrypted Android persistence.
+- [x] Clear matching drafts atomically with local acceptance; preserve newer edits.
+- [x] Send queued text in order after both phones verify the fresh connection.
+- [x] Pause new attempts while locked/backgrounded; drain only the verified identity.
+- [x] Queued counts, confirmed Cancel, explicit Retry and storage-error Resume.
+- [x] Retry original IDs; reject conflicting duplicates and avoid extra unread counts.
+- [x] Bound in-flight attempts; timeouts/disconnects/restarts become unconfirmed.
+- [x] Imported pending messages become unconfirmed and never send automatically.
+- [x] All 118 tests pass, final targeted checks pass, clean analysis and fresh
+      Android/browser builds; see [outbox checklist](OUTBOX.md).
+- [ ] Physical phone testing and user's commit.
+
+## Encrypted backups and phone migration: implemented and committed
 
 - [x] Settings export to a password-encrypted, versioned `.lcbackup` file.
 - [x] Include messages, drafts, unread state and pin/archive choices.
@@ -15,7 +29,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Lock clears passwords/previews; encrypted selection survives picker locking.
 - [x] All 99 tests pass, clean analysis and fresh Android/browser builds;
       see [backup checklist](BACKUPS.md).
-- [ ] Physical phone testing and user's commit.
+- [x] User commits backups and phone migration (`63eff9f`).
+- [ ] Physical phone testing.
 
 ## Conversation management: implemented and committed
 
@@ -36,8 +51,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Separate drafts for each conversation, editable while offline.
 - [x] Restore exact text after navigation, locking and Android app restarts.
 - [x] Encrypt Android draft bodies; temporary browser drafts reset on reload.
-- [x] Keep drafts after validation/send failures; clear only the sent revision
-      after transport accepts the message, even if its chat route has closed.
+- [x] Keep drafts after validation/storage failures; clear only the accepted
+      revision atomically when saving an outgoing message to the outbox.
 - [x] Draft load/save errors have a retry action; failed loads prevent overwriting.
 - [x] Delete all chat history also removes saved drafts and the open composer.
 - [x] Database upgrades preserve messages/read state; typing does not reorder
@@ -128,8 +143,9 @@ Work on one feature at a time; validate it before the user commits and starts th
       recent-message ordering.
 - [x] Local conversation and message search.
 - [x] Saved drafts across navigation and restarts (Android); temporary browser drafts.
-- [ ] Offline outbox, reconnection and retry after verification; distinguish
-      queued, delivered and unconfirmed messages; prevent duplicate resends.
+- [x] Offline outbox and retry after fresh verification; distinguish queued,
+      sending, delivered and unconfirmed messages; retry by original ID.
+- [ ] Automatic reconnection with troubleshooting and fresh verification.
 - [x] Pin, archive and delete individual conversations.
 - [ ] Connection troubleshooting: Wi-Fi, permissions, discovery, retry actions.
 - [ ] Local notifications with optional hidden message previews.
@@ -152,8 +168,9 @@ Work on one feature at a time; validate it before the user commits and starts th
 2. Themes (committed).
 3. Chats list previews/unread state, local search and drafts (committed),
    conversation management (committed).
-4. Encrypted backups and phone migration (current).
-5. Reliable reconnection, queued messages and notifications.
+4. Encrypted backups and phone migration (committed).
+5. Offline outbox and retry (current), then connection troubleshooting/reconnection
+   and notifications.
 6. Group chat and attachments.
 
 The user chose app lock first so it can be tested before committing. This order

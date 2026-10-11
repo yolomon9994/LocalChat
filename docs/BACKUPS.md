@@ -50,8 +50,10 @@ confirmed can finish while the UI is hidden; it is a single database transaction
   choices. New message activity can advance a chat; duplicate-only imports do not.
 - Fill empty/missing drafts; retain existing nonempty drafts. Newer local edits
   made while import is working take precedence over imported draft text.
-- Imported `sending` becomes `unconfirmed`; import never sends messages or
+- Imported `sending` or `queued` becomes `unconfirmed`; import never sends messages or
   invents delivery acknowledgements. Incoming unread state is retained.
+  Use explicit Retry for newly restored pending messages. Older app builds reject
+  queued status in a backup, so update before importing these files.
 - Imported bodies get fresh ciphertext under the destination's existing history
   key. Locks, themes, display name and the source phone's data are preserved.
 - Preview counts are recalculated at commit, to account for incoming messages.
@@ -106,4 +108,4 @@ without broad storage permissions. Browser file APIs use
 
 Automated checks and builds are recorded in [VALIDATION.md](VALIDATION.md).
 Physical phone/file-provider/Android Keystore checks remain pending. The user
-will stage, commit and push this milestone after testing it.
+committed the backup milestone as `63eff9f`.
