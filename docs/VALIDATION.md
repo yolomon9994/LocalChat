@@ -1,5 +1,41 @@
 # Validation for v0.1.0
 
+## Connection troubleshooting and manual reconnect — 2026-10-11
+
+Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all **132 tests passed** (118 existing + 14 recovery checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build; same optional
+  Cupertino font warning as prior builds. This does not test Android settings.
+- `git -c core.safecrlf=false diff --check`: clean.
+
+Ten controller/channel checks cover Wi-Fi/support/Location prerequisites while
+preserving drafts, initial permission request and post-grant status refresh,
+later permission denial and settings action, typed busy/stale/discovery failures,
+generic feedback without raw native details, Wi-Fi/service reset and retry,
+duplicate taps and lock during access checks, failed status/settings queries,
+cancelled connection deadlines, same-address Reconnect requiring fresh codes
+and both confirmations before queued text drains, disappearance requiring a
+scan, foreground permission revocation closing verification without deleting
+drafts/history, and the three Android settings channel destinations. Linked
+transports exchange real encrypted frames; native status/settings calls use
+channel doubles, not a physical settings provider.
+
+Four widget checks cover settings recovery and completed-empty scans, failed
+connect staying in Nearby, successful reconnect opening the chat, 320 × 568
+layout with 1.8× text and reachable wrapped recovery actions, and queue help
+being hidden by locking without losing queued history. Native-looking UI
+fixtures inject memory lock/appearance providers; they do not claim Keystore
+validation. Browser demo regressions continue to pass.
+
+Physical Wi-Fi Direct, permission prompts/revocation, Android settings return,
+pairing cancellation and vendor behavior remain pending. Follow
+[CONNECTION_RECOVERY.md](CONNECTION_RECOVERY.md). Changes are intentionally
+uncommitted; the user handles staging, committing and pushing.
+
 ## Offline outbox and message retry — 2026-10-11
 
 Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
@@ -40,8 +76,8 @@ duplicate fixture was corrected to use identical text/timestamp; conflicting
 records now deliberately fail, matching native behavior.
 
 Physical two-phone delivery, restart/lifecycle, vendor behavior and enlarged
-phone text remain pending. Follow [OUTBOX.md](OUTBOX.md). Changes are intentionally
-uncommitted; the user handles Git themselves.
+phone text remain pending. Follow [OUTBOX.md](OUTBOX.md). The user committed
+the outbox milestone as `605962e`.
 
 ## Encrypted backups and phone migration — 2026-10-11
 

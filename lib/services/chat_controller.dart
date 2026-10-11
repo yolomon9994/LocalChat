@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import '../core/local_store.dart';
 import '../core/models.dart';
 import '../core/chat_backup.dart';
@@ -8,6 +9,7 @@ import 'backup_files.dart';
 import '../core/secure_session.dart';
 import 'transport.dart';
 import 'draft_controller.dart';
+import 'nearby_support.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -15,9 +17,52 @@ class ChatController extends ChangeNotifier {
     this.store, {
     this.isDemo = false,
     this.ackTimeout = const Duration(seconds: 30),
-  });
+    this.connectionTimeout = const Duration(seconds: 90),
+    NearbyTools? nearbyTools,
+  }) : nearbyTools =
+           nearbyTools ??
+           (transport is WifiDirectTransport
+               ? const AndroidNearbyTools()
+               : const DemoNearbyTools());
   final bool isDemo;
   final Duration ackTimeout;
+  final Duration connectionTimeout;
+  final NearbyTools nearbyTools;
+  NearbyStatus? nearbyStatus;
+  ConnectionIssue? connectionIssue;
+  Peer? lastNearbyPeer;
+  bool nearbyBusy = false;
+  bool _checkingAccess = false;
+  bool get canUseNearby =>
+      initialized &&
+      !_disposed &&
+      _appAccessible &&
+      _appForeground &&
+      !nearbyBusy;
+  bool get canScan =>
+      canUseNearby &&
+      started &&
+      !scanning &&
+      _session == null &&
+      state != 'Connecting';
+  bool get canReconnect =>
+      canUseNearby &&
+      started &&
+      _session == null &&
+      state != 'Connecting' &&
+      lastNearbyPeer != null &&
+      peers.any((p) => p.address == lastNearbyPeer!.address);
+  bool get hasConnectionHelp =>
+      connectionIssue != null && error == connectionIssue!.title;
+  String get queueWaitingReason => outboxPaused
+      ? 'Resolve the storage error, then tap Resume outbox in this chat.'
+      : selectedPeer == connectedPeer && ready
+      ? 'Queued messages send in order while the app is unlocked and in the foreground.'
+      : !started
+      ? 'Open Nearby and tap Go nearby, then connect to this phone.'
+      : selectedPeer == connectedPeer && !ready
+      ? 'Both phones must compare the fresh code and tap Codes match.'
+      : 'Reconnect to this phone from Nearby and verify the fresh code on both phones.';
   final Transport transport;
   final LocalStore store;
   late final drafts = DraftController(store);
@@ -101,7 +146,10 @@ class ChatController extends ChangeNotifier {
     _appAccessible = accessible;
     accessRevision++;
     _readVisible();
-    if (accessible) _requestDrain();
+    if (accessible) {
+      unawaited(refreshNearbyAccess());
+      _requestDrain();
+    }
   }
 
   Future<BackupData> backupSnapshot() async {
@@ -174,7 +222,10 @@ class ChatController extends ChangeNotifier {
     _readVisible();
     // Refresh relative activity labels after time spent outside the app.
     if (foreground) notifyListeners();
-    if (foreground) _requestDrain();
+    if (foreground) {
+      unawaited(refreshNearbyAccess());
+      _requestDrain();
+    }
   }
 
   void _readVisible() {
@@ -225,26 +276,139 @@ class ChatController extends ChangeNotifier {
     }
   });
 
-  Future<void> start() => _run(() async {
-    if (!initialized) {
-      throw StateError('Local storage is unavailable. Retry setup.');
-    }
-    error = null;
-    await transport.start(store.name);
-    started = true;
-    state = 'Available nearby';
+  void _showConnectionIssue(ConnectionIssue issue) {
+    connectionIssue = issue;
+    error = issue.title;
+  }
+
+  Future<void> refreshNearbyAccess() async {
+    if (!canUseNearby || _checkingAccess) return;
+    _checkingAccess = true;
+    await _run(() async {
+      try {
+        if (!_appAccessible || !_appForeground || _disposed) return;
+        final status = await nearbyTools.check();
+        if (!_appAccessible || !_appForeground || _disposed) return;
+        nearbyStatus = status;
+        if (status.issue != null) {
+          if (_session != null || state == 'Connecting') await _disconnect();
+          if (status.issue == ConnectionIssue.wifiOff) {
+            await transport.stop();
+            started = false;
+            scanning = false;
+            peers = [];
+            state = 'Offline';
+          }
+          _showConnectionIssue(status.issue!);
+        } else if (connectionIssue?.isPrerequisite == true ||
+            connectionIssue == ConnectionIssue.status) {
+          if (hasConnectionHelp) error = null;
+          connectionIssue = null;
+        }
+      } catch (_) {
+        _showConnectionIssue(ConnectionIssue.status);
+      } finally {
+        _checkingAccess = false;
+        notifyListeners();
+        _requestDrain();
+      }
+    });
+  }
+
+  Future<bool> _nearbyAction(
+    Future<void> Function() action, {
+    bool allowPermissionRequest = false,
+    bool scanningAction = false,
+    bool connectingAction = false,
+  }) async {
+    if (!canUseNearby) return false;
+    final access = accessRevision;
+    nearbyBusy = true;
     notifyListeners();
-    await transport.scan();
-  });
-  Future<void> scan() => _run(() async {
-    error = null;
-    peers = [];
-    await transport.scan();
-    notifyListeners();
-  });
-  Future<void> connect(Peer peer) => _run(() async {
-    error = null;
+    var success = false;
+    await _run(() async {
+      try {
+        if (access != accessRevision ||
+            !_appAccessible ||
+            !_appForeground ||
+            _disposed) {
+          return;
+        }
+        error = null;
+        connectionIssue = null;
+        nearbyStatus = await nearbyTools.check();
+        if (access != accessRevision ||
+            !_appAccessible ||
+            !_appForeground ||
+            _disposed) {
+          return;
+        }
+        final issue = nearbyStatus!.issue;
+        if (issue != null &&
+            !(allowPermissionRequest && issue == ConnectionIssue.permission)) {
+          if (_session != null || state == 'Connecting') await _disconnect();
+          if (issue == ConnectionIssue.wifiOff) {
+            await transport.stop();
+            started = false;
+            scanning = false;
+            peers = [];
+            state = 'Offline';
+          }
+          _showConnectionIssue(issue);
+          return;
+        }
+        await action();
+        success = true;
+      } catch (e) {
+        if (connectingAction) await _reset();
+        if (scanningAction) scanning = false;
+        final issue = ConnectionIssue.fromCode(
+          e is PlatformException ? e.code : null,
+          scanning: scanningAction,
+        );
+        if (issue == ConnectionIssue.serviceStopped ||
+            issue == ConnectionIssue.wifiOff) {
+          started = false;
+          scanning = false;
+          peers = [];
+          state = 'Offline';
+        }
+        _showConnectionIssue(issue);
+      } finally {
+        nearbyBusy = false;
+        notifyListeners();
+      }
+    });
+    return success;
+  }
+
+  Future<bool> start() => _nearbyAction(
+    () async {
+      await transport.start(store.name);
+      nearbyStatus = await nearbyTools.check();
+      started = true;
+      state = 'Available nearby';
+      peers = [];
+      if (_appAccessible && _appForeground) await transport.scan();
+    },
+    allowPermissionRequest: true,
+    scanningAction: true,
+  );
+
+  Future<bool> scan() async {
+    if (!canScan) return false;
+    return _nearbyAction(() async {
+      peers = [];
+      await transport.scan();
+    }, scanningAction: true);
+  }
+
+  Future<bool> connect(Peer peer) => _nearbyAction(() async {
     if (_session != null || state == 'Connecting') await _disconnect();
+    final previousPeer = selectedPeer, previousName = selectedName;
+    lastNearbyPeer = peer;
+    selectedPeer = null;
+    messages = [];
     selectedName = peer.name;
     state = 'Connecting';
     _armTimeout();
@@ -252,21 +416,53 @@ class ChatController extends ChangeNotifier {
     try {
       await transport.connect(peer.address);
     } catch (_) {
-      await _reset();
+      selectedPeer = previousPeer;
+      selectedName = previousName;
       rethrow;
     }
-  });
+  }, connectingAction: true);
+
+  Future<bool> reconnect() async {
+    if (!canReconnect) {
+      if (canUseNearby) {
+        _showConnectionIssue(ConnectionIssue.stalePeer);
+        notifyListeners();
+      }
+      return false;
+    }
+    return connect(
+      peers.firstWhere((p) => p.address == lastNearbyPeer!.address),
+    );
+  }
+
+  Future<void> openNearbySettings(NearbySettings target) async {
+    if (!canUseNearby || isDemo) return;
+    nearbyBusy = true;
+    notifyListeners();
+    try {
+      await nearbyTools.openSettings(target);
+    } catch (_) {
+      _showConnectionIssue(ConnectionIssue.settings);
+    } finally {
+      nearbyBusy = false;
+      notifyListeners();
+    }
+  }
 
   void _armTimeout() {
     _timeout?.cancel();
-    _timeout = Timer(const Duration(seconds: 90), () {
+    late final Timer timer;
+    timer = Timer(connectionTimeout, () {
       unawaited(
         _run(() async {
-          error = 'Connection or verification timed out. Try again.';
+          if (_disposed || !identical(_timeout, timer) || ready) return;
           await _disconnect();
+          _showConnectionIssue(ConnectionIssue.timeout);
+          notifyListeners();
         }),
       );
     });
+    _timeout = timer;
   }
 
   Future<void> _event(Map<String, dynamic> event) async {
@@ -283,6 +479,8 @@ class ChatController extends ChangeNotifier {
           await _disconnect();
           return;
         }
+        if (hasConnectionHelp) error = null;
+        connectionIssue = null;
         _session = await SecureSession.create(store.identity, store.name);
         localVerified = false;
         remoteVerified = false;
@@ -293,18 +491,34 @@ class ChatController extends ChangeNotifier {
         try {
           await _frame(event['frame'] as String);
         } catch (_) {
-          error = 'Security check failed. Connection closed.';
           await _disconnect();
+          _showConnectionIssue(ConnectionIssue.security);
         }
       case 'disconnected':
+        final unexpected = _session != null || state == 'Connecting';
         await _reset();
+        if (unexpected && connectionIssue == null) {
+          _showConnectionIssue(ConnectionIssue.lost);
+        }
       case 'error':
-        error = event['message'] as String;
         if (state == 'Connecting' || _session != null) await _disconnect();
+        final issue = ConnectionIssue.fromCode(event['code'] as String?);
+        if (issue == ConnectionIssue.serviceStopped ||
+            issue == ConnectionIssue.wifiOff) {
+          started = false;
+          scanning = false;
+          peers = [];
+          state = 'Offline';
+        }
+        _showConnectionIssue(issue);
       case 'wifi':
         if (event['enabled'] != true) {
-          error = 'Turn on Wi-Fi to use nearby chat.';
+          await transport.stop();
+          started = false;
+          scanning = false;
+          peers = [];
           await _disconnect();
+          _showConnectionIssue(ConnectionIssue.wifiOff);
         }
     }
     notifyListeners();
@@ -408,6 +622,7 @@ class ChatController extends ChangeNotifier {
   Future<void> _updateReady() async {
     if (ready) {
       _timeout?.cancel();
+      _timeout = null;
       state = 'Encrypted • verified';
       await store.savePeer(connectedPeer!, _session!.peerName!);
       historyRevision++;
@@ -512,6 +727,7 @@ class ChatController extends ChangeNotifier {
       _appAccessible &&
       _appForeground &&
       !_pausedOutboxes.contains(peer) &&
+      nearbyStatus?.issue == null &&
       _ackTimers.length < 4;
 
   bool _validOutgoing(ChatMessage m) =>
@@ -830,6 +1046,7 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _reset() async {
     _timeout?.cancel();
+    _timeout = null;
     final peer = connectedPeer;
     final pending = _ackTimers.entries.toList();
     _ackTimers.clear();
@@ -866,6 +1083,7 @@ class ChatController extends ChangeNotifier {
   Future<void> disconnect() => _run(_disconnect);
   void dismissError() {
     error = null;
+    connectionIssue = null;
     notifyListeners();
   }
 

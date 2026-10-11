@@ -17,9 +17,37 @@ Navigation was committed as `abe4dc3`, and themes as `b353956`.
 Chats list improvements were committed as `c233159`, and local search as
 `a2c7aa3`; drafts were committed as `9e90550`, and conversation management as
 `8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
-The current milestone is offline outbox and message retry.
+Outbox/retry was committed as `605962e`. The current milestone is connection
+troubleshooting and easier manual reconnection.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Connection recovery milestone
+
+- `nearby_support.dart` adds typed issues, access status and injectable NearbyTools.
+  Native transport queries radio/support/permission/Location and opens fixed
+  Android settings destinations. Demo/custom test transports use simulated checks.
+- Nearby shows access checks, completed empty scans, Disconnect and last-device
+  Reconnect. Last attempted address/name stays only in memory, requires a current
+  nearby list entry and does not substitute for cryptographic identity verification.
+- Home/chat recovery cards use wrapping controls and bounded scrolling. Failed
+  connect stays in Nearby; successful reconnect opens the handshake. An immediate
+  failed attempt restores the prior selected chat rather than renaming its history.
+- Chat toolbar explains queued waiting state. Reconnect never confirms codes or
+  retries unconfirmed text automatically. The outbox still drains only to its
+  verified identity, with foreground/unlock gates.
+- Access refresh on foreground/unlock never starts discovery/connection. Missing
+  access closes a session; Wi-Fi loss clears discovery/started state. Pending
+  start/scan/connect actions reject repeated taps and earlier unlock tokens.
+- Kotlin errors carry codes; cancelled callback epochs cannot restart advertising
+  or scanning. Async permission errors are guarded and disconnect tolerates revoked
+  permission. A stopped P2P channel can be initialized by Go nearby again.
+- Connection/verification timeout remains 90 seconds with a cancellation guard;
+  idle socket detection and automatic reconnect/background sending are future work.
+- No database, wire, dependency or manifest permission changes. Phone checks and
+  results are in `docs/CONNECTION_RECOVERY.md` and `docs/VALIDATION.md`. Changes
+  remain uncommitted for the user; physical checks are pending.
+  All 132 tests pass, static analysis is clean and Android/browser builds succeed.
 
 ## Offline outbox and message retry milestone
 
@@ -42,8 +70,8 @@ time; the user will stage, commit and push it themselves after testing.
   after storage failures. Unconfirmed messages never resend automatically.
 - Backups accept queued state, but newly imported queued/sending become unconfirmed
   so imports cannot silently transmit. Older builds reject queued backup records.
-- See `docs/OUTBOX.md` and `docs/VALIDATION.md` for checks/results. Changes remain
-  uncommitted for the user; physical phone tests remain pending.
+- See `docs/OUTBOX.md` and `docs/VALIDATION.md` for checks/results. User committed
+  this as `605962e`; physical phone tests remain pending.
   All 118 tests pass, final targeted checks pass, analysis is clean and fresh
   Android/browser builds succeed.
 
@@ -302,7 +330,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the outbox milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the connection recovery milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

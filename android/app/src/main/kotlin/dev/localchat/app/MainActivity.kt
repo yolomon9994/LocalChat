@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
+import android.net.Uri
+import android.net.wifi.WifiManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pManager
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
@@ -15,6 +17,7 @@ import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterFragmentActivity
 import android.view.WindowManager
 import io.flutter.embedding.engine.FlutterEngine
@@ -60,6 +63,8 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private val peers = linkedMapOf<String, Map<String, String>>()
     private var scanEpoch = 0
     private var scanEnd: Runnable? = null
+    private var advertiseEpoch = 0
+    private class NearbyFailure(val code: String, message: String) : IllegalStateException(message)
 
     companion object {
         private const val PORT = 45873
@@ -110,15 +115,28 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
             } else result.notImplemented()
         }
         manager = getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-        channel = manager?.initialize(this, mainLooper) {
-            active = false
-            closeSockets()
-            emit("error", "message" to "Wi-Fi Direct service stopped. Restart LocalChat.")
-        }
+        initializeP2p()
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/events").setStreamHandler(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/transport").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "status" -> result.success(accessStatus())
+                    "openSettings" -> {
+                        val target = when (call.argument<String>("target")) {
+                            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+                            "permissions" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                            "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
+                            else -> throw NearbyFailure("SETTINGS_UNAVAILABLE", "Unknown settings destination.")
+                        }
+                        val intent = Intent(target)
+                        if (target == Settings.ACTION_APPLICATION_DETAILS_SETTINGS) intent.data = Uri.parse("package:$packageName")
+                        try { startActivity(intent) }
+                        catch (_: Exception) {
+                            try { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                            catch (_: Exception) { throw NearbyFailure("SETTINGS_UNAVAILABLE", "Open Android Settings manually.") }
+                        }
+                        result.success(null)
+                    }
                     "start" -> {
                         val name = call.argument<String>("name")?.trim() ?: "LocalChat user"
                         require(name.isNotEmpty() && name.length <= 32) { "Use a name with 1–32 characters" }
@@ -128,7 +146,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
                     "connect" -> {
                         ensureReady()
                         val address = call.argument<String>("address") ?: error("Missing address")
-                        require(peers.containsKey(address)) { "Device is no longer in the nearby list. Scan again." }
+                        if (!peers.containsKey(address)) throw NearbyFailure("STALE_PEER", "Device is no longer in the nearby list. Scan again.")
                         val config = WifiP2pConfig().apply { deviceAddress = address }
                         manager!!.connect(channel!!, config, action(result))
                     }
@@ -156,7 +174,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
                     "stop" -> { stop(); result.success(null) }
                     else -> result.notImplemented()
                 }
-            } catch (e: Exception) { result.error("LOCALCHAT", e.message, null) }
+            } catch (e: Exception) { nearbyError(result, e) }
         }
     }
 
@@ -211,9 +229,52 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private fun emit(type: String, vararg fields: Pair<String, Any?>) {
         main.post { sink?.success(mapOf("type" to type, *fields)) }
     }
+    private fun initializeP2p() {
+        channel = manager?.initialize(this, mainLooper) {
+            channel = null
+            active = false
+            ++advertiseEpoch
+            ++scanEpoch
+            scanEnd?.let { main.removeCallbacks(it) }
+            peers.clear()
+            closeSockets()
+            emit("scanning", "active" to false)
+            emit("error", "code" to "SERVICE_STOPPED", "message" to "Wi-Fi Direct service stopped. Tap Go nearby again.")
+        }
+    }
+    private fun accessStatus(): Map<String, Boolean> {
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val location = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val locationOn = if (Build.VERSION.SDK_INT >= 28) location.isLocationEnabled
+            else location.isProviderEnabled(LocationManager.GPS_PROVIDER) || location.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        return mapOf(
+            "supported" to (manager != null && packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)),
+            "wifiEnabled" to (wifi?.isWifiEnabled == true),
+            "permissionGranted" to (checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED),
+            "locationRequired" to (Build.VERSION.SDK_INT < 33),
+            "locationEnabled" to locationOn)
+    }
+    private fun nearbyError(result: MethodChannel.Result, e: Exception) {
+        when (e) {
+            is NearbyFailure -> result.error(e.code, e.message, null)
+            is SecurityException -> result.error("PERMISSION_DENIED", "Allow nearby access in Android Settings.", null)
+            else -> result.error("LOCALCHAT", "Nearby action failed. Check access and try again.", null)
+        }
+    }
+    private fun guardNearby(result: MethodChannel.Result, operation: () -> Unit) {
+        try { operation() } catch (e: Exception) {
+            emit("scanning", "active" to false)
+            nearbyError(result, e)
+        }
+    }
+    private fun reasonCode(reason: Int) = when (reason) {
+        WifiP2pManager.P2P_UNSUPPORTED -> "P2P_UNSUPPORTED"
+        WifiP2pManager.BUSY -> "P2P_BUSY"
+        else -> "WIFI_DIRECT"
+    }
     private fun action(result: MethodChannel.Result) = object : WifiP2pManager.ActionListener {
         override fun onSuccess() { result.success(null) }
-        override fun onFailure(reason: Int) { result.error("WIFI_DIRECT", reasonText(reason), null) }
+        override fun onFailure(reason: Int) { result.error(reasonCode(reason), reasonText(reason), null) }
     }
     private fun reasonText(reason: Int) = when (reason) {
         WifiP2pManager.P2P_UNSUPPORTED -> "This phone does not support Wi-Fi Direct."
@@ -222,19 +283,23 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     }
     private fun permission() = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
     private fun ensureReady() {
-        check(active && manager != null && channel != null) { "Tap Go nearby first." }
-        check(checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED) { "Allow nearby device permission in Android Settings." }
-        if (Build.VERSION.SDK_INT < 33) {
-            val location = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            check(location.isProviderEnabled(LocationManager.GPS_PROVIDER) || location.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                "Turn on Location for Wi-Fi Direct discovery on this Android version."
-            }
-        }
+        if (!active || manager == null || channel == null) throw NearbyFailure("NOT_STARTED", "Tap Go nearby first.")
+        ensureAccess()
+    }
+    private fun ensureAccess() {
+        val status = accessStatus()
+        if (status["supported"] != true) throw NearbyFailure("P2P_UNSUPPORTED", "This phone does not support Wi-Fi Direct.")
+        if (status["wifiEnabled"] != true) throw NearbyFailure("WIFI_DISABLED", "Turn on Wi-Fi.")
+        if (status["permissionGranted"] != true) throw NearbyFailure("PERMISSION_DENIED", "Allow nearby access in Android Settings.")
+        if (status["locationRequired"] == true && status["locationEnabled"] != true)
+            throw NearbyFailure("LOCATION_DISABLED", "Turn on Location for discovery on this Android version.")
     }
     private fun start(name: String, result: MethodChannel.Result) {
-        check(manager != null && channel != null && packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)) {
-            "This phone does not support Wi-Fi Direct."
-        }
+        if (manager == null || !packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT))
+            throw NearbyFailure("P2P_UNSUPPORTED", "This phone does not support Wi-Fi Direct.")
+        if (channel == null) initializeP2p()
+        if (channel == null) throw NearbyFailure("SERVICE_STOPPED", "Wi-Fi Direct service is unavailable. Reopen LocalChat.")
+        if (accessStatus()["wifiEnabled"] != true) throw NearbyFailure("WIFI_DISABLED", "Turn on Wi-Fi.")
         if (checkSelfPermission(permission()) != PackageManager.PERMISSION_GRANTED) {
             check(permissionResult == null) { "A permission request is already open." }
             permissionResult = result
@@ -250,10 +315,12 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         val result = permissionResult ?: return
         permissionResult = null
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            try { advertise(pendingName, result) } catch (e: Exception) { result.error("LOCALCHAT", e.message, null) }
+            try { advertise(pendingName, result) } catch (e: Exception) { nearbyError(result, e) }
         } else { result.error("PERMISSION_DENIED", "Allow nearby devices (or Location on older Android) to connect offline.", null) }
     }
     private fun advertise(name: String, result: MethodChannel.Result) {
+        ensureAccess()
+        val epoch = ++advertiseEpoch
         if (!registered) {
             val filter = IntentFilter().apply {
                 addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
@@ -277,12 +344,22 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
             mapOf("app" to "localchat", "v" to "1", "name" to name))
         manager!!.clearLocalServices(channel!!, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
-                manager!!.addLocalService(channel!!, newService, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() { service = newService; active = true; result.success(null) }
-                    override fun onFailure(reason: Int) { result.error("ADVERTISE", reasonText(reason), null) }
-                })
+                if (epoch != advertiseEpoch) { result.error("CANCELLED", "Nearby stopped", null); return }
+                guardNearby(result) {
+                    ensureAccess()
+                    manager!!.addLocalService(channel!!, newService, object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() {
+                            if (epoch != advertiseEpoch) { result.error("CANCELLED", "Nearby stopped", null); return }
+                            guardNearby(result) {
+                                ensureAccess()
+                                service = newService; active = true; result.success(null)
+                            }
+                        }
+                        override fun onFailure(reason: Int) { result.error(reasonCode(reason), reasonText(reason), null) }
+                    })
+                }
             }
-            override fun onFailure(reason: Int) { result.error("ADVERTISE", reasonText(reason), null) }
+            override fun onFailure(reason: Int) { result.error(reasonCode(reason), reasonText(reason), null) }
         })
     }
     private fun scan(result: MethodChannel.Result) {
@@ -295,32 +372,43 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         manager!!.clearServiceRequests(channel!!, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 if (epoch != scanEpoch || !active) { result.error("CANCELLED", "Scan stopped", null); return }
-                val newRequest = WifiP2pDnsSdServiceRequest.newInstance("_localchat._tcp")
-                request = newRequest
-                manager!!.addServiceRequest(channel!!, newRequest, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() {
-                        manager!!.discoverServices(channel!!, object : WifiP2pManager.ActionListener {
-                            override fun onSuccess() {
-                                result.success(null)
-                                scanEnd = Runnable {
-                                    if (epoch == scanEpoch) {
-                                        manager?.stopPeerDiscovery(channel, null)
-                                        emit("scanning", "active" to false)
+                guardNearby(result) {
+                    ensureAccess()
+                    val newRequest = WifiP2pDnsSdServiceRequest.newInstance("_localchat._tcp")
+                    request = newRequest
+                    manager!!.addServiceRequest(channel!!, newRequest, object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() {
+                            if (epoch != scanEpoch || !active) { result.error("CANCELLED", "Scan stopped", null); return }
+                            guardNearby(result) {
+                                ensureAccess()
+                                manager!!.discoverServices(channel!!, object : WifiP2pManager.ActionListener {
+                                    override fun onSuccess() {
+                                        if (epoch != scanEpoch || !active) { result.error("CANCELLED", "Scan stopped", null); return }
+                                        guardNearby(result) {
+                                            ensureAccess()
+                                            result.success(null)
+                                            scanEnd = Runnable {
+                                                if (epoch == scanEpoch) {
+                                                    runCatching { manager?.stopPeerDiscovery(channel, null) }
+                                                    emit("scanning", "active" to false)
+                                                }
+                                            }.also { main.postDelayed(it, 15000) }
+                                        }
                                     }
-                                }.also { main.postDelayed(it, 15000) }
+                                    override fun onFailure(reason: Int) { scanFailed(result, reason, epoch) }
+                                })
                             }
-                            override fun onFailure(reason: Int) { scanFailed(result, reason) }
-                        })
-                    }
-                    override fun onFailure(reason: Int) { scanFailed(result, reason) }
-                })
+                        }
+                        override fun onFailure(reason: Int) { scanFailed(result, reason, epoch) }
+                    })
+                }
             }
-            override fun onFailure(reason: Int) { scanFailed(result, reason) }
+            override fun onFailure(reason: Int) { scanFailed(result, reason, epoch) }
         })
     }
-    private fun scanFailed(result: MethodChannel.Result, reason: Int) {
-        emit("scanning", "active" to false)
-        result.error("DISCOVERY", reasonText(reason), null)
+    private fun scanFailed(result: MethodChannel.Result, reason: Int, epoch: Int) {
+        if (epoch == scanEpoch) emit("scanning", "active" to false)
+        result.error(if (epoch == scanEpoch) reasonCode(reason) else "CANCELLED", reasonText(reason), null)
     }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -329,7 +417,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
                     WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
                         val enabled = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1) == WifiP2pManager.WIFI_P2P_STATE_ENABLED
                         emit("wifi", "enabled" to enabled)
-                        if (!enabled) { closeSockets(); emit("disconnected") }
+                        if (!enabled) { stop(); peers.clear(); emit("scanning", "active" to false); emit("disconnected") }
                     }
                     WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION -> {
                         if (intent.getIntExtra(WifiP2pManager.EXTRA_DISCOVERY_STATE, -1) == WifiP2pManager.WIFI_P2P_DISCOVERY_STOPPED)
@@ -353,7 +441,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
                         }
                     }
                 }
-            } catch (e: SecurityException) { emit("error", "message" to "Nearby permission was removed. Restart LocalChat.") }
+            } catch (e: SecurityException) { closeSockets(); emit("error", "code" to "PERMISSION_DENIED", "message" to "Nearby permission was removed. Open Android Settings.") }
         }
     }
     private fun openSocket(token: Int, owner: Boolean, address: String?) {
@@ -426,7 +514,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
             if (token == generation.get()) {
                 closeSockets()
                 manager?.removeGroup(channel, null)
-                if (message != null) emit("error", "message" to message)
+                if (message != null) emit("error", "code" to "CONNECTION_LOST", "message" to message)
                 emit("disconnected")
             }
         }
@@ -443,14 +531,15 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         val p2p = manager
         val ch = channel
         if (p2p == null || ch == null) { emit("disconnected"); result.success(null); return }
-        p2p.cancelConnect(ch, null)
-        p2p.removeGroup(ch, object : WifiP2pManager.ActionListener {
+        runCatching { p2p.cancelConnect(ch, null) }
+        try { p2p.removeGroup(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() { emit("disconnected"); result.success(null) }
             override fun onFailure(reason: Int) { emit("disconnected"); result.success(null) }
-        })
+        }) } catch (_: Exception) { emit("disconnected"); result.success(null) }
     }
     private fun stop() {
         active = false
+        ++advertiseEpoch
         ++scanEpoch
         scanEnd?.let { main.removeCallbacks(it) }
         closeSockets()

@@ -5,15 +5,20 @@ These tests require physical hardware and are **not marked as passed** by the au
 For encrypted file export/import, merging and identity transfer, also follow
 the [backup phone checklist](BACKUPS.md).
 For queuing, retry and lifecycle gates, follow the [outbox checklist](OUTBOX.md).
+For settings shortcuts and reconnect, follow the [recovery checklist](CONNECTION_RECOVERY.md).
 
 | Case | Expected behavior |
 |---|---|
 | Fresh install on Android 13+ | Nearby device permission requested, no Location runtime request |
 | Android 7–12 | Location permission requested; Location toggle required for scanning |
 | Permission denied/revoked | Actionable error, no crash or plaintext fallback |
+| Settings recovery | Appropriate settings screen opens; return/unlock rechecks access without auto-connecting |
+| Access revoked in verified chat | Session/verification clears; saved history and drafts remain |
 | Wi-Fi disabled | Instructions to enable Wi-Fi; no mobile data fallback |
 | No router, mobile data off | Both phones discover/connect/chat using Wi-Fi Direct |
 | Discovery | Only LocalChat v1 service advertisements appear |
+| Completed empty scan | Progress ends; empty-result instructions and Scan again remain usable |
+| Device disappears | Failed connect stays in Nearby; Scan again removes the old list before rediscovery |
 | Pairing | Receiver accepts the system Wi-Fi Direct invitation |
 | Security code | All five groups match on both phones |
 | Only one phone confirms | No text transmission; new peers cannot submit, saved chats can queue |
@@ -29,6 +34,7 @@ For queuing, retry and lifecycle gates, follow the [outbox checklist](OUTBOX.md)
 | Imported pending messages | Newly imported queued/sending become unconfirmed; explicit Retry required |
 | Relaunch | Names, identity and encrypted-body history persist; sending leftovers are unconfirmed |
 | Reconnect | Fresh code, mandatory verification, same peer's saved history |
+| Reconnect shortcut | Last listed address only; fresh handshake and both-phone confirmation before queued delivery |
 | Simultaneous sending | Correct order per sender, no nonce/counter race |
 | Rename | Connection closes; tap Go nearby again to advertise new name |
 | Delete history | Messages/conversations disappear locally |

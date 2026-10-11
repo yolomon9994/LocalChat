@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
 import 'outgoing_message_actions.dart';
+import 'connection_help.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -276,6 +277,25 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             ],
           ),
           actions: [
+            if (c.queuedCount > 0)
+              IconButton(
+                tooltip: 'Why messages are queued',
+                icon: const Icon(Icons.schedule_send),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    scrollable: true,
+                    title: Text('${c.queuedCount} queued'),
+                    content: Text(c.queueWaitingReason),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Got it'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (_showTarget && !verifying)
               IconButton(
                 tooltip: 'Jump to latest',
@@ -298,15 +318,17 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   maxHeight: MediaQuery.sizeOf(context).height * .2,
                 ),
                 child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      c.error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
+                  child: c.hasConnectionHelp
+                      ? ConnectionHelp(controller: c)
+                      : Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            c.error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
                 ),
               ),
             if (_showTarget && !verifying && !c.messages.any(_isTarget))

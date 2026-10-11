@@ -3,7 +3,20 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Offline outbox and message retry
+## Current milestone: Connection troubleshooting and easier reconnection
+
+- [x] Typed guidance for Wi-Fi, permission, Location, busy, stale peer and service failures.
+- [x] Android Wi-Fi/app-permission/Location settings shortcuts, with safe fallback.
+- [x] Access checks on request and foreground/unlock; revoked access closes verification.
+- [x] Scan progress versus completed empty results; reject overlapping recovery actions.
+- [x] Manual Reconnect to a device still listed; always require fresh two-phone verification.
+- [x] Explain queued waiting state; preserve drafts/history and identity-targeted delivery.
+- [x] Failed connect stays in Nearby; connection/verification timeout is retryable.
+- [x] All 132 tests pass, clean analysis and fresh Android/browser builds;
+      see [recovery checklist](CONNECTION_RECOVERY.md).
+- [ ] Physical phone testing and user's commit.
+
+## Offline outbox and message retry: implemented and committed
 
 - [x] Queue text in saved chats while disconnected; encrypted Android persistence.
 - [x] Clear matching drafts atomically with local acceptance; preserve newer edits.
@@ -15,7 +28,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Imported pending messages become unconfirmed and never send automatically.
 - [x] All 118 tests pass, final targeted checks pass, clean analysis and fresh
       Android/browser builds; see [outbox checklist](OUTBOX.md).
-- [ ] Physical phone testing and user's commit.
+- [x] User commits outbox and retry (`605962e`).
+- [ ] Physical phone testing.
 
 ## Encrypted backups and phone migration: implemented and committed
 
@@ -147,7 +161,8 @@ Work on one feature at a time; validate it before the user commits and starts th
       sending, delivered and unconfirmed messages; retry by original ID.
 - [ ] Automatic reconnection with troubleshooting and fresh verification.
 - [x] Pin, archive and delete individual conversations.
-- [ ] Connection troubleshooting: Wi-Fi, permissions, discovery, retry actions.
+- [x] Connection troubleshooting: Wi-Fi, permissions, discovery, retry actions
+      and manual Reconnect to a device still listed.
 - [ ] Local notifications with optional hidden message previews.
 - [ ] Optional background connection mode with battery/connection controls.
 - [ ] Reply to messages, copy actions, and starred messages.
@@ -169,8 +184,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 3. Chats list previews/unread state, local search and drafts (committed),
    conversation management (committed).
 4. Encrypted backups and phone migration (committed).
-5. Offline outbox and retry (current), then connection troubleshooting/reconnection
-   and notifications.
+5. Offline outbox and retry (committed), connection troubleshooting/manual
+   reconnection (current), then notifications/background connection support.
 6. Group chat and attachments.
 
 The user chose app lock first so it can be tested before committing. This order

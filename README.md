@@ -14,6 +14,8 @@ Android-first Flutter app for nearby, encrypted, one-to-one text conversations o
 - Encrypted offline outbox for saved chats; send after both phones verify again,
   with queued counts, cancellation and explicit Retry using the original message ID.
 - Separate Chats and Nearby tabs with bottom navigation; Settings in the toolbar.
+- Nearby access checks, actionable connection guidance and Android settings
+  shortcuts; manual Reconnect to a device still listed, with fresh verification.
 - Latest-message previews, activity timestamps, persistent unread badges and
   recent-message ordering in Chats. Opening a visible conversation clears its unread count.
 - Offline name/message search from the Chats toolbar; tap a message result to
@@ -40,6 +42,7 @@ See [saved draft testing](docs/DRAFTS.md) for persistence and send behavior.
 See [conversation management testing](docs/CONVERSATION_MANAGEMENT.md) for chat options.
 See [encrypted backups and phone migration](docs/BACKUPS.md) for transfer steps.
 See [offline outbox and retry](docs/OUTBOX.md) for queued delivery and phone checks.
+See [connection recovery](docs/CONNECTION_RECOVERY.md) for settings, scans and reconnect.
 
 Bluetooth, media, group chat, relaying, iOS, background delivery, automatic reconnection and notifications are future work. Version 0.1 only operates while both apps remain open. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 

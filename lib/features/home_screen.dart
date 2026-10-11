@@ -10,6 +10,7 @@ import 'chats_tab.dart';
 import 'nearby_tab.dart';
 import 'settings_screen.dart';
 import 'archived_chats_screen.dart';
+import 'connection_help.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -53,8 +54,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _connect(Peer peer) async {
-    await widget.controller.connect(peer);
-    if (mounted) _chat();
+    final connecting = await widget.controller.connect(peer);
+    if (mounted && connecting) _chat();
+  }
+
+  Future<void> _reconnect() async {
+    final connecting = await widget.controller.reconnect();
+    if (mounted && connecting) _chat();
   }
 
   @override
@@ -105,23 +111,35 @@ class _HomeScreenState extends State<HomeScreen> {
                           maxHeight: constraints.maxHeight * .4,
                         ),
                         child: SingleChildScrollView(
-                          child: Card(
-                            margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                            color: Theme.of(context).colorScheme.errorContainer,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  Expanded(child: Text(c.error!)),
-                                  IconButton(
-                                    onPressed: c.dismissError,
-                                    icon: const Icon(Icons.close),
-                                    tooltip: 'Dismiss',
+                          child: c.hasConnectionHelp
+                              ? ConnectionHelp(
+                                  controller: c,
+                                  onReconnect: _reconnect,
+                                )
+                              : Card(
+                                  margin: const EdgeInsets.fromLTRB(
+                                    20,
+                                    8,
+                                    20,
+                                    0,
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.errorContainer,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Row(
+                                      children: [
+                                        Expanded(child: Text(c.error!)),
+                                        IconButton(
+                                          onPressed: c.dismissError,
+                                          icon: const Icon(Icons.close),
+                                          tooltip: 'Dismiss',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                         ),
                       ),
                     Expanded(
@@ -151,7 +169,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                       ),
                                 ),
-                                NearbyTab(controller: c, onConnect: _connect),
+                                NearbyTab(
+                                  controller: c,
+                                  onConnect: _connect,
+                                  onReconnect: _reconnect,
+                                ),
                               ],
                             ),
                     ),

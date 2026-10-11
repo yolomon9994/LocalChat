@@ -113,6 +113,14 @@ Wi-Fi Direct communication uses Android's `INTERNET` permission because TCP sock
 
 Foreground UI operation only; OS suspension can interrupt transport. No assurance of background delivery. This release has no heartbeat or automatic reconnect; idle socket failure may become visible only when sending or when Android reports group loss.
 
+Manual recovery checks radio/permissions on foreground/unlock without starting
+discovery or connecting. Revoked access closes existing verification. The last
+device hint is an in-memory Wi-Fi address/name from the current nearby list,
+not a trusted identity. Reconnect always performs a new signed handshake and
+both-phone code comparison; queued delivery remains scoped to the learned
+cryptographic identity. Settings shortcuts use fixed system intents and add no
+permissions. See [connection recovery](CONNECTION_RECOVERY.md).
+
 ## Before a production release
 
 Obtain an independent protocol/code review; test on several Android vendors and API levels; fuzz framing/handshake parsing; consider a reviewed protocol library, key pinning and identity-change UX, robust bounded storage and background lifecycle support. Use a private release signing key rather than the provided debug build configuration.
