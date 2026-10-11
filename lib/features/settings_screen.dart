@@ -6,6 +6,7 @@ import '../services/appearance_controller.dart';
 import 'appearance_settings.dart';
 import 'backup_screen.dart';
 import 'notification_settings.dart';
+import 'background_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -64,6 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (widget.appearance != null)
           AppearanceSettings(appearance: widget.appearance!),
         NotificationSettings(notifications: widget.controller.notifications),
+        BackgroundSettings(controller: widget.controller),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.backup_outlined),
@@ -118,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: Text(
             widget.controller.isDemo
                 ? 'Interface preview only. Devices, replies and delivery status are simulated. No real Wi-Fi Direct communication takes place.'
-                : 'Text only. Keep the app open on both phones. Bluetooth fallback, media and background messaging are planned. This prototype has not had an independent security audit.',
+                : 'Text only. Optional background connection protection keeps a verified link while away from the app; Android battery restrictions still apply. Bluetooth fallback and media are planned. This prototype has not had an independent security audit.',
           ),
         ),
         const SizedBox(height: 24),

@@ -7,6 +7,7 @@ the [backup phone checklist](BACKUPS.md).
 For queuing, retry and lifecycle gates, follow the [outbox checklist](OUTBOX.md).
 For settings shortcuts and reconnect, follow the [recovery checklist](CONNECTION_RECOVERY.md).
 For message alerts, permission and lock-aware taps, follow the [notification checklist](NOTIFICATIONS.md).
+For screen-off receipt, ongoing Stop and battery limits, follow the [background checklist](BACKGROUND_CONNECTION.md).
 
 | Case | Expected behavior |
 |---|---|

@@ -33,13 +33,15 @@ The permission prompt or system settings can lock LocalChat; unlock to continue.
   its history. Back returns to the home screen. A deleted chat cannot be recreated
   by its old notification, and deletion cancels its alert.
 - Disabling notifications removes current alerts. Clearing all history removes
-  all alerts and pending tap targets. Preferences stay local to this phone and
+  all message alerts and pending chat tap targets. The ongoing connection notification
+  is controlled separately in Background connection. Preferences stay local to this phone and
   are excluded from chat export/import.
 
 These are local Android notifications for messages the running app actually
-receives. There is no cloud push, foreground service, background delivery promise
-or automatic reconnect. Keep both apps running with a verified connection for
-reliable tests; vendor battery restrictions/process termination can stop receipt.
+receives. Optional [background connection protection](BACKGROUND_CONNECTION.md)
+uses a foreground service for the current running verified session. There is no
+cloud push, guaranteed background delivery or automatic reconnect. Keep both apps
+running with a verified connection; vendor battery restrictions/process termination can stop receipt.
 The browser demo offers temporary settings only and requests no browser permission
 or OS notification. It does not validate Android notification behavior.
 

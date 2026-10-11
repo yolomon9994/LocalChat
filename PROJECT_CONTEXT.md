@@ -8,8 +8,10 @@ docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes
 LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first and text only.
-Images and videos are planned later. Bluetooth, group chat, relaying, iOS,
-reliable background delivery are also future work. Local notifications are implemented.
+Images and videos are planned later. Bluetooth, group chat, relaying, iOS and
+automatic reconnect are also future work. Local notifications and optional
+background protection of the current running verified session are implemented;
+Doze/vendor restrictions still apply and hardware reliability is unvalidated.
 
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
@@ -18,9 +20,42 @@ Chats list improvements were committed as `c233159`, and local search as
 `a2c7aa3`; drafts were committed as `9e90550`, and conversation management as
 `8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
 Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
-The current milestone is local message notifications with privacy controls.
+Notifications were committed as `9bb6c60`. The current milestone is optional
+background connection protection with battery/connection controls.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Background connection milestone
+
+- `BackgroundConnection` / `BackgroundPlatform` implement an injectable status,
+  local preference, activation, cancellation and battery/channel settings bridge.
+  Root initializes it independently of locked chat storage. Settings offers the
+  Keep connection active switch and Retry after startup failure, with demo labels.
+- Android `ConnectionService` is unexported, uses `remoteMessaging` and the normal
+  foreground-service/type/wake-lock permissions. It protects the existing live
+  Activity/Flutter engine without moving crypto or creating a background engine.
+  Foreground unlock plus both confirmations gate activation; the native socket
+  generation and service epoch reject stale startup/cancel/Stop operations.
+- MainActivity retains transport ownership. Home/another app/screen lock retain
+  the current session. Activity finish/task removal/process death ends it; no
+  sticky restart, boot receiver, automatic reconnect or session-key restoration.
+- The separate Connection channel has fixed generic ongoing/connection-loss text
+  and an immutable Stop intent scoped to the service epoch. Stop closes sockets,
+  advertising and service, disables the preference, preserves history/drafts/outbox
+  and works while locked. Turning the Settings switch off only removes protection.
+  Message alert cancellation now targets only peer message notifications.
+- Frame events carry native generation metadata. The service owns short received-
+  frame CPU wake locks with a 15-second timeout; Dart releases after protocol work,
+  and native disconnect/destruction also cleans up. No idle CPU/Wi-Fi lock. Local
+  access/service checks stop invalid protection; no new wire heartbeat/payload.
+- Battery optimization status/shortcuts are advisory and user-controlled, without
+  an automatic-exemption permission. Doze/vendor behavior still needs phone checks.
+  Receiving/persistence/ACKs and unread/preview privacy work while protected;
+  queued sending remains foreground/unlock gated. Backups exclude the preference.
+- All 162 tests pass (147 existing + 15 new lifecycle/channel/widget checks).
+  Analysis is clean; Android and browser builds pass. Final results and hardware
+  checklist are in `docs/VALIDATION.md` and `docs/BACKGROUND_CONNECTION.md`.
+  This milestone remains uncommitted for the user; physical checks are pending.
 
 ## Local notification milestone
 
@@ -50,8 +85,8 @@ time; the user will stage, commit and push it themselves after testing.
   generic notice. Browser demo settings are temporary with no OS notifications.
 - All 147 tests pass (132 existing + 15 notification checks); final results and
   hardware checklist are in `docs/VALIDATION.md` and `docs/NOTIFICATIONS.md`.
-  Changes remain uncommitted for the user; physical phone checks are pending.
-  Reliable background receipt/service/battery controls remain a later milestone.
+  User committed this as `9bb6c60`; physical phone checks are pending.
+  Background connection protection was added in the next milestone above.
 
 ## Connection recovery milestone
 
@@ -361,7 +396,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the notification milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the background milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

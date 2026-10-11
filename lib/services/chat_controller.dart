@@ -11,6 +11,7 @@ import 'transport.dart';
 import 'draft_controller.dart';
 import 'nearby_support.dart';
 import 'chat_notifications.dart';
+import 'background_connection.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -21,6 +22,7 @@ class ChatController extends ChangeNotifier {
     this.connectionTimeout = const Duration(seconds: 90),
     NearbyTools? nearbyTools,
     ChatNotifications? notifications,
+    BackgroundConnection? background,
   }) : nearbyTools =
            nearbyTools ??
            (transport is WifiDirectTransport
@@ -33,8 +35,18 @@ class ChatController extends ChangeNotifier {
                  ? AndroidNotificationPlatform()
                  : MemoryNotificationPlatform(),
              isDemo: isDemo,
+           ),
+       background =
+           background ??
+           BackgroundConnection(
+             transport is WifiDirectTransport
+                 ? const AndroidBackgroundPlatform()
+                 : MemoryBackgroundPlatform(),
+             isDemo: isDemo,
            );
   final ChatNotifications notifications;
+  final BackgroundConnection background;
+  int? _transportGeneration;
   final bool isDemo;
   final Duration ackTimeout;
   final Duration connectionTimeout;
@@ -159,6 +171,7 @@ class ChatController extends ChangeNotifier {
     accessRevision++;
     _readVisible();
     if (accessible) {
+      _requestBackground();
       unawaited(refreshNearbyAccess());
       _requestDrain();
     }
@@ -237,6 +250,8 @@ class ChatController extends ChangeNotifier {
     if (foreground) notifyListeners();
     if (foreground) {
       unawaited(notifications.refreshPermission());
+      unawaited(background.refresh());
+      _requestBackground();
       unawaited(refreshNearbyAccess());
       _requestDrain();
     }
@@ -495,6 +510,7 @@ class ChatController extends ChangeNotifier {
         }
         if (hasConnectionHelp) error = null;
         connectionIssue = null;
+        _transportGeneration = event['generation'] as int?;
         _session = await SecureSession.create(store.identity, store.name);
         localVerified = false;
         remoteVerified = false;
@@ -507,9 +523,23 @@ class ChatController extends ChangeNotifier {
         } catch (_) {
           await _disconnect();
           _showConnectionIssue(ConnectionIssue.security);
+        } finally {
+          unawaited(background.frameProcessed(event['generation'] as int?));
+        }
+      case 'backgroundStatus':
+        background.nativeStatus(event);
+      case 'backgroundStopped':
+        await transport.stop();
+        started = false;
+        scanning = false;
+        peers = [];
+        await _reset();
+        if (event['reason'] == 'system') {
+          _showConnectionIssue(ConnectionIssue.lost);
         }
       case 'disconnected':
         final unexpected = _session != null || state == 'Connecting';
+        background.connectionEnded(unexpected: unexpected);
         await _reset();
         if (unexpected && connectionIssue == null) {
           _showConnectionIssue(ConnectionIssue.lost);
@@ -654,6 +684,7 @@ class ChatController extends ChangeNotifier {
       await _refresh();
       _pausedOutboxes.remove(connectedPeer!);
       _requestDrain();
+      _requestBackground();
     } else {
       state = localVerified
           ? 'Waiting for peer verification'
@@ -663,6 +694,32 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _sendPayload(Map<String, dynamic> payload) async {
     await transport.send(jsonEncode(await _session!.encrypt(payload)));
+  }
+
+  Future<void> setBackgroundEnabled(bool enabled) async {
+    if (!_appAccessible || !_appForeground) return;
+    await background.setEnabled(enabled);
+    _requestBackground();
+  }
+
+  Future<void> retryBackground() async {
+    await background.refresh();
+    await _protectBackground();
+  }
+
+  void _requestBackground() => unawaited(_protectBackground());
+  Future<void> _protectBackground() {
+    final session = _session;
+    return background.protect(
+      _transportGeneration,
+      canStart: () =>
+          !_disposed &&
+          ready &&
+          identical(_session, session) &&
+          _appAccessible &&
+          _appForeground,
+      sameConnection: () => !_disposed && ready && identical(_session, session),
+    );
   }
 
   /// True means accepted into local encrypted history, not delivered. The draft
@@ -1095,6 +1152,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> _reset() async {
+    background.connectionEnded();
+    _transportGeneration = null;
     _timeout?.cancel();
     _timeout = null;
     final peer = connectedPeer;
@@ -1147,6 +1206,7 @@ class ChatController extends ChangeNotifier {
     _disposed = true;
     drafts.dispose();
     notifications.dispose();
+    background.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {
       timer.cancel();

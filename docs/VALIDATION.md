@@ -1,5 +1,44 @@
 # Validation for v0.1.0
 
+## Optional background connection protection — 2026-10-11
+
+Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
+
+- Targeted background tests: all **15 passed** (12 service/controller/channel,
+  three widget checks).
+- `flutter test`: all **162 passed** (147 existing + 15 background checks).
+- `flutter analyze`: no issues.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build; same optional
+  Cupertino font warning as previous builds (the UI uses Material icons).
+- `git -c core.safecrlf=false diff --check`: clean.
+
+Checks cover opt-in defaults/stored preference without automatic activation,
+denied notification access, generation/revision startup cancellation, an already
+authorized start finishing after background/lock, Stop invalidating a pending
+start, recoverable startup failure, restart with no restored session, both fresh
+confirmations plus foreground unlock, locked background persistence/ACK/unread
+and generic alerts, foreground-only queued draining with preserved drafts, native
+Stop preserving records and disabling mode, loss guidance and the Android channel
+generation/settings contract independently of the Messages channel. Linked
+transports exchange real encrypted frames; native providers are test doubles.
+
+Widget checks cover native-sized 320 × 568 Settings at 1.8× text, reachable
+battery/channel shortcuts after denial and status refresh, and app lock removing
+settings while protection remains active. Initial UI fixtures tapped before lazy
+scroll layout settled; the corrected fixtures explicitly settle/ensure visibility.
+The native-sized fixture supplies memory lock/appearance providers and no browser
+banner, matching the Android layout; it does not validate hardware APIs.
+
+Native compilation checks the service/type manifest and Kotlin bridge. There is
+no new package, database schema, backup format or wire payload. Message-alert
+cancellation is scoped so it cannot remove the ongoing service notification.
+Physical foreground-service promotion, ongoing Stop, wake locks, permission
+revocation, screen-off/Doze delivery, battery behavior and vendor compatibility
+remain pending. Follow [BACKGROUND_CONNECTION.md](BACKGROUND_CONNECTION.md).
+Changes are intentionally uncommitted; the user handles Git.
+
 ## Local message notifications and privacy — 2026-10-11
 
 Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
@@ -30,7 +69,7 @@ no physical notification, vendor, channel or OS-history test is claimed.
 
 No new dependencies, database schema or protocol changes. Android adds only
 POST_NOTIFICATIONS and a native notification bridge/icon. Hardware checks are in
-[NOTIFICATIONS.md](NOTIFICATIONS.md). Changes remain uncommitted for the user.
+[NOTIFICATIONS.md](NOTIFICATIONS.md). User committed this as `9bb6c60`.
 Automatic Flutter deep-link handling is disabled in the Activity metadata so
 peer-specific notification intents use the lock-aware route instead of being
 interpreted as named Flutter routes. See [Flutter's handler configuration](https://docs.flutter.dev/cookbook/navigation/set-up-app-links).

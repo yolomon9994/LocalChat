@@ -3,7 +3,27 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Local message notifications and privacy
+## Current milestone: Optional background connection protection
+
+- [x] Opt-in Keep connection active switch, persisted locally on Android.
+- [x] Start only from foreground unlock after both fresh confirmations; protect
+      the current running session without automatic discovery/reconnection.
+- [x] Separate generic Connection notification with Stop, permission/channel
+      guidance, status, Retry and user-controlled battery-settings shortcut.
+- [x] Stop disconnects/ends advertising while locked; preserves history/drafts/
+      outbox and disables the preference. Epochs reject obsolete Stop actions.
+- [x] Background receiving/persistence/ACKs retain privacy and unread gates;
+      new queued sends still wait for foreground unlock.
+- [x] Bound received-frame wake locks; cleanup on completion/disconnect/service
+      destruction; no idle CPU lock, sticky/boot restart or restored session keys.
+- [x] Detect reported connection loss/invalid local access; show recovery guidance
+      without a wire heartbeat or changing encrypted payloads.
+- [x] All 162 tests pass (147 existing + 15 new); final analysis/build results are in
+      [VALIDATION.md](VALIDATION.md).
+- [ ] Physical phone/Doze/vendor testing and user's commit;
+      see [background checklist](BACKGROUND_CONNECTION.md).
+
+## Local message notifications and privacy: implemented and committed
 
 - [x] Opt-in Settings controls; previews disabled by default.
 - [x] Android permission/channel status, request and notification-settings shortcut.
@@ -14,7 +34,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Per-peer alerts; reading/deleting cancels them, imports never create alerts.
 - [x] Temporary browser settings without browser OS alerts; no background service.
 - [x] All 147 tests pass; final analysis/build results are in [VALIDATION.md](VALIDATION.md).
-- [ ] Physical phone testing and user's commit; see [notification checklist](NOTIFICATIONS.md).
+- [x] User commits notifications (`9bb6c60`).
+- [ ] Physical phone testing; see [notification checklist](NOTIFICATIONS.md).
 
 ## Connection troubleshooting and easier reconnection: implemented and committed
 
@@ -178,7 +199,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Connection troubleshooting: Wi-Fi, permissions, discovery, retry actions
       and manual Reconnect to a device still listed.
 - [x] Local notifications with hidden message previews by default and lock-aware taps.
-- [ ] Optional background connection mode with battery/connection controls.
+- [x] Optional background connection mode with battery/connection controls;
+      protects the current running verified session, subject to Doze/vendor limits.
 - [ ] Reply to messages, copy actions, and starred messages.
 - [ ] QR scanning for session verification (bind to the verified session).
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
@@ -199,7 +221,7 @@ Work on one feature at a time; validate it before the user commits and starts th
    conversation management (committed).
 4. Encrypted backups and phone migration (committed).
 5. Offline outbox and retry (committed), connection troubleshooting/manual
-   reconnection (committed), notifications (current), then background connection support.
+   reconnection and notifications (committed), background connection support (current).
 6. Group chat and attachments.
 
 The user chose app lock first so it can be tested before committing. This order

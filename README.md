@@ -33,6 +33,8 @@ Android-first Flutter app for nearby, encrypted, one-to-one text conversations o
   choose them in Settings → Appearance. Android remembers your choices.
 - Opt-in local message notifications with hidden previews by default, lock-aware
   chat opening and suppression while reading the conversation. Configure in Settings.
+- Optional protection of the current verified connection while backgrounded,
+  with an ongoing Stop notification, battery guidance and foreground-only queued sending.
 
 See [app lock setup and testing](docs/APP_LOCK.md) and the
 [feature backlog](docs/FEATURE_BACKLOG.md) for planned additions.
@@ -46,8 +48,9 @@ See [encrypted backups and phone migration](docs/BACKUPS.md) for transfer steps.
 See [offline outbox and retry](docs/OUTBOX.md) for queued delivery and phone checks.
 See [connection recovery](docs/CONNECTION_RECOVERY.md) for settings, scans and reconnect.
 See [notification privacy and testing](docs/NOTIFICATIONS.md) for permissions and taps.
+See [background connection testing](docs/BACKGROUND_CONNECTION.md) for controls and battery limits.
 
-Bluetooth, media, group chat, relaying, iOS, reliable background delivery and automatic reconnection are future work. Keep both apps running for reliable messaging; local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
+Bluetooth, media, group chat, relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running session; app closure/process termination ends it, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 

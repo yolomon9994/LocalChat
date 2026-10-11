@@ -60,7 +60,9 @@ tap intents and redaction bookkeeping retain peer IDs without names or bodies.
 Cold/warm taps wait for app unlock and saved-history validation, and never bypass
 fresh session verification. New persisted incoming rows notify; retained-history
 duplicate retries and backup imports do not. Notification failures are isolated
-from the encrypted protocol. No background service or cloud push is added.
+from the encrypted protocol. Optional background protection uses a separate,
+generic Connection notification; message-alert cancellation cannot remove it.
+There is no cloud push.
 See [notification privacy and testing](NOTIFICATIONS.md).
 
 An independent random 32-byte key encrypts message bodies using XChaCha20-Poly1305, stored as base64(nonce || tag || ciphertext). AAD binds the peer ID, message ID and direction. Message IDs are scoped by peer and direction so a received ID cannot replace an outgoing record. SQLite stores peer IDs, names, timestamps, directions, delivery state and local read state without encryption. Chats list previews decrypt the existing message body in memory; no additional plaintext preview is stored. Read state is local and is not sent as a network read receipt. The storage key and Ed25519 seed use `flutter_secure_storage` backed by Android's platform security facilities. These are software-accessible secrets, not claims of non-exportable hardware X25519 or Ed25519 keys.
@@ -126,7 +128,25 @@ testing. See [app lock testing](APP_LOCK.md).
 
 Wi-Fi Direct communication uses Android's `INTERNET` permission because TCP sockets require it. There is no application API endpoint, telemetry SDK, account service or backend. The group owner listens on port 45873. The listener is not an identity check: the signed handshake plus mandatory code comparison is the application-layer gate. A nearby attacker could occupy the single connection and cause denial of service.
 
-Foreground UI operation only; OS suspension can interrupt transport. No assurance of background delivery. This release has no heartbeat or automatic reconnect; idle socket failure may become visible only when sending or when Android reports group loss.
+Optional `remoteMessaging` foreground-service protection retains the current
+Activity/Flutter session while backgrounded. It starts only from foreground
+unlock after both phones verify, bound to native socket generation/service epoch.
+Native promotion failure/cancellation is guarded; stale Stop actions cannot close
+a later protection session. Stop is an explicit local operation allowed while
+locked: it closes transport/advertising, disables the preference and preserves
+history/drafts/outbox. Closing the Activity/task/process ends protection; there is
+no sticky/boot restart, alternate engine or restoration of session keys.
+
+Notifications/status retain only fixed generic text and control tokens, with no
+peer identity/name/body. An unexported service owns bounded frame-processing wake
+locks (15-second timeout, completion/disconnect/destruction cleanup), never an
+idle CPU/Wi-Fi lock. Foreground unlock still gates new queued sending; existing
+receiving/persistence/ACK rules remain. Doze/vendor settings can interrupt receipt;
+battery exemption is user-controlled and not automatically requested. Local
+permission/notification checks stop an invalid service; this is not a peer
+heartbeat. OS suspension can interrupt transport and background delivery is not
+guaranteed. Idle socket failure may become visible only when sending or when
+Android reports group/TCP loss. No automatic reconnect. See [background limits](BACKGROUND_CONNECTION.md).
 
 Manual recovery checks radio/permissions on foreground/unlock without starting
 discovery or connecting. Revoked access closes existing verification. The last

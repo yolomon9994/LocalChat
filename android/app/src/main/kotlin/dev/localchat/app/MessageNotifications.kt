@@ -37,7 +37,7 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
             })
         }
         // Remove previews left by a previous process before reading any settings.
-        if (!prefs.getBoolean("enabled", false)) manager.cancelAll()
+        if (!prefs.getBoolean("enabled", false)) cancelMessages()
         else for (notification in manager.activeNotifications) {
             val peer = notification.tag
             if (peer != null && PEER.matches(peer)) post(peer, null, null, silent = true)
@@ -54,7 +54,7 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
                         val enabled = call.argument<Boolean>("enabled") == true
                         val previews = call.argument<Boolean>("previews") == true
                         check(prefs.edit().putBoolean("enabled", enabled).putBoolean("previews", previews).commit())
-                        if (!enabled) manager.cancelAll()
+                        if (!enabled) cancelMessages()
                         else if (!previews) redact()
                         result.success(null)
                     }
@@ -82,7 +82,7 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
                     }
                     "cancel" -> {
                         val peer = call.argument<String>("peer")
-                        if (peer == null) { manager.cancelAll(); previewPeers.clear(); pendingPeer = null }
+                        if (peer == null) { cancelMessages(); previewPeers.clear(); pendingPeer = null }
                         else { manager.cancel(peer, 1); previewPeers.remove(peer) }
                         result.success(null)
                     }
@@ -143,6 +143,13 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
             if (manager.activeNotifications.any { it.tag == peer && it.id == 1 }) post(peer, null, null, silent = true)
         }
         previewPeers.clear()
+    }
+
+    private fun cancelMessages() {
+        for (notification in manager.activeNotifications) {
+            val peer = notification.tag
+            if (peer != null && PEER.matches(peer) && notification.id == 1) manager.cancel(peer, 1)
+        }
     }
 
     fun foreground(value: Boolean) {

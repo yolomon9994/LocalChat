@@ -50,7 +50,7 @@ class NotificationSettings extends StatelessWidget {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           const Text(
-            'Notifications require an active connection. Reliable background messaging is planned.',
+            'Notifications require an active connection. Use Background connection below to protect a verified link while away from the app.',
           ),
           if (!n.initialized && n.error != null)
             TextButton(

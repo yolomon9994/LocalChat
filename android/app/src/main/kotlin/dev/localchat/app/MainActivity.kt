@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private var sink: EventChannel.EventSink? = null
     private var notifications: MessageNotifications? = null
+    private var background: BackgroundConnection? = null
     private var manager: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
     private val main = Handler(Looper.getMainLooper())
@@ -81,6 +82,16 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         // Protect the initial window until Flutter has read persisted settings.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         notifications = MessageNotifications(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/notifications"))
+        background = BackgroundConnection(this,
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/background"),
+            eligible = { token -> token == generation.get() && socket != null && output != null &&
+                checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED },
+            stopConnection = { reason ->
+                stop()
+                emit("backgroundStopped", "reason" to reason)
+                emit("disconnected")
+            },
+            changed = { values -> sink?.success(values + ("type" to "backgroundStatus")) })
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/backup").setMethodCallHandler { call, result ->
             if (call.method != "pick" && call.method != "save") {
                 result.notImplemented()
@@ -487,7 +498,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
                 output = DataOutputStream(BufferedOutputStream(connected.getOutputStream()))
             }
             main.post {
-                if (token == generation.get()) { socketStarting = false; sink?.success(mapOf("type" to "connected")) }
+                if (token == generation.get()) { socketStarting = false; sink?.success(mapOf("type" to "connected", "generation" to token)) }
             }
             val input = DataInputStream(BufferedInputStream(connected.getInputStream()))
             while (token == generation.get()) {
@@ -505,8 +516,9 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
                     StandardCharsets.UTF_8.newDecoder()
                         .onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
                 } finally { deadline.cancel(false) }
+                if (token == generation.get()) ConnectionService.holdFrame(token)
                 main.post {
-                    if (token == generation.get()) sink?.success(mapOf("type" to "frame", "frame" to frame))
+                    if (token == generation.get()) sink?.success(mapOf("type" to "frame", "frame" to frame, "generation" to token))
                 }
             }
             failConnection(token, null)
@@ -525,7 +537,8 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
             }
         }
     }
-    private fun closeSockets() {
+    private fun closeSockets(backgroundReason: String = "lost") {
+        background?.connectionClosed(backgroundReason)
         generation.incrementAndGet()
         // Close without the writer lock: a blocked write must be interruptible.
         socket?.runCatching { close() }
@@ -533,7 +546,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         socket = null; server = null; output = null; socketStarting = false
     }
     private fun disconnect(result: MethodChannel.Result) {
-        closeSockets()
+        closeSockets("disconnected")
         val p2p = manager
         val ch = channel
         if (p2p == null || ch == null) { emit("disconnected"); result.success(null); return }
@@ -548,7 +561,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         ++advertiseEpoch
         ++scanEpoch
         scanEnd?.let { main.removeCallbacks(it) }
-        closeSockets()
+        closeSockets("stopped")
         if (manager != null && channel != null) {
             runCatching {
                 manager?.cancelConnect(channel, null)
@@ -562,6 +575,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         if (registered) { unregisterReceiver(receiver); registered = false }
     }
     override fun onDestroy() {
+        background?.dispose()
         notifications?.dispose()
         backupResult?.error("CANCELLED", "Activity closed. Choose the file again.", null)
         backupResult = null
@@ -583,9 +597,11 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     override fun onResume() {
         super.onResume()
         notifications?.foreground(true)
+        background?.foreground = true
     }
 
     override fun onPause() {
+        background?.foreground = false
         notifications?.foreground(false)
         super.onPause()
     }

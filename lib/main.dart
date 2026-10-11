@@ -66,6 +66,7 @@ class _LocalChatAppState extends State<LocalChatApp>
     controller.notifications.addListener(_notificationChanged);
     _appearance.addListener(_notificationChanged);
     unawaited(controller.notifications.initialize());
+    unawaited(controller.background.initialize());
     unawaited(_lock.initialize());
     unawaited(_appearance.initialize());
   }
