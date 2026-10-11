@@ -118,6 +118,7 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             trailing: const Icon(Icons.chevron_right),
+            subtitle: peer.archived ? const Text('Archived chat') : null,
             onTap: _opening ? null : () => _open(peer),
           ),
       ],
@@ -140,6 +141,7 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (hit.conversation.archived) const Text('Archived chat'),
                 Text(
                   '${hit.message.outgoing ? 'You: ' : ''}${searchSnippet(hit.message.text, search.query)}',
                   maxLines: 3,

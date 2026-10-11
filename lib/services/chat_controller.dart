@@ -388,6 +388,9 @@ class ChatController extends ChangeNotifier {
       error = null;
       final history = await store.messages(peer.id);
       final summaries = await store.conversations();
+      if (!summaries.any((p) => p.id == peer.id)) {
+        throw StateError('This conversation has been deleted.');
+      }
       selectedPeer = peer.id;
       selectedName = peer.name;
       messages = history;
@@ -434,6 +437,53 @@ class ChatController extends ChangeNotifier {
     selectedName = connectedPeer == null ? '' : _session!.peerName!;
     notifyListeners();
   });
+
+  Future<bool> setPinned(String peer, bool pinned) =>
+      _manageConversation(() => store.setPinned(peer, pinned));
+
+  Future<bool> setArchived(String peer, bool archived) =>
+      _manageConversation(() => store.setArchived(peer, archived));
+
+  Future<bool> _manageConversation(Future<bool> Function() action) async {
+    var success = false;
+    await _run(() async {
+      error = null;
+      try {
+        if (!await action()) throw StateError('Conversation no longer exists');
+        conversations = await store.conversations();
+        historyRevision++;
+        success = true;
+      } catch (_) {
+        error = 'Could not update this chat. Please try again.';
+      }
+      notifyListeners();
+    });
+    return success;
+  }
+
+  Future<bool> deleteConversation(String peer) async {
+    var success = false;
+    await _run(() async {
+      error = null;
+      try {
+        if (connectedPeer == peer) await _disconnect();
+        await drafts.deleteConversation(peer);
+        historyRevision++;
+        if (selectedPeer == peer) {
+          selectedPeer = null;
+          selectedName = '';
+          messages = [];
+        }
+        conversations = await store.conversations();
+        success = true;
+      } catch (_) {
+        error = 'Could not delete this chat. Please try again.';
+      }
+      notifyListeners();
+    });
+    return success;
+  }
+
   Future<void> _reset() async {
     _timeout?.cancel();
     final peer = connectedPeer;

@@ -35,7 +35,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -48,6 +48,7 @@ class LocalStore {
         );
         await _createSummaryIndexes(db);
         await _createDraftTable(db);
+        await _addManagementColumns(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -58,6 +59,7 @@ class LocalStore {
           await _createSummaryIndexes(db);
         }
         if (oldVersion < 3) await _createDraftTable(db);
+        if (oldVersion < 4) await _addManagementColumns(db);
       },
     );
     // A process termination leaves delivery unknown, never silently "delivered".
@@ -76,6 +78,40 @@ class LocalStore {
   static Future<void> _createDraftTable(Database db) => db.execute(
     'CREATE TABLE drafts (peer TEXT PRIMARY KEY, body TEXT NOT NULL)',
   );
+
+  static Future<void> _addManagementColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE peers ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE peers ADD COLUMN archived INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  Future<bool> setPinned(String peer, bool pinned) async =>
+      await _database.update(
+        'peers',
+        {'pinned': pinned ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [peer],
+      ) ==
+      1;
+
+  Future<bool> setArchived(String peer, bool archived) async =>
+      await _database.update(
+        'peers',
+        {'archived': archived ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [peer],
+      ) ==
+      1;
+
+  Future<void> deleteConversation(String peer) =>
+      _database.transaction((txn) async {
+        await txn.delete('messages', where: 'peer = ?', whereArgs: [peer]);
+        await txn.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
+        await txn.delete('peers', where: 'id = ?', whereArgs: [peer]);
+      });
 
   Future<String> draft(String peer) async {
     final rows = await _database.query(
@@ -138,14 +174,14 @@ class LocalStore {
 
   Future<List<Conversation>> conversations() async {
     final rows = await _database.rawQuery('''
-      SELECT p.id AS peer_id, p.name, p.updated,
+      SELECT p.id AS peer_id, p.name, p.updated, p.pinned, p.archived,
              m.id, m.peer, m.body, m.timestamp, m.outgoing, m.status,
              (SELECT COUNT(*) FROM messages u
               WHERE u.peer = p.id AND u.outgoing = 0 AND u.is_read = 0) AS unread_count
       FROM peers p
       LEFT JOIN messages m ON m.rowid =
         (SELECT rowid FROM messages WHERE peer = p.id ORDER BY rowid DESC LIMIT 1)
-      ORDER BY (m.id IS NOT NULL) DESC, p.updated DESC, p.id ASC
+      ORDER BY p.pinned DESC, (m.id IS NOT NULL) DESC, p.updated DESC, p.id ASC
     ''');
     final result = <Conversation>[];
     for (final row in rows) {
@@ -156,6 +192,8 @@ class LocalStore {
           row['updated'] as int,
           latestMessage: row['id'] == null ? null : await _decodeMessage(row),
           unreadCount: row['unread_count'] as int,
+          pinned: row['pinned'] == 1,
+          archived: row['archived'] == 1,
         ),
       );
     }
@@ -276,6 +314,8 @@ class LocalStore {
             p['id'] as String,
             p['name'] as String,
             p['updated'] as int,
+            pinned: p['pinned'] == 1,
+            archived: p['archived'] == 1,
           ),
         )
         .toList();
@@ -285,7 +325,8 @@ class LocalStore {
       if (isCancelled?.call() == true) return const LocalSearchResults();
       // Scan ciphertext in small batches. No plaintext index or duplicate body.
       final rows = await _database.rawQuery('''
-        SELECT m.rowid AS search_rowid, m.*, p.name AS peer_name, p.updated AS peer_updated
+        SELECT m.rowid AS search_rowid, m.*, p.name AS peer_name, p.updated AS peer_updated,
+               p.pinned AS peer_pinned, p.archived AS peer_archived
         FROM messages m JOIN peers p ON p.id = m.peer
         ${before == null ? '' : 'WHERE m.rowid < ?'}
         ORDER BY m.rowid DESC LIMIT 100
@@ -308,6 +349,8 @@ class LocalStore {
               message.peerId,
               row['peer_name'] as String,
               row['peer_updated'] as int,
+              pinned: row['peer_pinned'] == 1,
+              archived: row['peer_archived'] == 1,
             ),
             message,
           ),

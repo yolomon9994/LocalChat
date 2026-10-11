@@ -30,6 +30,30 @@ class ControlledDraftStore extends DemoStore {
 
 void main() {
   test(
+    'Deleting one peer invalidates its pending drafts and preserves other peer edits',
+    () async {
+      final store = ControlledDraftStore();
+      final drafts = DraftController(store);
+      addTearDown(drafts.dispose);
+      await drafts.load('alice');
+      await drafts.load('bob');
+      store.blockedWrite = Completer<void>();
+      drafts.setText('alice', 'Pending Alice');
+      await Future<void>.delayed(Duration.zero);
+      final deletion = drafts.deleteConversation('alice');
+      drafts.setText('alice', 'Must not return');
+      drafts.setText('bob', 'Keep Bob');
+      store.blockedWrite!.complete();
+      await deletion;
+      await drafts.settled;
+      await drafts.load('alice');
+      expect(drafts.textFor('alice'), '');
+      expect(await store.draft('alice'), '');
+      expect(drafts.textFor('bob'), 'Keep Bob');
+      expect(await store.draft('bob'), 'Keep Bob');
+    },
+  );
+  test(
     'Drafts isolate peers, preserve edits across controllers and clear only captured revisions',
     () async {
       final store = DemoStore();

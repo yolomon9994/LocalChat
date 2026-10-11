@@ -48,6 +48,15 @@ deletion. Clearing history deletes drafts too, subject to the same forensic-wipe
 limits as messages. Draft plaintext can remain in process memory while locked;
 the existing UI access-control boundary applies. Browser drafts are memory only.
 
+Pin and archive flags are unencrypted peer metadata. Archiving changes list
+placement rather than privacy or delivery rules: archived text remains stored
+encrypted, searchable after unlock, and readable through the active chat.
+Deleting an individual conversation removes its messages, draft and peer row
+in a transaction; it disconnects that peer's active session first. Its queued
+draft writes are invalidated without dropping other peers' edits. This deletes
+local records, not the other phone's history or forensic copies. Reconnecting
+and exchanging new messages can create a new conversation with that identity.
+
 Android cloud backup and device transfer are excluded to avoid moving a database without its secure-storage keys. Uninstalling loses identity and chat history. Clearing history deletes database records, not a guaranteed forensic wipe of SQLite journals or flash storage. A device lock and OS security are still required.
 
 ## Implementation boundaries

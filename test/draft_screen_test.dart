@@ -84,6 +84,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(320, 568));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final store = ControlledDraftStore();
+      await store.savePeer('alice', 'Alice');
       await store.saveDraft('alice', 'Stored draft');
       final c = ChatController(DemoTransport(), store, isDemo: true);
       addTearDown(c.dispose);

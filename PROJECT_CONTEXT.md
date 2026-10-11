@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-10. The workspace is authoritative; read README.md,
+Updated: 2026-10-11. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -15,8 +15,40 @@ The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
 Navigation was committed as `abe4dc3`, and themes as `b353956`.
 Chats list improvements were committed as `c233159`, and local search as
-`a2c7aa3`; the current milestone is saved message drafts. Work on one milestone at a
+`a2c7aa3`; drafts were committed as `9e90550`. The current milestone is
+conversation management. Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Conversation management milestone
+
+- Chat rows have a menu for Pin/Unpin, Archive/Unarchive and confirmed Delete.
+  Pinned chats precede others; activity order applies within each group. Pinning
+  does not change message timestamps, draft text or unread counts.
+- `LocalStore` schema 4 adds unencrypted `pinned`/`archived` flags on peers,
+  defaulting to false for existing history. Native and demo savePeer/saveMessage
+  preserve flags. Schema 1/2/3 upgrades retain messages, drafts, identity and
+  read state. Browser choices stay in memory and reset on reload.
+- `ChatsTab` filters the primary/archived lists, with separate scroll keys.
+  The main list links to `ArchivedChatsScreen` and shows its chat/unread totals.
+  Archived chats stay archived on incoming messages and remain searchable;
+  name/message results label their archive state. Opening reads normally but
+  does not unarchive. Unarchive preserves its existing pin choice.
+- `ChatController` serializes management actions, reports generic failures and
+  increments historyRevision for search refresh. viewHistory rejects a deleted
+  conversation instead of selecting a stale search/list result.
+- Per-chat deletion disconnects the target if it is the active session, then
+  transactionally deletes its messages, draft and peer metadata. Other peers,
+  identity, settings and the other person's history remain. A failed deletion
+  retains saved data; a prior disconnect may already have happened.
+- `DraftController` now tracks both global and per-peer deletion generations.
+  Targeted deletion clears only that peer's cache and invalidates its queued
+  writes; another peer's drafts keep saving. The selected deleted chat clears.
+- Menu state stays with keyed chat cards when pinning changes order. Archive
+  routes and deletion dialogs use the existing lock-covered navigator. Error
+  banners have a scrollable height limit so large text leaves room for the list.
+- Phone checks are in `docs/CONVERSATION_MANAGEMENT.md`. Changes are uncommitted
+  for the user's testing/commit; validation results are in `docs/VALIDATION.md`.
+  All 82 tests pass, static analysis is clean and Android/browser builds succeed.
 
 ## Saved drafts milestone
 
@@ -47,8 +79,8 @@ time; the user will stage, commit and push it themselves after testing.
   saved text. Plaintext can remain in controller memory under the existing app
   lock model. Browser drafts use `DemoStore` memory and reset with the tab.
 - All 73 tests pass, static analysis is clean and Android/browser builds succeed;
-  results are in `docs/VALIDATION.md`. Phone testing is in `docs/DRAFTS.md`. Changes remain
-  uncommitted for the user.
+  results are in `docs/VALIDATION.md`. Phone testing is in `docs/DRAFTS.md`.
+  The user committed this as `9e90550`.
 
 ## Local search milestone
 
@@ -203,7 +235,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the saved drafts milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before conversation management, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.

@@ -228,6 +228,7 @@ void main() {
       final peer = a.selectedPeer!;
       await a.drafts.load(peer);
       a.drafts.setText(peer, 'Only for this peer');
+      await a.store.savePeer('another', 'Another');
       final opening = a.viewHistory(
         const Conversation('another', 'Another', 0),
       );

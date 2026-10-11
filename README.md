@@ -18,6 +18,8 @@ Android-first Flutter app for nearby, encrypted, one-to-one text conversations o
   open its conversation at the highlighted message.
 - Encrypted drafts for each chat, including offline editing; unfinished text
   restores after navigation and Android app restarts and stays after send failures.
+- Chat options to pin/unpin, archive/unarchive or delete one conversation and
+  its draft. Archived chats have a separate list and remain searchable.
 - Optional six-digit app PIN, biometric unlock on supported Android phones,
   automatic locking on launch/background, and manual Lock now in Settings.
 - Light, dark and follow-system themes with mint, blue, purple and amber palettes;
@@ -30,6 +32,7 @@ See [Chats / Nearby navigation](docs/NAVIGATION.md) and
 See [Chats list testing](docs/CHAT_LIST.md) for previews and unread behavior.
 See [local search testing](docs/SEARCH.md) for search and message navigation.
 See [saved draft testing](docs/DRAFTS.md) for persistence and send behavior.
+See [conversation management testing](docs/CONVERSATION_MANAGEMENT.md) for chat options.
 
 Bluetooth, media, group chat, relaying, iOS, background delivery, retransmission and notifications are future work. Version 0.1 only operates while both apps remain open. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 

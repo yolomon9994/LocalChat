@@ -9,6 +9,7 @@ import 'chat_search_screen.dart';
 import 'chats_tab.dart';
 import 'nearby_tab.dart';
 import 'settings_screen.dart';
+import 'archived_chats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -95,49 +96,67 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: c.loading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  if (c.error != null)
-                    Card(
-                      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(c.error!)),
-                            IconButton(
-                              onPressed: c.dismissError,
-                              icon: const Icon(Icons.close),
-                              tooltip: 'Dismiss',
+            : LayoutBuilder(
+                builder: (context, constraints) => Column(
+                  children: [
+                    if (c.error != null)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: constraints.maxHeight * .4,
+                        ),
+                        child: SingleChildScrollView(
+                          child: Card(
+                            margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                            color: Theme.of(context).colorScheme.errorContainer,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Expanded(child: Text(c.error!)),
+                                  IconButton(
+                                    onPressed: c.dismissError,
+                                    icon: const Icon(Icons.close),
+                                    tooltip: 'Dismiss',
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  Expanded(
-                    child: !c.initialized
-                        ? Center(
-                            child: FilledButton(
-                              onPressed: c.initialize,
-                              child: const Text('Retry setup'),
-                            ),
-                          )
-                        : IndexedStack(
-                            index: _selectedTab,
-                            children: [
-                              ChatsTab(
-                                controller: c,
-                                onFindDevices: () =>
-                                    setState(() => _selectedTab = 1),
-                                onOpenConnected: _openConnected,
-                                onOpenHistory: _openHistory,
+                    Expanded(
+                      child: !c.initialized
+                          ? Center(
+                              child: FilledButton(
+                                onPressed: c.initialize,
+                                child: const Text('Retry setup'),
                               ),
-                              NearbyTab(controller: c, onConnect: _connect),
-                            ],
-                          ),
-                  ),
-                ],
+                            )
+                          : IndexedStack(
+                              index: _selectedTab,
+                              children: [
+                                ChatsTab(
+                                  controller: c,
+                                  onFindDevices: () =>
+                                      setState(() => _selectedTab = 1),
+                                  onOpenConnected: _openConnected,
+                                  onOpenHistory: _openHistory,
+                                  onOpenArchived: () =>
+                                      Navigator.of(context).push<void>(
+                                        MaterialPageRoute(
+                                          builder: (_) => ArchivedChatsScreen(
+                                            controller: c,
+                                            routeObserver: widget.routeObserver,
+                                          ),
+                                        ),
+                                      ),
+                                ),
+                                NearbyTab(controller: c, onConnect: _connect),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _selectedTab,

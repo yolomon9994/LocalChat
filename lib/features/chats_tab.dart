@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import '../services/chat_controller.dart';
+import 'conversation_menu.dart';
 
 String formatConversationTime(int timestamp, {DateTime? now}) {
   final time = DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal();
@@ -39,29 +40,47 @@ class ChatsTab extends StatelessWidget {
     required this.onFindDevices,
     required this.onOpenConnected,
     required this.onOpenHistory,
+    this.onOpenArchived,
+    this.archived = false,
   });
 
   final ChatController controller;
   final VoidCallback onFindDevices;
   final VoidCallback onOpenConnected;
   final ValueChanged<Conversation> onOpenHistory;
+  final VoidCallback? onOpenArchived;
+  final bool archived;
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
+    final displayed = c.conversations
+        .where((p) => p.archived == archived)
+        .toList();
+    final archivedChats = c.conversations.where((p) => p.archived).toList();
+    final archivedUnread = archivedChats.fold<int>(
+      0,
+      (sum, p) => sum + p.unreadCount,
+    );
     return ListView(
-      key: const PageStorageKey('chats-list'),
+      key: PageStorageKey(archived ? 'archived-chats-list' : 'chats-list'),
       primary: false,
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Your chats', style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          archived ? 'Saved for later' : 'Your chats',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
         const SizedBox(height: 8),
         Text(
-          c.isDemo
+          archived
+              ? 'Archived chats stay here when new messages arrive. Unarchive to return them to Chats.'
+              : c.isDemo
               ? 'Your demo conversations stay in this browser tab until reload.'
               : 'Your conversations stay saved on this phone.',
         ),
-        if (c.connectedPeer != null || c.state == 'Connecting') ...[
+        if (!archived &&
+            (c.connectedPeer != null || c.state == 'Connecting')) ...[
           const SizedBox(height: 20),
           Card(
             child: ListTile(
@@ -82,7 +101,21 @@ class ChatsTab extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        if (c.conversations.isEmpty)
+        if (!archived && archivedChats.isNotEmpty)
+          Card(
+            child: ListTile(
+              key: const ValueKey('open-archived-chats'),
+              leading: const Icon(Icons.archive_outlined),
+              title: const Text('Archived chats'),
+              subtitle: Text(
+                '${archivedChats.length} ${archivedChats.length == 1 ? 'chat' : 'chats'}'
+                '${archivedUnread > 0 ? ' · $archivedUnread unread ${archivedUnread == 1 ? 'message' : 'messages'}' : ''}',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onOpenArchived,
+            ),
+          ),
+        if (displayed.isEmpty)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -91,32 +124,43 @@ class ChatsTab extends StatelessWidget {
                   const Icon(Icons.chat_bubble_outline, size: 48),
                   const SizedBox(height: 12),
                   Text(
-                    'No chats yet',
+                    archived
+                        ? 'No archived chats'
+                        : archivedChats.isNotEmpty
+                        ? 'All your chats are archived'
+                        : 'No chats yet',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Find a nearby friend and verify your connection '
-                    'to start a conversation.',
+                  Text(
+                    archived
+                        ? 'Archive a conversation from its chat options to keep it here.'
+                        : 'Find a nearby friend and verify your connection '
+                              'to start a conversation.',
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: onFindDevices,
-                    icon: const Icon(Icons.radar),
-                    label: const Text('Find nearby devices'),
-                  ),
+                  if (!archived)
+                    FilledButton.icon(
+                      onPressed: onFindDevices,
+                      icon: const Icon(Icons.radar),
+                      label: const Text('Find nearby devices'),
+                    ),
                 ],
               ),
             ),
           )
         else
-          for (final peer in c.conversations)
+          for (final peer in displayed)
             Card(
+              key: ValueKey('conversation-card-${peer.id}'),
               child: ListTile(
                 key: ValueKey('conversation-${peer.id}'),
-                leading: const CircleAvatar(
-                  child: Icon(Icons.chat_bubble_outline),
+                leading: CircleAvatar(
+                  child: Icon(
+                    peer.pinned ? Icons.push_pin : Icons.chat_bubble_outline,
+                    semanticLabel: peer.pinned ? 'Pinned chat' : null,
+                  ),
                 ),
                 title: Text(
                   peer.name,
@@ -145,8 +189,11 @@ class ChatsTab extends StatelessWidget {
                       ),
                   ],
                 ),
-                trailing: peer.unreadCount > 0
-                    ? Semantics(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (peer.unreadCount > 0)
+                      Semantics(
                         label:
                             '${peer.unreadCount} unread ${peer.unreadCount == 1 ? 'message' : 'messages'}',
                         child: ExcludeSemantics(
@@ -159,8 +206,10 @@ class ChatsTab extends StatelessWidget {
                             ),
                           ),
                         ),
-                      )
-                    : const Icon(Icons.chevron_right),
+                      ),
+                    ConversationMenu(controller: c, peer: peer),
+                  ],
+                ),
                 onTap: () => onOpenHistory(peer),
               ),
             ),

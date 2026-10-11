@@ -28,12 +28,16 @@ class Conversation {
     this.updated, {
     this.latestMessage,
     this.unreadCount = 0,
+    this.pinned = false,
+    this.archived = false,
   });
   final String id;
   final String name;
   final int updated;
   final ChatMessage? latestMessage;
   final int unreadCount;
+  final bool pinned;
+  final bool archived;
 }
 
 class MessageSearchHit {

@@ -36,6 +36,8 @@ class DemoStore extends LocalStore {
       id,
       name,
       _people[id]?.updated ?? DateTime.now().millisecondsSinceEpoch,
+      pinned: _people[id]?.pinned ?? false,
+      archived: _people[id]?.archived ?? false,
     );
   }
 
@@ -53,10 +55,13 @@ class DemoStore extends LocalStore {
           peer.updated,
           latestMessage: history.isEmpty ? null : history.last,
           unreadCount: _unread.where((key) => key.$1 == peer.id).length,
+          pinned: peer.pinned,
+          archived: peer.archived,
         ),
       );
     }
     return result..sort((a, b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       if ((a.latestMessage == null) != (b.latestMessage == null)) {
         return a.latestMessage == null ? 1 : -1;
       }
@@ -77,6 +82,8 @@ class DemoStore extends LocalStore {
         peer.id,
         peer.name,
         DateTime.now().millisecondsSinceEpoch,
+        pinned: peer.pinned,
+        archived: peer.archived,
       );
     }
   }
@@ -140,6 +147,42 @@ class DemoStore extends LocalStore {
     return isCancelled?.call() == true
         ? const LocalSearchResults()
         : LocalSearchResults(conversations: names, messages: hits);
+  }
+
+  @override
+  Future<bool> setPinned(String peer, bool pinned) async {
+    final old = _people[peer];
+    if (old == null) return false;
+    _people[peer] = Conversation(
+      peer,
+      old.name,
+      old.updated,
+      pinned: pinned,
+      archived: old.archived,
+    );
+    return true;
+  }
+
+  @override
+  Future<bool> setArchived(String peer, bool archived) async {
+    final old = _people[peer];
+    if (old == null) return false;
+    _people[peer] = Conversation(
+      peer,
+      old.name,
+      old.updated,
+      pinned: old.pinned,
+      archived: archived,
+    );
+    return true;
+  }
+
+  @override
+  Future<void> deleteConversation(String peer) async {
+    _people.remove(peer);
+    _messages.removeWhere((key, _) => key.$1 == peer);
+    _unread.removeWhere((key) => key.$1 == peer);
+    _drafts.remove(peer);
   }
 
   @override

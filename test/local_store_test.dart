@@ -283,7 +283,10 @@ void main() {
       final oldMessage = Map<String, Object?>.from(
         (await db.query('messages')).single,
       )..remove('is_read');
-      final oldPeer = (await db.query('peers')).single;
+      final oldPeer =
+          Map<String, Object?>.from((await db.query('peers')).single)
+            ..remove('pinned')
+            ..remove('archived');
       final key = (await store.identity.extractPublicKey()).bytes;
       await store.close();
       await deleteDatabase(databasePath);
@@ -314,7 +317,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 3);
+      expect(await upgraded.getVersion(), 4);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -418,6 +421,7 @@ void main() {
       await store.saveMessage(message(outgoing: false));
       final db = await openDatabase(databasePath);
       await db.execute('DROP TABLE drafts');
+      await legacyPeerTable(db);
       await db.setVersion(2);
       await store.close();
       store = LocalStore();
@@ -429,4 +433,129 @@ void main() {
       expect(await store.draft('alice'), 'After upgrade');
     },
   );
+
+  test(
+    'Pinned ordering and archived metadata persist across activity, names, reads and restarts',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      final aliceTime = (await store.conversations()).single.updated;
+      clock = clock.add(const Duration(minutes: 1));
+      await store.savePeer('bob', 'Bob');
+      await store.saveMessage(message(peer: 'bob', outgoing: false));
+      await store.saveDraft('alice', 'A draft');
+      expect(await store.setPinned('alice', true), isTrue);
+      expect(await store.setArchived('alice', true), isTrue);
+      expect(await store.setPinned('missing', true), isFalse);
+      expect(await store.setArchived('missing', true), isFalse);
+      var all = await store.conversations();
+      expect(all.map((p) => p.id), ['alice', 'bob']);
+      expect(all.first.updated, aliceTime);
+      expect(all.first.unreadCount, 1);
+      expect(await store.draft('alice'), 'A draft');
+      await store.savePeer('alice', 'Renamed Alice');
+      await store.setStatus('id-1', 'alice', 'delivered');
+      await store.saveMessage(message(outgoing: false)); // Duplicate.
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      all = await store.conversations();
+      expect(all.first.pinned, isTrue);
+      expect(all.first.archived, isTrue);
+      expect(all.first.updated, aliceTime);
+      await store.saveMessage(
+        const ChatMessage(
+          id: 'new-arrival',
+          peerId: 'alice',
+          text: 'New private arrival',
+          timestamp: 2,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      expect((await store.conversations()).first.archived, isTrue);
+      expect(
+        (await store.search('Renamed')).conversations.single.archived,
+        isTrue,
+      );
+      expect(
+        (await store.search('arrival')).messages.single.conversation.pinned,
+        isTrue,
+      );
+      await store.markRead('alice');
+      await store.setArchived('alice', false);
+      await store.setPinned('alice', false);
+      all = await store.conversations();
+      expect(all.singleWhere((p) => p.id == 'alice').unreadCount, 0);
+      expect(all.every((p) => !p.archived && !p.pinned), isTrue);
+    },
+  );
+
+  test(
+    'Deleting one conversation removes its encrypted records and draft but preserves others and identity',
+    () async {
+      await store.savePeer('bob', 'Bob');
+      await store.saveMessage(message());
+      await store.saveMessage(message(outgoing: false));
+      await store.saveMessage(message(peer: 'bob', outgoing: false));
+      await store.saveDraft('alice', 'Alice draft');
+      await store.saveDraft('bob', 'Bob draft');
+      await store.setPinned('alice', true);
+      await store.setArchived('alice', true);
+      final identity = (await store.identity.extractPublicKey()).bytes;
+      await store.deleteConversation('alice');
+      await store.deleteConversation(
+        'alice',
+      ); // Idempotent, no other peer touched.
+      expect((await store.conversations()).single.id, 'bob');
+      expect((await store.conversations()).single.unreadCount, 1);
+      expect(await store.messages('alice'), isEmpty);
+      expect(await store.draft('alice'), '');
+      expect(await store.draft('bob'), 'Bob draft');
+      expect(
+        (await store.search('Private')).messages.single.message.peerId,
+        'bob',
+      );
+      expect((await store.identity.extractPublicKey()).bytes, identity);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect(await store.messages('alice'), isEmpty);
+      expect((await store.conversations()).single.id, 'bob');
+    },
+  );
+
+  test(
+    'Version 3 upgrade preserves drafts, encrypted messages, identity and unread state',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      await store.saveDraft('alice', 'Older draft');
+      final identity = (await store.identity.extractPublicKey()).bytes;
+      final db = await openDatabase(databasePath);
+      await legacyPeerTable(db);
+      await db.setVersion(3);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final peer = (await store.conversations()).single;
+      expect(peer.pinned, isFalse);
+      expect(peer.archived, isFalse);
+      expect(peer.unreadCount, 1);
+      expect(peer.latestMessage!.text, message().text);
+      expect(await store.draft('alice'), 'Older draft');
+      expect((await store.identity.extractPublicKey()).bytes, identity);
+      expect(await store.setPinned('alice', true), isTrue);
+      expect(await store.setArchived('alice', true), isTrue);
+    },
+  );
 }
+
+Future<void> legacyPeerTable(Database db) => db.transaction((txn) async {
+  await txn.execute(
+    'CREATE TABLE legacy_peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
+  );
+  await txn.execute(
+    'INSERT INTO legacy_peers SELECT id, name, updated FROM peers',
+  );
+  await txn.execute('DROP TABLE peers');
+  await txn.execute('ALTER TABLE legacy_peers RENAME TO peers');
+});

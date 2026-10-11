@@ -14,6 +14,8 @@ class DraftController extends ChangeNotifier {
   final _revisions = <String, int>{};
   Future<void> _queue = Future<void>.value();
   int _epoch = 0;
+  final _peerEpochs = <String, int>{};
+  (int, int) _generation(String peer) => (_epoch, _peerEpochs[peer] ?? 0);
   int _nextRevision = 0;
   bool _disposed = false;
 
@@ -35,17 +37,17 @@ class DraftController extends ChangeNotifier {
 
   Future<void> load(String peer) async {
     if (_loaded.contains(peer) || !_loading.add(peer)) return;
-    final epoch = _epoch;
+    final generation = _generation(peer);
     await _enqueue(() async {
-      if (epoch != _epoch) return;
+      if (generation != _generation(peer)) return;
       try {
         final text = await store.draft(peer);
-        if (epoch != _epoch) return;
+        if (generation != _generation(peer)) return;
         _text[peer] = text;
         _loaded.add(peer);
         _errors.remove(peer);
       } catch (_) {
-        if (epoch == _epoch) {
+        if (generation == _generation(peer)) {
           _errors[peer] = 'Could not load this draft. Please retry.';
         }
       } finally {
@@ -60,27 +62,33 @@ class DraftController extends ChangeNotifier {
     _text[peer] = text;
     _revisions[peer] = ++_nextRevision;
     _notify();
-    unawaited(_save(peer, text, _epoch, revisionFor(peer)));
+    unawaited(_save(peer, text, _generation(peer), revisionFor(peer)));
   }
 
-  Future<void> _save(String peer, String text, int epoch, int revision) =>
-      _enqueue(() async {
-        if (epoch != _epoch || revision != revisionFor(peer)) return;
-        try {
-          await store.saveDraft(peer, text);
-          if (epoch == _epoch && revision == revisionFor(peer)) {
-            _errors.remove(peer);
-          }
-        } catch (_) {
-          if (epoch == _epoch) {
-            _errors[peer] = 'Draft not saved on this device. Please retry.';
-          }
-        }
-        _notify();
-      });
+  Future<void> _save(
+    String peer,
+    String text,
+    (int, int) generation,
+    int revision,
+  ) => _enqueue(() async {
+    if (generation != _generation(peer) || revision != revisionFor(peer)) {
+      return;
+    }
+    try {
+      await store.saveDraft(peer, text);
+      if (generation == _generation(peer) && revision == revisionFor(peer)) {
+        _errors.remove(peer);
+      }
+    } catch (_) {
+      if (generation == _generation(peer)) {
+        _errors[peer] = 'Draft not saved on this device. Please retry.';
+      }
+    }
+    _notify();
+  });
 
   Future<void> retry(String peer) => isLoaded(peer)
-      ? _save(peer, textFor(peer), _epoch, revisionFor(peer))
+      ? _save(peer, textFor(peer), _generation(peer), revisionFor(peer))
       : load(peer);
 
   Future<void> clearAfterSend(String peer, int revision) async {
@@ -92,11 +100,23 @@ class DraftController extends ChangeNotifier {
   Future<void> clearHistory() => _enqueue(() async {
     await store.clearHistory();
     _epoch++;
+    _peerEpochs.clear();
     _text.clear();
     _loaded.clear();
     _loading.clear();
     _errors.clear();
     _revisions.clear();
+    _notify();
+  });
+
+  Future<void> deleteConversation(String peer) => _enqueue(() async {
+    await store.deleteConversation(peer);
+    _peerEpochs[peer] = (_peerEpochs[peer] ?? 0) + 1;
+    _text.remove(peer);
+    _loaded.remove(peer);
+    _loading.remove(peer);
+    _errors.remove(peer);
+    _revisions.remove(peer);
     _notify();
   });
 

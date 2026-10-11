@@ -1,5 +1,45 @@
 # Validation for v0.1.0
 
+## Conversation management milestone — 2026-10-11
+
+Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
+
+- `flutter analyze`: no issues.
+- `flutter test`: all 82 tests passed (73 existing + 9 new checks).
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build, with the same
+  optional Cupertino font warning recorded below.
+
+Real SQLite tests cover flag persistence, pin ordering without changing activity,
+preservation through rename/duplicate/delivery/read updates, incoming activity
+remaining archived, archive flags in search results, targeted message/draft
+deletion, identity/other-peer retention, and schema-3 upgrades. Existing schema-1
+and schema-2 fixtures now model their old peer table accurately and upgrade to
+schema 4 with preserved encrypted history, drafts and unread state.
+
+Draft checks verify that deleting one peer invalidates its queued edits while
+another peer's draft persists. Encrypted linked-peer checks verify archival
+through a live received message, active-peer disconnect on deletion, removal
+of local data and preservation of the other phone's history. Failure checks
+cover retained draft/state, generic errors, retry, deleted-result invalidation
+and rejecting stale opens.
+
+Widget tests cover pin/unpin, archive/unarchive, searching archived history,
+draft restoration, empty archive states, delete cancellation/confirmation,
+lock removal of archive routes/dialogs, and long names/unread/menu/error flows
+at 320 × 568 with 1.5× system text. The error banner is constrained and scrollable
+so it cannot consume the list; the temporary snackbar is allowed to expire
+before the test uses the list again. The existing wrong-peer send and draft
+error fixtures now seed their conversations before opening saved history.
+
+Pin/archive flags are local unencrypted metadata; message/draft encryption and
+wire payloads are unchanged. No new dependency or native Android code change.
+Deleting active history disconnects first; a failed storage deletion can leave
+the session disconnected while retaining data. Physical Android persistence,
+upgrades and two-phone behavior remain user testing; follow
+[the conversation management checklist](CONVERSATION_MANAGEMENT.md).
+
 ## Saved drafts milestone — 2026-10-10
 
 Checked with Flutter 3.38.7 / Dart 3.10.7 on the same Windows/Android SDK setup.
