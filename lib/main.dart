@@ -9,6 +9,7 @@ import 'services/chat_controller.dart';
 import 'services/transport.dart';
 import 'features/home_screen.dart';
 import 'features/app_lock_screen.dart';
+import 'features/chat_screen.dart';
 import 'services/app_lock_controller.dart';
 import 'services/appearance_controller.dart';
 
@@ -47,6 +48,8 @@ class _LocalChatAppState extends State<LocalChatApp>
       AppearanceController.platform(isDemo: widget.controller.isDemo);
   late final Listenable _changes = Listenable.merge([_lock, _appearance]);
   final _routes = RouteObserver<ModalRoute<dynamic>>();
+  final _navigator = GlobalKey<NavigatorState>();
+  bool _openingNotification = false;
   ChatController get controller => widget.controller;
 
   @override
@@ -59,6 +62,10 @@ class _LocalChatAppState extends State<LocalChatApp>
       lifecycle == null || lifecycle == AppLifecycleState.resumed,
     );
     _lock.addListener(_accessChanged);
+    controller.addListener(_notificationChanged);
+    controller.notifications.addListener(_notificationChanged);
+    _appearance.addListener(_notificationChanged);
+    unawaited(controller.notifications.initialize());
     unawaited(_lock.initialize());
     unawaited(_appearance.initialize());
   }
@@ -69,6 +76,71 @@ class _LocalChatAppState extends State<LocalChatApp>
       _startedChat = true;
       unawaited(controller.initialize());
     }
+    _notificationChanged();
+  }
+
+  void _notificationChanged() {
+    if (!mounted ||
+        _openingNotification ||
+        !_lock.canAccess ||
+        _appearance.loading ||
+        !controller.initialized ||
+        !controller.appForeground ||
+        controller.notifications.pendingPeer == null) {
+      return;
+    }
+    _openingNotification = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final peer = controller.notifications.pendingPeer;
+        if (!mounted ||
+            peer == null ||
+            !_lock.canAccess ||
+            !controller.appForeground) {
+          return;
+        }
+        final navigator = _navigator.currentState;
+        if (navigator == null) return;
+        final token = controller.accessRevision;
+        final matches = controller.conversations.where((c) => c.id == peer);
+        if (matches.isEmpty) {
+          controller.notifications.consumeTap(peer);
+          ScaffoldMessenger.of(navigator.context).showSnackBar(
+            const SnackBar(
+              content: Text('This conversation is no longer available.'),
+            ),
+          );
+          return;
+        }
+        final opened = await controller.viewHistory(
+          matches.first,
+          notificationAccessToken: token,
+        );
+        if (!mounted ||
+            !_lock.canAccess ||
+            !controller.appForeground ||
+            controller.accessRevision != token ||
+            controller.notifications.pendingPeer != peer ||
+            _navigator.currentState != navigator) {
+          return;
+        }
+        controller.notifications.consumeTap(peer);
+        if (!opened) return;
+        navigator.popUntil((route) => route.isFirst);
+        unawaited(
+          navigator.push(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  ChatScreen(controller: controller, routeObserver: _routes),
+            ),
+          ),
+        );
+      } finally {
+        _openingNotification = false;
+        if (mounted) _notificationChanged();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   @override
@@ -76,6 +148,7 @@ class _LocalChatAppState extends State<LocalChatApp>
     // Stop read marking immediately, before locked routes are disposed.
     controller.setAppForeground(state == AppLifecycleState.resumed);
     _lock.lifecycle(state);
+    _notificationChanged();
   }
 
   @override
@@ -83,6 +156,9 @@ class _LocalChatAppState extends State<LocalChatApp>
     WidgetsBinding.instance.removeObserver(this);
     controller.setAppAccess(false);
     _lock.removeListener(_accessChanged);
+    controller.removeListener(_notificationChanged);
+    controller.notifications.removeListener(_notificationChanged);
+    _appearance.removeListener(_notificationChanged);
     if (widget.appLock == null) _lock.dispose();
     if (widget.appearance == null) _appearance.dispose();
     super.dispose();
@@ -94,6 +170,7 @@ class _LocalChatAppState extends State<LocalChatApp>
     builder: (context, _) => MaterialApp(
       title: 'LocalChat',
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigator,
       navigatorObservers: [_routes],
       builder: (context, child) {
         // Remove the whole Navigator while locked. Pushed routes, dialogs,

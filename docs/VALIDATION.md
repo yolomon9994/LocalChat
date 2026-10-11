@@ -1,5 +1,40 @@
 # Validation for v0.1.0
 
+## Local message notifications and privacy — 2026-10-11
+
+Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
+
+- `flutter test`: all **147 tests passed** (132 existing + 15 notification checks).
+- Final targeted notification/widget tests: all **15 passed** after privacy/setup fixes.
+- `flutter analyze`: no issues.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful updated APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: successful browser build; same optional
+  Cupertino font warning as previous builds (the UI uses Material icons).
+- `git -c core.safecrlf=false diff --check`: clean.
+
+Ten service/controller/channel checks cover opt-in defaults, generic payloads
+without sender/body, preview redaction, blocked permission and later grant,
+visible-chat suppression, independent peer alerts, notification-manager failure
+without losing persistence/ACKs, lost-ACK retry dedupe with real encrypted frames,
+read/lock/background unread behavior, history deletion, and cold/warm native
+channel tap delivery. The existing SQLite test now checks the new committed-row
+result for initial and duplicate insertion. Schema/encryption tests still pass.
+
+Five widget checks cover cold-start taps waiting for PIN before opening the
+correct history, latest warm tap and route replacement/back behavior, lock during
+an async history load, safe deleted-history taps and Settings switches in the
+browser demo. The first Settings test needed scrolling to build the lazy list
+section; the corrected test passes. Android APIs/permission UI use doubles here;
+no physical notification, vendor, channel or OS-history test is claimed.
+
+No new dependencies, database schema or protocol changes. Android adds only
+POST_NOTIFICATIONS and a native notification bridge/icon. Hardware checks are in
+[NOTIFICATIONS.md](NOTIFICATIONS.md). Changes remain uncommitted for the user.
+Automatic Flutter deep-link handling is disabled in the Activity metadata so
+peer-specific notification intents use the lock-aware route instead of being
+interpreted as named Flutter routes. See [Flutter's handler configuration](https://docs.flutter.dev/cookbook/navigation/set-up-app-links).
+
 ## Connection troubleshooting and manual reconnect — 2026-10-11
 
 Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.
@@ -33,8 +68,8 @@ validation. Browser demo regressions continue to pass.
 
 Physical Wi-Fi Direct, permission prompts/revocation, Android settings return,
 pairing cancellation and vendor behavior remain pending. Follow
-[CONNECTION_RECOVERY.md](CONNECTION_RECOVERY.md). Changes are intentionally
-uncommitted; the user handles staging, committing and pushing.
+[CONNECTION_RECOVERY.md](CONNECTION_RECOVERY.md). The user committed this
+milestone as `c7d4d6e` and handles staging, committing and pushing.
 
 ## Offline outbox and message retry — 2026-10-11
 

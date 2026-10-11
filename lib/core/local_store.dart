@@ -409,7 +409,8 @@ class LocalStore {
     return result;
   }
 
-  Future<void> saveMessage(ChatMessage message) => _saveMessage(message);
+  /// True only for a new committed row; duplicate retries return false.
+  Future<bool> saveMessage(ChatMessage message) => _saveMessage(message);
 
   /// Message acceptance and removal of its composer draft commit together.
   Future<void> saveOutgoingMessage(
@@ -419,10 +420,10 @@ class LocalStore {
     if (!message.outgoing || message.status != 'queued') {
       throw ArgumentError('Expected a queued outgoing message');
     }
-    return _saveMessage(message, clearDraft: clearDraft);
+    return _saveMessage(message, clearDraft: clearDraft).then((_) {});
   }
 
-  Future<void> _saveMessage(
+  Future<bool> _saveMessage(
     ChatMessage message, {
     bool clearDraft = false,
   }) async {
@@ -433,7 +434,7 @@ class LocalStore {
         '${message.peerId}/${message.id}/${message.outgoing ? 1 : 0}',
       ),
     );
-    await _database.transaction((txn) async {
+    return _database.transaction((txn) async {
       final existing = await txn.query(
         'messages',
         where: 'peer = ? AND id = ? AND outgoing = ?',
@@ -446,7 +447,7 @@ class LocalStore {
             previous.timestamp != message.timestamp) {
           throw const FormatException('Conflicting message ID');
         }
-        return;
+        return false;
       }
       await txn.insert('messages', {
         'id': message.id,
@@ -474,6 +475,7 @@ class LocalStore {
           whereArgs: [message.peerId],
         );
       }
+      return true;
     });
   }
 

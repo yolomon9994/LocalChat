@@ -3,7 +3,20 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Connection troubleshooting and easier reconnection
+## Current milestone: Local message notifications and privacy
+
+- [x] Opt-in Settings controls; previews disabled by default.
+- [x] Android permission/channel status, request and notification-settings shortcut.
+- [x] New persisted verified incoming messages notify; suppress visible-chat alerts
+      and identical retries. Notification failures leave message delivery intact.
+- [x] Generic locked/background alerts; redact active previews on privacy changes.
+- [x] Cold/warm tap opens the intended saved chat after unlock, with no verification bypass.
+- [x] Per-peer alerts; reading/deleting cancels them, imports never create alerts.
+- [x] Temporary browser settings without browser OS alerts; no background service.
+- [x] All 147 tests pass; final analysis/build results are in [VALIDATION.md](VALIDATION.md).
+- [ ] Physical phone testing and user's commit; see [notification checklist](NOTIFICATIONS.md).
+
+## Connection troubleshooting and easier reconnection: implemented and committed
 
 - [x] Typed guidance for Wi-Fi, permission, Location, busy, stale peer and service failures.
 - [x] Android Wi-Fi/app-permission/Location settings shortcuts, with safe fallback.
@@ -14,7 +27,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Failed connect stays in Nearby; connection/verification timeout is retryable.
 - [x] All 132 tests pass, clean analysis and fresh Android/browser builds;
       see [recovery checklist](CONNECTION_RECOVERY.md).
-- [ ] Physical phone testing and user's commit.
+- [x] User commits connection recovery (`c7d4d6e`).
+- [ ] Physical phone testing.
 
 ## Offline outbox and message retry: implemented and committed
 
@@ -163,7 +177,7 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Pin, archive and delete individual conversations.
 - [x] Connection troubleshooting: Wi-Fi, permissions, discovery, retry actions
       and manual Reconnect to a device still listed.
-- [ ] Local notifications with optional hidden message previews.
+- [x] Local notifications with hidden message previews by default and lock-aware taps.
 - [ ] Optional background connection mode with battery/connection controls.
 - [ ] Reply to messages, copy actions, and starred messages.
 - [ ] QR scanning for session verification (bind to the verified session).
@@ -185,7 +199,7 @@ Work on one feature at a time; validate it before the user commits and starts th
    conversation management (committed).
 4. Encrypted backups and phone migration (committed).
 5. Offline outbox and retry (committed), connection troubleshooting/manual
-   reconnection (current), then notifications/background connection support.
+   reconnection (committed), notifications (current), then background connection support.
 6. Group chat and attachments.
 
 The user chose app lock first so it can be tested before committing. This order

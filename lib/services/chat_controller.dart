@@ -10,6 +10,7 @@ import '../core/secure_session.dart';
 import 'transport.dart';
 import 'draft_controller.dart';
 import 'nearby_support.dart';
+import 'chat_notifications.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -19,11 +20,21 @@ class ChatController extends ChangeNotifier {
     this.ackTimeout = const Duration(seconds: 30),
     this.connectionTimeout = const Duration(seconds: 90),
     NearbyTools? nearbyTools,
+    ChatNotifications? notifications,
   }) : nearbyTools =
            nearbyTools ??
            (transport is WifiDirectTransport
                ? const AndroidNearbyTools()
-               : const DemoNearbyTools());
+               : const DemoNearbyTools()),
+       notifications =
+           notifications ??
+           ChatNotifications(
+             transport is WifiDirectTransport
+                 ? AndroidNotificationPlatform()
+                 : MemoryNotificationPlatform(),
+             isDemo: isDemo,
+           );
+  final ChatNotifications notifications;
   final bool isDemo;
   final Duration ackTimeout;
   final Duration connectionTimeout;
@@ -144,6 +155,7 @@ class ChatController extends ChangeNotifier {
   void setAppAccess(bool accessible) {
     if (_appAccessible == accessible) return;
     _appAccessible = accessible;
+    notifications.setAccessible(_appAccessible && _appForeground);
     accessRevision++;
     _readVisible();
     if (accessible) {
@@ -219,10 +231,12 @@ class ChatController extends ChangeNotifier {
   void setAppForeground(bool foreground) {
     if (_appForeground == foreground) return;
     _appForeground = foreground;
+    notifications.setAccessible(_appAccessible && _appForeground);
     _readVisible();
     // Refresh relative activity labels after time spent outside the app.
     if (foreground) notifyListeners();
     if (foreground) {
+      unawaited(notifications.refreshPermission());
       unawaited(refreshNearbyAccess());
       _requestDrain();
     }
@@ -561,7 +575,7 @@ class ChatController extends ChangeNotifier {
           throw const FormatException('Invalid text message');
         }
         await store.savePeer(connectedPeer!, _session!.peerName!);
-        await store.saveMessage(
+        final inserted = await store.saveMessage(
           ChatMessage(
             id: id,
             peerId: connectedPeer!,
@@ -571,6 +585,17 @@ class ChatController extends ChangeNotifier {
             status: 'received',
           ),
         );
+        if (inserted) {
+          final peer = connectedPeer!;
+          unawaited(
+            notifications.incoming(
+              peer,
+              _session!.peerName!,
+              text,
+              isReading: () => selectedPeer == peer && _canReadSelected,
+            ),
+          );
+        }
         historyRevision++;
         await _sendPayload({'type': 'ack', 'id': id});
         await _refresh();
@@ -932,18 +957,40 @@ class ChatController extends ChangeNotifier {
   Future<void> _refresh() async {
     if (selectedPeer != null) messages = await store.messages(selectedPeer!);
     // Only clear read state after the visible history has decrypted successfully.
-    if (_canReadSelected) await store.markRead(selectedPeer!);
+    if (_canReadSelected) {
+      await store.markRead(selectedPeer!);
+      unawaited(notifications.cancel(selectedPeer!));
+    }
     conversations = await store.conversations();
   }
 
-  Future<bool> viewHistory(Conversation peer) async {
+  Future<bool> viewHistory(
+    Conversation peer, {
+    int? notificationAccessToken,
+  }) async {
     var opened = false;
     await _run(() async {
+      if (notificationAccessToken != null &&
+          (!_appAccessible ||
+              !_appForeground ||
+              notificationAccessToken != accessRevision ||
+              notifications.pendingPeer != peer.id)) {
+        return;
+      }
       error = null;
       final history = await store.messages(peer.id);
       final summaries = await store.conversations();
       if (!summaries.any((p) => p.id == peer.id)) {
         throw StateError('This conversation has been deleted.');
+      }
+      if (notificationAccessToken != null) {
+        if (!_appAccessible ||
+            !_appForeground ||
+            notificationAccessToken != accessRevision ||
+            notifications.pendingPeer != peer.id) {
+          return;
+        }
+        _visibleChat = null;
       }
       selectedPeer = peer.id;
       selectedName = peer.name;
@@ -951,6 +998,7 @@ class ChatController extends ChangeNotifier {
       conversations = summaries;
       if (_canReadSelected) {
         await store.markRead(peer.id);
+        unawaited(notifications.cancel(peer.id));
         conversations = await store.conversations();
       }
       opened = true;
@@ -982,6 +1030,7 @@ class ChatController extends ChangeNotifier {
   });
   Future<void> clearHistory() => _run(() async {
     await drafts.clearHistory();
+    unawaited(notifications.cancel(null));
     for (final timer in _ackTimers.values) {
       timer.cancel();
     }
@@ -1028,6 +1077,7 @@ class ChatController extends ChangeNotifier {
       try {
         if (connectedPeer == peer) await _disconnect();
         await drafts.deleteConversation(peer);
+        unawaited(notifications.cancel(peer));
         historyRevision++;
         if (selectedPeer == peer) {
           selectedPeer = null;
@@ -1096,6 +1146,7 @@ class ChatController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     drafts.dispose();
+    notifications.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {
       timer.cancel();

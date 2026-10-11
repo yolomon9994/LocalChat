@@ -77,9 +77,9 @@ void main() {
     () async {
       await store.savePeer('bob', 'Bob');
       await store.saveMessage(message());
-      await store.saveMessage(message(outgoing: false));
+      expect(await store.saveMessage(message(outgoing: false)), true);
       await store.saveMessage(message(peer: 'bob'));
-      await store.saveMessage(message(outgoing: false)); // Duplicate receive.
+      expect(await store.saveMessage(message(outgoing: false)), false);
       await store.setStatus('id-1', 'alice', 'delivered');
       final alice = await store.messages('alice');
       expect(alice.length, 2);

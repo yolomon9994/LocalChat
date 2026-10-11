@@ -48,6 +48,21 @@ There is no automatic reconnect. See [outbox behavior and tests](OUTBOX.md).
 
 ## At-rest data
 
+Local notifications are opt-in, with sender/body previews disabled by default.
+Generic alerts send only the peer ID to Android. Preview opt-in passes bounded
+plaintext sender/text to the OS only while unlocked and foregrounded; Android
+private visibility and a generic public version protect device-lock-screen
+content. Lock/background and preview disabling redact active previews; OS
+notification history/listeners/connected devices can retain earlier plaintext
+and cannot be erased by this app. Native pause also gates/redacts previews before
+Dart lifecycle processing. Native preferences contain only notification booleans;
+tap intents and redaction bookkeeping retain peer IDs without names or bodies.
+Cold/warm taps wait for app unlock and saved-history validation, and never bypass
+fresh session verification. New persisted incoming rows notify; retained-history
+duplicate retries and backup imports do not. Notification failures are isolated
+from the encrypted protocol. No background service or cloud push is added.
+See [notification privacy and testing](NOTIFICATIONS.md).
+
 An independent random 32-byte key encrypts message bodies using XChaCha20-Poly1305, stored as base64(nonce || tag || ciphertext). AAD binds the peer ID, message ID and direction. Message IDs are scoped by peer and direction so a received ID cannot replace an outgoing record. SQLite stores peer IDs, names, timestamps, directions, delivery state and local read state without encryption. Chats list previews decrypt the existing message body in memory; no additional plaintext preview is stored. Read state is local and is not sent as a network read receipt. The storage key and Ed25519 seed use `flutter_secure_storage` backed by Android's platform security facilities. These are software-accessible secrets, not claims of non-exportable hardware X25519 or Ed25519 keys.
 
 Local search decrypts existing message bodies in memory in cancellable batches.

@@ -5,6 +5,7 @@ import 'app_lock_settings.dart';
 import '../services/appearance_controller.dart';
 import 'appearance_settings.dart';
 import 'backup_screen.dart';
+import 'notification_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -62,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (widget.appLock != null) AppLockSettings(lock: widget.appLock!),
         if (widget.appearance != null)
           AppearanceSettings(appearance: widget.appearance!),
+        NotificationSettings(notifications: widget.controller.notifications),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.backup_outlined),

@@ -6,6 +6,7 @@ For encrypted file export/import, merging and identity transfer, also follow
 the [backup phone checklist](BACKUPS.md).
 For queuing, retry and lifecycle gates, follow the [outbox checklist](OUTBOX.md).
 For settings shortcuts and reconnect, follow the [recovery checklist](CONNECTION_RECOVERY.md).
+For message alerts, permission and lock-aware taps, follow the [notification checklist](NOTIFICATIONS.md).
 
 | Case | Expected behavior |
 |---|---|

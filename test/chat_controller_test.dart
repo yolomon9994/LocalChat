@@ -31,8 +31,10 @@ class MemoryStore extends LocalStore {
   }
 
   @override
-  Future<void> saveMessage(ChatMessage message) async {
+  Future<bool> saveMessage(ChatMessage message) async {
+    if (saved.containsKey(message.id)) return false;
     saved.putIfAbsent(message.id, () => message);
+    return true;
   }
 
   @override

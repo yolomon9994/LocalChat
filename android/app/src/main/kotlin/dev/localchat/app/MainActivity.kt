@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Android transport only. All message cryptography and verification live in Dart. */
 class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private var sink: EventChannel.EventSink? = null
+    private var notifications: MessageNotifications? = null
     private var manager: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
     private val main = Handler(Looper.getMainLooper())
@@ -79,6 +80,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         super.configureFlutterEngine(flutterEngine)
         // Protect the initial window until Flutter has read persisted settings.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        notifications = MessageNotifications(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/notifications"))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/backup").setMethodCallHandler { call, result ->
             if (call.method != "pick" && call.method != "save") {
                 result.notImplemented()
@@ -311,6 +313,10 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == MessageNotifications.PERMISSION_REQUEST) {
+            notifications?.permissionFinished()
+            return
+        }
         if (requestCode != PERMISSION_REQUEST) return
         val result = permissionResult ?: return
         permissionResult = null
@@ -556,6 +562,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         if (registered) { unregisterReceiver(receiver); registered = false }
     }
     override fun onDestroy() {
+        notifications?.dispose()
         backupResult?.error("CANCELLED", "Activity closed. Choose the file again.", null)
         backupResult = null
         backupBytes = null
@@ -566,5 +573,20 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         io.shutdownNow()
         watchdog.shutdownNow()
         super.onDestroy()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        notifications?.acceptIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        notifications?.foreground(true)
+    }
+
+    override fun onPause() {
+        notifications?.foreground(false)
+        super.onPause()
     }
 }

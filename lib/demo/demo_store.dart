@@ -183,7 +183,7 @@ class DemoStore extends LocalStore {
   }
 
   @override
-  Future<void> saveMessage(ChatMessage message) async {
+  Future<bool> saveMessage(ChatMessage message) async {
     final key = (message.peerId, message.id, message.outgoing);
     final previous = _messages[key];
     if (previous != null) {
@@ -191,7 +191,7 @@ class DemoStore extends LocalStore {
           previous.timestamp != message.timestamp) {
         throw const FormatException('Conflicting message ID');
       }
-      return;
+      return false;
     }
     _messages[key] = message;
     if (!message.outgoing) _unread.add(key);
@@ -205,6 +205,7 @@ class DemoStore extends LocalStore {
         archived: peer.archived,
       );
     }
+    return true;
   }
 
   @override

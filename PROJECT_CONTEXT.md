@@ -9,7 +9,7 @@ LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first and text only.
 Images and videos are planned later. Bluetooth, group chat, relaying, iOS,
-background delivery and notifications are also future work.
+reliable background delivery are also future work. Local notifications are implemented.
 
 The complete requested/suggested feature list is in `docs/FEATURE_BACKLOG.md`.
 The user chose app lock first and committed it as `df3c2b3`.
@@ -17,10 +17,41 @@ Navigation was committed as `abe4dc3`, and themes as `b353956`.
 Chats list improvements were committed as `c233159`, and local search as
 `a2c7aa3`; drafts were committed as `9e90550`, and conversation management as
 `8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
-Outbox/retry was committed as `605962e`. The current milestone is connection
-troubleshooting and easier manual reconnection.
+Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
+The current milestone is local message notifications with privacy controls.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Local notification milestone
+
+- `ChatNotifications` owns opt-in preferences, permission status, privacy gates,
+  notification operations and pending peer-only taps. Root initializes it before
+  chat storage opens so cold-start taps wait safely for app unlock.
+- Settings offers enable/disable, previews, denial guidance and Android settings.
+  Android `MessageNotifications` uses SharedPreferences booleans and native APIs
+  through `dev.localchat/notifications`, plus a dedicated POST_NOTIFICATIONS
+  request code (Android 13+). No package, schema, backup or wire changes.
+- LocalStore/DemoStore.saveMessage returns whether a new row committed. Only new
+  verified incoming text notifies; identical retries retain existing read state
+  and do not re-alert. Notifications run separately from persistence/ACKs, and
+  errors appear in notification settings rather than failing the secure session.
+- Generic defaults omit sender/body from the native bridge. Opt-in previews
+  require foreground + unlocked access, bounded by native checks as well as Dart.
+  Native pause and Dart lock changes redact active previews. Android private
+  visibility/public generic content also applies; earlier OS history/listener
+  copies cannot be erased. Native retained tap/redaction state contains peer IDs.
+- One alert per peer; actual visible-read gates suppress/cancel alerts. Clear
+  history and per-chat deletion cancel them. Backup imports never create alerts.
+- Root navigator routes cold/warm taps after unlock + initialization + foreground,
+  with access-token, current-target and navigator checks after async history load.
+  Activity metadata disables Flutter's automatic deep-link handler so native
+  notification URIs reach only this routing path.
+  Taps neither auto-connect nor bypass code confirmation. Missing histories get a
+  generic notice. Browser demo settings are temporary with no OS notifications.
+- All 147 tests pass (132 existing + 15 notification checks); final results and
+  hardware checklist are in `docs/VALIDATION.md` and `docs/NOTIFICATIONS.md`.
+  Changes remain uncommitted for the user; physical phone checks are pending.
+  Reliable background receipt/service/battery controls remain a later milestone.
 
 ## Connection recovery milestone
 
@@ -46,7 +77,7 @@ time; the user will stage, commit and push it themselves after testing.
   idle socket detection and automatic reconnect/background sending are future work.
 - No database, wire, dependency or manifest permission changes. Phone checks and
   results are in `docs/CONNECTION_RECOVERY.md` and `docs/VALIDATION.md`. Changes
-  remain uncommitted for the user; physical checks are pending.
+  were committed by the user as `c7d4d6e`; physical checks are pending.
   All 132 tests pass, static analysis is clean and Android/browser builds succeed.
 
 ## Offline outbox and message retry milestone
@@ -330,7 +361,7 @@ preview and automated tests do not validate these.
 ## Source control
 
 Local Git history and LocalChat-history.bundle are included. GitHub account:
-`yolomon9994`; repository: `LocalChat`. Before the connection recovery milestone, the working tree
+`yolomon9994`; repository: `LocalChat`. Before the notification milestone, the working tree
 was clean and `main` matched the locally recorded `origin/main`. Do not stage,
 commit, publish or push without a new user request; the user will commit this
 milestone themselves. No open-source license has been selected.
