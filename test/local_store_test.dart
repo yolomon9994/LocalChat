@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
 import 'package:local_chat/core/chat_backup.dart';
+import 'package:local_chat/core/group_models.dart';
+import 'package:local_chat/core/secure_session.dart';
 import 'package:local_chat/demo/demo_store.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -47,6 +49,80 @@ void main() {
         outgoing: outgoing,
         status: 'sending',
       );
+  test(
+    'group titles/authors/text/receipts are encrypted and preserved across reopen',
+    () async {
+      final public = base64Encode(
+        (await store.identity.extractPublicKey()).bytes,
+      );
+      final id = randomId();
+      final text = await GroupText.create(
+        store.identity,
+        'Private author',
+        group: id,
+        host: public,
+        epoch: randomId(),
+        view: 1,
+        text: 'Private group body سلام',
+        targets: [await identityId(public)],
+      );
+      await store.saveGroupHistory(
+        GroupHistory(
+          id: id,
+          title: 'Private group title',
+          host: public,
+          messages: [text],
+          updated: 1000,
+        ),
+      );
+      final db = await openDatabase(databasePath);
+      final ciphertext =
+          (await db.query('group_history')).single['body'] as String;
+      final bytes = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
+      expect(bytes, isNot(contains('Private group')));
+      expect(bytes, isNot(contains('Private author')));
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final saved = (await store.groupHistories()).single;
+      expect(saved.title, 'Private group title');
+      expect(saved.messages.single.text, text.text);
+      expect(
+        saved.messages.single.envelope['signature'],
+        text.envelope['signature'],
+      );
+      final backup = await store.exportBackup();
+      expect(backup.groups.length, 1);
+      await store.clearHistory();
+      expect(await store.groupHistories(), isEmpty);
+      await store.importBackup(backup);
+      expect(
+        (await store.groupHistories()).single.messages.single.receipts.values,
+        everyElement('unconfirmed'),
+      );
+    },
+  );
+  test(
+    'schema six upgrades without losing existing direct history and creates group storage',
+    () async {
+      await store.saveMessage(message());
+      final db = await openDatabase(databasePath);
+      await db.execute('DROP TABLE group_history');
+      await db.execute('PRAGMA user_version = 6');
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect((await store.messages('alice')).single.text, message().text);
+      expect(await store.groupHistories(), isEmpty);
+      final public = base64Encode(
+        (await store.identity.extractPublicKey()).bytes,
+      );
+      await store.saveGroupHistory(
+        GroupHistory(id: randomId(), title: 'Upgraded', host: public),
+      );
+      expect((await store.groupHistories()).single.title, 'Upgraded');
+    },
+  );
   test(
     'SQLite contains ciphertext; reopening preserves identity, text and delivery uncertainty',
     () async {
@@ -319,7 +395,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 6);
+      expect(await upgraded.getVersion(), 7);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -730,7 +806,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 6);
+      expect(await (await openDatabase(databasePath)).getVersion(), 7);
     },
   );
   test(
@@ -809,7 +885,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 6);
+      expect(await (await openDatabase(databasePath)).getVersion(), 7);
     },
   );
 

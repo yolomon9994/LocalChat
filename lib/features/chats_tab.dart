@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
 import 'conversation_menu.dart';
+import 'group_screen.dart';
 
 String formatConversationTime(int timestamp, {DateTime? now}) {
   final time = DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal();
@@ -42,6 +43,7 @@ class ChatsTab extends StatelessWidget {
     required this.onOpenHistory,
     this.onOpenArchived,
     this.archived = false,
+    this.routeObserver,
   });
 
   final ChatController controller;
@@ -50,6 +52,7 @@ class ChatsTab extends StatelessWidget {
   final ValueChanged<Conversation> onOpenHistory;
   final VoidCallback? onOpenArchived;
   final bool archived;
+  final RouteObserver<ModalRoute<dynamic>>? routeObserver;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +74,28 @@ class ChatsTab extends StatelessWidget {
           archived ? 'Saved for later' : 'Your chats',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
+        if (!archived && c.groups.histories.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          for (final group in c.groups.histories)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.groups_outlined),
+                title: Text(group.title),
+                subtitle: Text(
+                  'Group • ${group.unread} unread${c.groups.active?.id == group.id ? ' • active' : ''}',
+                ),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => GroupChatScreen(
+                      controller: c,
+                      id: group.id,
+                      routeObserver: routeObserver,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
         const SizedBox(height: 8),
         Text(
           archived

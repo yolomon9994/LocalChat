@@ -43,6 +43,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private var sink: EventChannel.EventSink? = null
     private var notifications: MessageNotifications? = null
     private var background: BackgroundConnection? = null
+    private var groups: GroupTransport? = null
     private var manager: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
     private val main = Handler(Looper.getMainLooper())
@@ -129,6 +130,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         }
         manager = getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
         initializeP2p()
+        groups = GroupTransport(this, flutterEngine.dartExecutor.binaryMessenger) { ensureAccess() }
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/events").setStreamHandler(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/transport").setMethodCallHandler { call, result ->
             try {
@@ -575,6 +577,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         if (registered) { unregisterReceiver(receiver); registered = false }
     }
     override fun onDestroy() {
+        groups?.dispose()
         background?.dispose()
         notifications?.dispose()
         backupResult?.error("CANCELLED", "Activity closed. Choose the file again.", null)

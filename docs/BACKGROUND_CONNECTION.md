@@ -1,5 +1,8 @@
 # Background connection protection
 
+This setting currently protects direct chats. Hosted groups should keep the host
+open; group background protection is a later refinement.
+
 On each phone, open **Settings → Background connection** and turn on **Keep
 connection active**. This choice is off on a fresh install and stays local to the
 phone, outside chat backups. Allow Android notifications when prompted. If the

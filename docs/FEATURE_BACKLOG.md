@@ -3,7 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Optional background connection protection
+## Current milestone: Hosted nearby group text chats
+
+- [x] Create/find/join one nearby Android-hosted group; up to eight members
+      including the host, subject to hardware capacity.
+- [x] Separate host–guest encrypted sessions and both fresh confirmations;
+      host approves members and reads/relays messages. The UI explains this trust.
+- [x] Signed author/group/epoch/roster/recipient envelopes, per-member receipts,
+      membership updates/removal, dedupe and isolated bad-link closure.
+- [x] Encrypted saved history, unread counts, lock-aware notification taps,
+      offline viewing, confirmed deletion and original-host rehosting.
+- [x] Schema 7 preserves direct chats; backups include validated groups with
+      version-2 payloads, version-1 import compatibility and safe merging.
+- [x] No old history for new members; no automatic reconnect/retry, host migration
+      or group background-service claim. Direct outbox/background mode stay intact.
+- [x] All 185 tests pass, clean final analysis and Android/browser builds;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical three-phone checks and user's commit; see [GROUP_CHATS.md](GROUP_CHATS.md).
+
+## Optional background connection protection: implemented and committed
 
 - [x] Opt-in Keep connection active switch, persisted locally on Android.
 - [x] Start only from foreground unlock after both fresh confirmations; protect
@@ -20,7 +38,8 @@ Work on one feature at a time; validate it before the user commits and starts th
       without a wire heartbeat or changing encrypted payloads.
 - [x] All 162 tests pass (147 existing + 15 new); final analysis/build results are in
       [VALIDATION.md](VALIDATION.md).
-- [ ] Physical phone/Doze/vendor testing and user's commit;
+- [x] User commits background connection protection (`24d52b5`).
+- [ ] Physical phone/Doze/vendor testing;
       see [background checklist](BACKGROUND_CONNECTION.md).
 
 ## Local message notifications and privacy: implemented and committed
@@ -175,9 +194,9 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 ## User-requested features
 
-- [ ] Group chats: create/invite, member list, verification, per-member delivery.
-      Start with a nearby host that must remain connected; plan group encryption
-      and membership changes before changing the current one-peer protocol.
+- [x] Hosted group text chats: create/find/join, member list, host–guest verification,
+      per-member receipts and saved history. Host must remain connected and is a
+      trusted relay; see [GROUP_CHATS.md](GROUP_CHATS.md). Hardware checks pending.
 - [x] Theme modes: light, dark, and follow system.
 - [x] Color palettes: mint, blue, purple, amber; persist the Android selection.
 - [x] Bottom navigation with separate Chats and Nearby screens; toolbar Settings.
@@ -209,6 +228,9 @@ Work on one feature at a time; validate it before the user commits and starts th
 
 ## Later refinements discussed
 
+- [ ] Group drafts, pin/archive/search, background protection and browser
+      simulation. Current refinements apply to direct chats.
+
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
 - [ ] Group delivery behavior when members leave or the host disconnects.
 - [x] Backup format versioning, validation and explicit identity-migration flow.
@@ -221,8 +243,8 @@ Work on one feature at a time; validate it before the user commits and starts th
    conversation management (committed).
 4. Encrypted backups and phone migration (committed).
 5. Offline outbox and retry (committed), connection troubleshooting/manual
-   reconnection and notifications (committed), background connection support (current).
-6. Group chat and attachments.
+   reconnection and notifications (committed), background connection support (committed).
+6. Hosted group text chat (current), then attachments and group refinements.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
+import 'group_models.dart';
 
 /// Version one fixes the KDF cost; files cannot request arbitrary work.
 const backupMaxPlaintext = 20 * 1024 * 1024;
@@ -18,13 +19,15 @@ class BackupData {
     required this.peers,
     required this.messages,
     required this.drafts,
+    this.groups = const [],
   });
   final String seed, owner, name;
   final int created;
   final bool demo;
   final List<Map<String, Object?>> peers, messages, drafts;
+  final List<Map<String, Object?>> groups;
   Map<String, Object?> toJson() => {
-    'version': 1,
+    'version': groups.isEmpty ? 1 : 2,
     'seed': seed,
     'owner': owner,
     'name': name,
@@ -33,11 +36,13 @@ class BackupData {
     'peers': peers,
     'messages': messages,
     'drafts': drafts,
+    if (groups.isNotEmpty) 'groups': groups,
   };
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || raw['version'] != 1) throw invalid;
+    if (raw is! Map || !{1, 2}.contains(raw['version'])) throw invalid;
+    if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
       if (value is! String ||
@@ -113,6 +118,17 @@ class BackupData {
       // The composer counts graphemes; one grapheme may contain many code points.
       string(d, 'text', 1024 * 1024);
     }
+    final groups = <Map<String, Object?>>[];
+    final groupIds = <String>{};
+    var groupMessages = 0;
+    if (raw['version'] == 2) {
+      for (final row in rows('groups', 500)) {
+        final group = await GroupHistory.parse(row);
+        groupMessages += group.messages.length;
+        if (!groupIds.add(group.id) || groupMessages > 100000) throw invalid;
+        groups.add(group.toJson());
+      }
+    }
     return BackupData(
       seed: seed,
       owner: owner,
@@ -122,6 +138,7 @@ class BackupData {
       peers: peers,
       messages: messages,
       drafts: drafts,
+      groups: groups,
     );
   }
 }
@@ -156,6 +173,50 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
       newMessages = <Map<String, Object?>>[],
       newDrafts = <Map<String, Object?>>[];
   var duplicates = 0, conflicts = 0, keptDrafts = 0;
+  final groupChanges = <Map<String, Object?>>[];
+  final oldGroups = {for (final g in current.groups) g['id']: g};
+  var newGroups = 0, newGroupMessages = 0;
+  for (final group in incoming.groups) {
+    final old = oldGroups[group['id']];
+    if (old == null) {
+      newGroups++;
+      newGroupMessages += (group['messages'] as List).length;
+      groupChanges.add(_restoredGroup(group));
+      continue;
+    }
+    if (old['host'] != group['host']) {
+      conflicts++;
+      continue;
+    }
+    String key(Map m) =>
+        '${(m['envelope'] as Map)['authorId']}/${(m['envelope'] as Map)['id']}';
+    final records = {for (final m in old['messages'] as List) key(m as Map): m};
+    final additions = <Object?>[];
+    for (final m in group['messages'] as List) {
+      final previous = records[key(m as Map)];
+      if (previous == null) {
+        additions.add(m);
+        newGroupMessages++;
+      } else if ((previous['envelope'] as Map)['signature'] ==
+          (m['envelope'] as Map)['signature']) {
+        duplicates++;
+      } else {
+        conflicts++;
+      }
+    }
+    if (additions.isNotEmpty) {
+      if (records.length + additions.length > 10000) {
+        throw const FormatException('Group history limit exceeded.');
+      }
+      groupChanges.add(
+        _restoredGroup({
+          ...old,
+          'messages': [...records.values, ...additions],
+          'updated': max(old['updated'] as int, group['updated'] as int),
+        }),
+      );
+    }
+  }
   for (final p in incoming.peers) {
     if (!peers.containsKey(p['id'])) newPeers.add(p);
   }
@@ -191,17 +252,32 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     peers: newPeers,
     messages: newMessages,
     drafts: newDrafts,
+    groups: groupChanges,
   );
   return BackupMerge(
     data,
-    newPeers.length,
-    newMessages.length,
+    newPeers.length + newGroups,
+    newMessages.length + newGroupMessages,
     duplicates,
     conflicts,
     newDrafts.length,
     keptDrafts,
   );
 }
+
+Map<String, Object?> _restoredGroup(Map<String, Object?> group) => {
+  ...group,
+  'messages': [
+    for (final raw in group['messages'] as List)
+      {
+        ...raw as Map,
+        'receipts': {
+          for (final e in (raw['receipts'] as Map).entries)
+            e.key: e.value == 'pending' ? 'unconfirmed' : e.value,
+        },
+      },
+  ],
+};
 
 typedef BackupKeyDeriver = Future<Uint8List> Function(String, Uint8List);
 

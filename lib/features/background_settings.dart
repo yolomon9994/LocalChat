@@ -22,7 +22,7 @@ class BackgroundSettings extends StatelessWidget {
             subtitle: Text(
               b.isDemo
                   ? 'Simulated mode only; no background browser connection.'
-                  : 'Keep the current verified connection while using another app or turning the screen off. Uses additional battery.',
+                  : 'Keep the current verified direct chat while using another app or turning the screen off. Uses additional battery. Hosted groups are not protected.',
             ),
             value: b.enabled,
             onChanged: b.initialized && !b.busy

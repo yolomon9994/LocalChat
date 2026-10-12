@@ -3,10 +3,20 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
+import 'package:local_chat/core/group_models.dart';
 import 'package:local_chat/services/chat_controller.dart';
 import 'package:local_chat/services/transport.dart';
 
 class MemoryStore extends LocalStore {
+  final groupRecords = <String, GroupHistory>{};
+  @override
+  Future<List<GroupHistory>> groupHistories() async =>
+      groupRecords.values.toList();
+  @override
+  Future<void> saveGroupHistory(GroupHistory group) async =>
+      groupRecords[group.id] = group;
+  @override
+  Future<void> deleteGroupHistory(String id) async => groupRecords.remove(id);
   final saved = <String, ChatMessage>{};
   final people = <String, Conversation>{};
   final draftText = <String, String>{};
@@ -103,6 +113,7 @@ class MemoryStore extends LocalStore {
 
   @override
   Future<void> clearHistory() async {
+    groupRecords.clear();
     saved.clear();
     people.clear();
     draftText.clear();

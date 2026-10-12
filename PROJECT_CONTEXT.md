@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-11. The workspace is authoritative; read README.md,
+Updated: 2026-10-12. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -8,7 +8,7 @@ docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes
 LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first and text only.
-Images and videos are planned later. Bluetooth, group chat, relaying, iOS and
+Images and videos are planned later. Bluetooth, multi-hop relaying, iOS and
 automatic reconnect are also future work. Local notifications and optional
 background protection of the current running verified session are implemented;
 Doze/vendor restrictions still apply and hardware reliability is unvalidated.
@@ -20,10 +20,62 @@ Chats list improvements were committed as `c233159`, and local search as
 `a2c7aa3`; drafts were committed as `9e90550`, and conversation management as
 `8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
 Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
-Notifications were committed as `9bb6c60`. The current milestone is optional
-background connection protection with battery/connection controls.
+Notifications were committed as `9bb6c60`, and background protection as `24d52b5`.
+The current milestone is hosted nearby group text chats.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Hosted group milestone — ready for phone testing, 2026-10-12
+
+All work remains local and uncommitted. The user resumed after the saved pause.
+Do not stage, commit or push; the user handles Git after phone testing.
+
+Implemented:
+- `GroupTransport.kt` owns dedicated Android group channels, Wi-Fi Direct owner
+  creation, `_localchatg._tcp` host discovery, port 45874 and up to seven guest
+  sockets. Direct and group modes are mutually exclusive. Native cleanup has
+  epoch guards, per-link writer locks and bounded partial reads/writes.
+- `GroupController` serializes per-link `SecureSession` crypto, both fresh code
+  confirmations, host admission, rosters/removal, signed authors/recipient sets,
+  text relay, per-member receipts, dedupe and unconfirmed delivery. The host is a
+  trusted decrypt/store/relay endpoint; clients trust its admission of others.
+- `group_screen.dart` provides create/find/join, code cards, members/removal,
+  saved history, originating text and confirmed deletion. Home has a Group chats
+  icon; saved group cards appear in Chats. Lock and notification routing cover
+  groups. Normal notification preferences apply; previews retain existing gates.
+- `group_models.dart` validates signatures bound to group/host/epoch/roster/
+  author/name/time/text/exact targets. New members receive no old messages.
+- SQLite schema 7 encrypts entire group records; random group IDs are plaintext
+  keys. Backups add version-2 group payloads with v1 import support; envelope/KDF
+  stay v1. Imports merge history safely, never connect/send and make pending
+  receipts unconfirmed. Identity migration requires no destination groups and
+  refreshes group identity state. Existing direct history/features remain intact.
+- Limits: eight members including host (hardware may allow fewer), 4096-byte
+  text, 10,000 saved messages/group, 90-second joins and 30-second receipts.
+  Original host can explicitly rehost with a fresh epoch/codes. No group outbox,
+  automatic retry/reconnect, host migration or background service. Group drafts,
+  pin/archive/search and browser simulation are backlog refinements.
+- Docs updated: README, SECURITY, BACKUPS, BACKGROUND_CONNECTION, DEVICE_TESTING,
+  FEATURE_BACKLOG; full controls/trust/three-phone checklist in GROUP_CHATS.md.
+
+Verified:
+- Full `flutter test` on 2026-10-11: **185 passed**, exit 0, after integration and fixes.
+  Includes 162 existing tests plus 23 new group checks: 13 protocol/controller,
+  four backup, three widget, two SQLite encryption/migration and one native-channel.
+- Final `flutter analyze` on 2026-10-12: no issues.
+- Final Android arm64 debug APK build on 2026-10-12 passed, including the native
+  channel-epoch guard and final Dart/UI changes. Artifact:
+  `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Final `flutter build web --no-wasm-dry-run` on 2026-10-12 passed; the existing
+  optional Cupertino font warning remains (the UI uses Material icons).
+- `git -c core.safecrlf=false diff --check`: clean.
+- Widget fixtures use real async scheduling for cryptography and deletion;
+  mixing Flutter's fake clock with real controller queues caused fixture waits.
+  Corrected fixtures pass in the full suite. Temporary debug prints were removed.
+
+Next: install the updated APK on three Android phones and follow
+`docs/GROUP_CHATS.md`. Hardware discovery/pairing/capacity, Doze/vendor behavior
+and battery checks remain pending. User stages, commits and pushes after testing.
 
 ## Background connection milestone
 
@@ -55,7 +107,7 @@ time; the user will stage, commit and push it themselves after testing.
 - All 162 tests pass (147 existing + 15 new lifecycle/channel/widget checks).
   Analysis is clean; Android and browser builds pass. Final results and hardware
   checklist are in `docs/VALIDATION.md` and `docs/BACKGROUND_CONNECTION.md`.
-  This milestone remains uncommitted for the user; physical checks are pending.
+  User committed this as `24d52b5`; physical checks are pending.
 
 ## Local notification milestone
 

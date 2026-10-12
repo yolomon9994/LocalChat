@@ -1,5 +1,33 @@
 # Validation for v0.1.0
 
+## Hosted nearby group text chats — final checks 2026-10-12
+
+- Full `flutter test` on 2026-10-11: **185 passed** (162 existing + 23 group
+  checks), exit 0.
+- Group checks: 13 protocol/controller, four backup, three widget, two SQLite
+  encryption/migration and one native-channel contract test.
+- Final `flutter analyze` on 2026-10-12: no issues.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful final APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`,
+  including the latest native channel-epoch guard and Dart/UI changes.
+- `flutter build web --no-wasm-dry-run`: successful browser build; existing
+  optional Cupertino font warning remains (the UI uses Material icons).
+- `git -c core.safecrlf=false diff --check`: clean.
+- Changes remain unstaged and uncommitted; the user handles Git after phone tests.
+
+Tests cover both confirmations and code equality, real encrypted three-phone
+relay, signed authors, impersonation/modification/session replay rejection,
+membership races/removal/cap, late joins without old history, duplicate IDs,
+locked admission/origination, receiving/unread gates, individual missing receipts,
+host loss/rehosting, persistence failure before relay/receipt, stop despite storage
+failure, validated encrypted backups/merges/identity migration, schema upgrades,
+encrypted group records, small-screen/enlarged-text controls, confirmed deletion
+and notification taps waiting for PIN. Widget fixtures explicitly use real async
+scheduling where cryptography/controller queues require it.
+
+Physical discovery, pairing, guest capacity, background behavior and battery use
+are unvalidated. Follow [GROUP_CHATS.md](GROUP_CHATS.md) on three Android phones.
+
 ## Optional background connection protection — 2026-10-11
 
 Checked with Flutter 3.38.7 / Dart 3.10.7, Java 21 and Android SDK 36 on Windows.

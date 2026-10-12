@@ -10,6 +10,7 @@ import 'services/transport.dart';
 import 'features/home_screen.dart';
 import 'features/app_lock_screen.dart';
 import 'features/chat_screen.dart';
+import 'features/group_screen.dart';
 import 'services/app_lock_controller.dart';
 import 'services/appearance_controller.dart';
 
@@ -103,6 +104,32 @@ class _LocalChatAppState extends State<LocalChatApp>
         final navigator = _navigator.currentState;
         if (navigator == null) return;
         final token = controller.accessRevision;
+        if (peer.startsWith('group:')) {
+          final id = peer.substring(6);
+          final found = controller.groups.histories.where((g) => g.id == id);
+          controller.notifications.consumeTap(peer);
+          if (found.isEmpty) {
+            ScaffoldMessenger.of(navigator.context).showSnackBar(
+              const SnackBar(
+                content: Text('This group history is no longer available.'),
+              ),
+            );
+            return;
+          }
+          navigator.popUntil((route) => route.isFirst);
+          unawaited(
+            navigator.push(
+              MaterialPageRoute<void>(
+                builder: (_) => GroupChatScreen(
+                  controller: controller,
+                  id: id,
+                  routeObserver: _routes,
+                ),
+              ),
+            ),
+          );
+          return;
+        }
         final matches = controller.conversations.where((c) => c.id == peer);
         if (matches.isEmpty) {
           controller.notifications.consumeTap(peer);

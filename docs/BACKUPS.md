@@ -16,6 +16,11 @@ archive choices, and the private messaging identity. Anyone who has both the
 file and password can read the archive and use that identity. The archive does
 not contain the destination's history key, app PIN, biometric or theme settings.
 The source display name is shown in the preview; the destination name is kept.
+Hosted group history, signed authors, receipts and read state are included too.
+Archives containing groups use payload version 2; current builds also import
+version 1, while older builds reject group archives. Group sessions/keys are never
+restored, and imported pending receipts become unconfirmed. Import ends the current
+group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
 Export does not delete or change source history. Failed draft saves/loads must
 be resolved before export so the backup does not silently omit unsaved edits.
 
@@ -27,7 +32,7 @@ be resolved before export so the backup does not silently omit unsaved edits.
 4. Choose the identity option, then press the final import button:
    - **Import history** keeps this phone's current messaging identity.
    - **Transfer messaging identity** is available only when this phone has no
-     saved chats, messages or drafts. It transfers the source identity and stops
+     saved direct/group chats, messages or drafts. It transfers the source identity and stops
      nearby advertising/connections. Stop using LocalChat on the old phone after
      moving; do not run both phones with the same identity. Open Nearby and tap
      Go nearby on the new phone. Existing peers recognize its identity, but both

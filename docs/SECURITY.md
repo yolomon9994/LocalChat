@@ -24,7 +24,49 @@ There is no Double Ratchet, post-compromise recovery, offline prekey messaging o
 
 ## Frames and payloads
 
-TCP framing is a 4-byte unsigned big-endian byte count followed by UTF-8 JSON, maximum 65,536 bytes. Invalid sizes, malformed UTF-8 or partial frames taking over 15 seconds cause closure. The idle first byte can wait indefinitely. There is one accepted socket and one conversation per session, and no automatic forwarding.
+Direct chats use one socket. Hosted groups use a trusted host and separate
+host–guest sockets, ephemeral keys, counters and both fresh confirmations. Guests
+verify the host and trust its admission of other members. The host decrypts,
+stores and forwards text; group encryption does not conceal text from the host.
+Names, titles and pairing prompts remain untrusted. See the detailed
+[hosted group trust model and wire design](GROUP_CHATS.md).
+
+Group types `groupVerified`, `groupRoster`, `groupText`, `groupReceipt` and
+`groupRejected` travel inside existing sealed frames. Authors sign ordered UTF-8
+JSON of `["LocalChat/group-text/1", groupId, hostPublicBase64, roomEpoch,
+membershipRevision, messageId, authorPublicBase64, authorName, timestamp, text,
+sortedRecipientIds]`. Receivers check signature, fields, current group/epoch,
+host-approved author and exact recipients. The host also binds submissions to
+their verified sending link. Clients pin the actual verified host key. A fresh
+random room epoch and advancing roster revision prevent reuse after rehosting or
+membership changes; stale recipient submissions get an encrypted rejection.
+Invalid/unverified/replayed/forged frames close the offending link. Identical
+signed author/message IDs do not persist twice while receiver history is retained.
+
+Persistence precedes receipts/forwarding. Guest receipts are authenticated at the
+host, then reported through it. Receipts do not prove a person read the text;
+the trusted host can withhold text, lie about receipts/rosters or admit a lookalike
+identity despite author signatures. Pending attempts become unconfirmed after
+30 seconds or disconnect/restart. No automatic group retry/outbox operates.
+Originating sends/admission require foreground unlock; receiving/relay on already
+admitted links may continue while the process runs. Groups have no background
+service in this version. Removing a member closes its socket and updates the
+roster; it cannot erase old copies or prevent other members sharing them.
+
+Native limits: seven guest sockets, eight roster members, 65,536-byte frames,
+15-second partial-read/write deadlines and 90-second pending joins. New members
+receive no old history. Host closure ends the room; explicit rehosting creates a
+new epoch and requires fresh confirmations. No host migration, auto-connect or
+session key restoration exists. Schema 7 encrypts whole group records with the
+local history key and AAD `LocalChat/group-history/1/<groupId>`; only random IDs
+remain plaintext. Author signatures are checked on receiving/backup import
+before an authenticated local write; local reads rely on AEAD protection.
+Each saved group is bounded to 10,000 messages. Version-2 backup payloads add
+bounded validated groups and convert imported pending receipts to unconfirmed.
+New builds retain v1 import and the v1 encrypted envelope/KDF; older builds reject
+group payloads. Import ends group links, never sends/joins and preserves conflicts.
+
+TCP framing is a 4-byte unsigned big-endian byte count followed by UTF-8 JSON, maximum 65,536 bytes. Invalid sizes, malformed UTF-8 or partial frames taking over 15 seconds cause closure. The idle first byte can wait indefinitely. Direct sessions have one socket with no forwarding; the hosted group exception is described above.
 
 Sealed frame fields: `v`, `kind=sealed`, `session`, `seq`, `nonce`, `body`, `tag`. XChaCha20-Poly1305 uses a random 24-byte nonce. The authenticated additional data is UTF-8 JSON of `["LocalChat/frame/1", sessionHashHex, sequence]`. Receive counters advance only after successful authentication and parsing. Sequences must be contiguous; duplicates, reordering, wrong sessions, invalid lengths and authentication failures close the connection. A serialized controller queue prevents concurrent counter/writer races.
 

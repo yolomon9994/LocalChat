@@ -174,7 +174,8 @@ class _BackupScreenState extends State<BackupScreen>
         _canMove =
             current.peers.isEmpty &&
             current.messages.isEmpty &&
-            current.drafts.isEmpty;
+            current.drafts.isEmpty &&
+            current.groups.isEmpty;
       });
     } catch (e) {
       if (_valid(generation, access)) {
@@ -243,7 +244,7 @@ class _BackupScreenState extends State<BackupScreen>
           children: [
             const Text(
               'Save an encrypted .lcbackup file and transfer it offline to another phone. '
-              'The file includes messages, drafts, pin/archive choices and your messaging identity. '
+              'The file includes direct and group history, drafts, pin/archive choices and your messaging identity. '
               'Anyone with the file and password can read it and use that identity.',
             ),
             const SizedBox(height: 12),
@@ -326,7 +327,8 @@ class _BackupScreenState extends State<BackupScreen>
                 'From ${data.name} • ${DateTime.fromMillisecondsSinceEpoch(data.created).toLocal()}',
               ),
               Text(
-                '${data.peers.length} chats • ${data.messages.length} messages • ${data.drafts.length} drafts',
+                '${data.peers.length} direct chats • ${data.groups.length} groups • '
+                '${data.messages.length + data.groups.fold<int>(0, (sum, g) => sum + (g['messages'] as List).length)} messages • ${data.drafts.length} drafts',
               ),
               const SizedBox(height: 12),
               Text(

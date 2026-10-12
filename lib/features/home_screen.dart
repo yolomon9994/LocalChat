@@ -11,6 +11,7 @@ import 'nearby_tab.dart';
 import 'settings_screen.dart';
 import 'archived_chats_screen.dart';
 import 'connection_help.dart';
+import 'group_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -72,6 +73,19 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('LocalChat'),
           actions: [
+            if (c.initialized)
+              IconButton(
+                tooltip: 'Group chats',
+                icon: const Icon(Icons.groups_outlined),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => GroupHubScreen(
+                      controller: c,
+                      routeObserver: widget.routeObserver,
+                    ),
+                  ),
+                ),
+              ),
             if (_selectedTab == 0 && c.initialized)
               IconButton(
                 tooltip: 'Search chats',
@@ -155,6 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 ChatsTab(
                                   controller: c,
+                                  routeObserver: widget.routeObserver,
                                   onFindDevices: () =>
                                       setState(() => _selectedTab = 1),
                                   onOpenConnected: _openConnected,

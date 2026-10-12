@@ -12,6 +12,8 @@ import 'draft_controller.dart';
 import 'nearby_support.dart';
 import 'chat_notifications.dart';
 import 'background_connection.dart';
+import 'group_controller.dart';
+import 'group_transport.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -23,6 +25,7 @@ class ChatController extends ChangeNotifier {
     NearbyTools? nearbyTools,
     ChatNotifications? notifications,
     BackgroundConnection? background,
+    GroupTransport? groupTransport,
   }) : nearbyTools =
            nearbyTools ??
            (transport is WifiDirectTransport
@@ -43,7 +46,31 @@ class ChatController extends ChangeNotifier {
                  ? const AndroidBackgroundPlatform()
                  : MemoryBackgroundPlatform(),
              isDemo: isDemo,
-           );
+           ),
+       _groupTransport =
+           groupTransport ??
+           (transport is WifiDirectTransport
+               ? WifiGroupTransport()
+               : UnavailableGroupTransport());
+  final GroupTransport _groupTransport;
+  late final groups = GroupController(
+    _groupTransport,
+    store,
+    prepare: _prepareGroup,
+    notifications: notifications,
+    canAct: () => initialized && !_disposed && _appAccessible && _appForeground,
+  );
+  Future<bool> _prepareGroup() => _nearbyAction(() async {
+    await _disconnect();
+    await transport.stop();
+    // Reuse the established Android permission flow before changing radio mode.
+    await transport.start(store.name);
+    await transport.stop();
+    started = false;
+    scanning = false;
+    peers = [];
+    state = 'Group mode';
+  }, allowPermissionRequest: true);
   final ChatNotifications notifications;
   final BackgroundConnection background;
   int? _transportGeneration;
@@ -169,6 +196,7 @@ class ChatController extends ChangeNotifier {
     _appAccessible = accessible;
     notifications.setAccessible(_appAccessible && _appForeground);
     accessRevision++;
+    unawaited(groups.accessChanged());
     _readVisible();
     if (accessible) {
       _requestBackground();
@@ -199,6 +227,7 @@ class ChatController extends ChangeNotifier {
     bool moveIdentity = false,
     required int accessToken,
   }) async {
+    await groups.stop();
     late BackupMerge result;
     Object? failure;
     await _run(() async {
@@ -219,6 +248,7 @@ class ChatController extends ChangeNotifier {
           selectedName = '';
         }
         result = await drafts.importBackup(data, moveIdentity: moveIdentity);
+        await groups.initialize();
         conversations = await store.conversations();
         if (selectedPeer != null) {
           messages = await store.messages(selectedPeer!);
@@ -244,6 +274,7 @@ class ChatController extends ChangeNotifier {
   void setAppForeground(bool foreground) {
     if (_appForeground == foreground) return;
     _appForeground = foreground;
+    unawaited(groups.accessChanged());
     notifications.setAccessible(_appAccessible && _appForeground);
     _readVisible();
     // Refresh relative activity labels after time spent outside the app.
@@ -287,6 +318,8 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     try {
       await store.open();
+      await groups.initialize();
+      groups.addListener(_groupChanged);
       conversations = await store.conversations();
       historyRevision++;
       _subscription = transport.events.listen(
@@ -320,6 +353,7 @@ class ChatController extends ChangeNotifier {
         if (!_appAccessible || !_appForeground || _disposed) return;
         nearbyStatus = status;
         if (status.issue != null) {
+          unawaited(groups.stop());
           if (_session != null || state == 'Connecting') await _disconnect();
           if (status.issue == ConnectionIssue.wifiOff) {
             await transport.stop();
@@ -411,7 +445,12 @@ class ChatController extends ChangeNotifier {
     return success;
   }
 
-  Future<bool> start() => _nearbyAction(
+  Future<bool> start() async {
+    await groups.stop();
+    return _startNearby();
+  }
+
+  Future<bool> _startNearby() => _nearbyAction(
     () async {
       await transport.start(store.name);
       nearbyStatus = await nearbyTools.check();
@@ -432,7 +471,12 @@ class ChatController extends ChangeNotifier {
     }, scanningAction: true);
   }
 
-  Future<bool> connect(Peer peer) => _nearbyAction(() async {
+  Future<bool> connect(Peer peer) async {
+    await groups.stop();
+    return _connectNearby(peer);
+  }
+
+  Future<bool> _connectNearby(Peer peer) => _nearbyAction(() async {
     if (_session != null || state == 'Connecting') await _disconnect();
     final previousPeer = selectedPeer, previousName = selectedName;
     lastNearbyPeer = peer;
@@ -1071,7 +1115,12 @@ class ChatController extends ChangeNotifier {
     await _refresh();
     notifyListeners();
   });
-  Future<void> rename(String name) => _run(() async {
+  Future<void> rename(String name) async {
+    await groups.stop();
+    await _rename(name);
+  }
+
+  Future<void> _rename(String name) => _run(() async {
     error = null;
     name = name.trim();
     if (name.isEmpty || name.length > 32) {
@@ -1085,8 +1134,14 @@ class ChatController extends ChangeNotifier {
     await store.rename(name);
     notifyListeners();
   });
-  Future<void> clearHistory() => _run(() async {
+  Future<void> clearHistory() async {
+    await groups.stop();
+    await _clearHistory();
+  }
+
+  Future<void> _clearHistory() => _run(() async {
     await drafts.clearHistory();
+    await groups.refreshHistory();
     unawaited(notifications.cancel(null));
     for (final timer in _ackTimers.values) {
       timer.cancel();
@@ -1203,6 +1258,8 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    groups.removeListener(_groupChanged);
+    groups.dispose();
     _disposed = true;
     drafts.dispose();
     notifications.dispose();
@@ -1214,5 +1271,9 @@ class ChatController extends ChangeNotifier {
     unawaited(_subscription?.cancel());
     unawaited(transport.stop());
     super.dispose();
+  }
+
+  void _groupChanged() {
+    if (!_disposed) notifyListeners();
   }
 }

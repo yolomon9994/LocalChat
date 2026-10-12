@@ -1,8 +1,12 @@
 # LocalChat
 
-Android-first Flutter app for nearby, encrypted, one-to-one text conversations over **Wi-Fi Direct**. No server, account, router, mobile data, Firebase, or cloud database. Wi-Fi radio must be enabled.
+Android-first Flutter app for nearby encrypted direct chats and hosted text groups over **Wi-Fi Direct**. No server, account, router, mobile data, Firebase, or cloud database. Wi-Fi radio must be enabled.
 
 ## Version 0.1
+
+- Hosted nearby text groups: create/find/join, verify each host–guest connection,
+  signed authors, member lists/removal, individual receipts and encrypted saved history.
+  The host reads and relays messages; it must remain connected. No host migration.
 
 - Advertise a display name and discover nearby LocalChat phones using Wi-Fi Direct DNS-SD.
 - Connect through Android's Wi-Fi Direct pairing flow and exchange framed TCP messages.
@@ -49,8 +53,9 @@ See [offline outbox and retry](docs/OUTBOX.md) for queued delivery and phone che
 See [connection recovery](docs/CONNECTION_RECOVERY.md) for settings, scans and reconnect.
 See [notification privacy and testing](docs/NOTIFICATIONS.md) for permissions and taps.
 See [background connection testing](docs/BACKGROUND_CONNECTION.md) for controls and battery limits.
+See [hosted group chats](docs/GROUP_CHATS.md) for the trust model, joining and three-phone checks.
 
-Bluetooth, media, group chat, relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running session; app closure/process termination ends it, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
+Bluetooth, media, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running direct-chat session; groups should keep the host open. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 

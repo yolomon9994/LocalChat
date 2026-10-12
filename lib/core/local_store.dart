@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 import 'models.dart';
 import 'chat_backup.dart';
+import 'group_models.dart';
 
 class LocalStore {
   LocalStore({DateTime Function()? now, FlutterSecureStorage? vault})
@@ -39,7 +40,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -55,6 +56,7 @@ class LocalStore {
         await _addManagementColumns(db);
         await db.execute('CREATE TABLE backup_receipt (id TEXT PRIMARY KEY)');
         await _createOutboxIndex(db);
+        await _createGroups(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -72,6 +74,7 @@ class LocalStore {
           );
         }
         if (oldVersion < 6) await _createOutboxIndex(db);
+        if (oldVersion < 7) await _createGroups(db);
       },
     );
     await _recoverIdentity();
@@ -155,6 +158,7 @@ class LocalStore {
           .toList(),
       messages: result,
       drafts: draftResult,
+      groups: (await _groupHistories(db)).map((g) => g.toJson()).toList(),
     );
   }
 
@@ -171,7 +175,8 @@ class LocalStore {
       final current = await exportBackup();
       if (current.peers.isNotEmpty ||
           current.messages.isNotEmpty ||
-          current.drafts.isNotEmpty) {
+          current.drafts.isNotEmpty ||
+          current.groups.isNotEmpty) {
         throw const FormatException(
           'Identity transfer requires an empty destination phone.',
         );
@@ -192,12 +197,16 @@ class LocalStore {
         if (moveIdentity &&
             (current.peers.isNotEmpty ||
                 current.messages.isNotEmpty ||
-                current.drafts.isNotEmpty)) {
+                current.drafts.isNotEmpty ||
+                current.groups.isNotEmpty)) {
           throw const FormatException(
             'Identity transfer requires an empty destination phone.',
           );
         }
         final plan = planBackup(current, data);
+        for (final g in plan.data.groups) {
+          await _writeGroup(txn, await GroupHistory.parse(g));
+        }
         for (final p in plan.data.peers) {
           await txn.insert('peers', {
             'id': p['id'],
@@ -272,6 +281,52 @@ class LocalStore {
       'CREATE INDEX message_peer_unread ON messages(peer, outgoing, is_read)',
     );
   }
+
+  static Future<void> _createGroups(Database db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS group_history (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
+  );
+
+  Future<List<GroupHistory>> _groupHistories(DatabaseExecutor db) async {
+    final result = <GroupHistory>[];
+    for (final row in await db.query('group_history')) {
+      final bytes = base64Decode(row['body'] as String);
+      final clear = await _cipher.decrypt(
+        SecretBox(
+          bytes.sublist(40),
+          nonce: bytes.sublist(0, 24),
+          mac: Mac(bytes.sublist(24, 40)),
+        ),
+        secretKey: _historyKey,
+        aad: utf8.encode('LocalChat/group-history/1/${row['id']}'),
+      );
+      // Received/imported authors were checked before this authenticated local write.
+      result.add(
+        await GroupHistory.parse(
+          jsonDecode(utf8.decode(clear)) as Map,
+          verifySignatures: false,
+        ),
+      );
+    }
+    return result..sort((a, b) => b.updated.compareTo(a.updated));
+  }
+
+  Future<List<GroupHistory>> groupHistories() => _groupHistories(_database);
+  Future<void> _writeGroup(DatabaseExecutor db, GroupHistory group) async {
+    final box = await _cipher.encrypt(
+      utf8.encode(jsonEncode(group.toJson())),
+      secretKey: _historyKey,
+      aad: utf8.encode('LocalChat/group-history/1/${group.id}'),
+    );
+    await db.insert('group_history', {
+      'id': group.id,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> saveGroupHistory(GroupHistory group) =>
+      _writeGroup(_database, group);
+  Future<void> deleteGroupHistory(String id) =>
+      _database.delete('group_history', where: 'id = ?', whereArgs: [id]);
 
   static Future<void> _createOutboxIndex(Database db) => db.execute(
     'CREATE INDEX IF NOT EXISTS message_outbox ON messages(peer, outgoing, status)',
@@ -646,6 +701,7 @@ class LocalStore {
 
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
+      await txn.delete('group_history');
       await txn.delete('messages');
       await txn.delete('drafts');
       await txn.delete('peers');

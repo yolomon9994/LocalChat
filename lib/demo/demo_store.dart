@@ -3,6 +3,7 @@ import 'package:cryptography/cryptography.dart';
 import '../core/chat_backup.dart';
 import '../core/local_store.dart';
 import '../core/models.dart';
+import '../core/group_models.dart';
 
 /// Preview-only state. Never opens SQLite or platform secure storage.
 class DemoStore extends LocalStore {
@@ -10,6 +11,15 @@ class DemoStore extends LocalStore {
   final _messages = <(String, String, bool), ChatMessage>{};
   final _unread = <(String, String, bool)>{};
   final _drafts = <String, String>{};
+  final _groups = <String, GroupHistory>{};
+  @override
+  Future<List<GroupHistory>> groupHistories() async =>
+      _groups.values.toList()..sort((a, b) => b.updated.compareTo(a.updated));
+  @override
+  Future<void> saveGroupHistory(GroupHistory group) async =>
+      _groups[group.id] = group;
+  @override
+  Future<void> deleteGroupHistory(String id) async => _groups.remove(id);
 
   @override
   Future<BackupData> exportBackup() async {
@@ -23,6 +33,7 @@ class DemoStore extends LocalStore {
       name: name,
       created: DateTime.now().millisecondsSinceEpoch,
       demo: true,
+      groups: _groups.values.map((g) => g.toJson()).toList(),
       peers: _people.values
           .map(
             (p) => <String, Object?>{
@@ -63,12 +74,16 @@ class DemoStore extends LocalStore {
     if (moveIdentity &&
         (current.peers.isNotEmpty ||
             current.messages.isNotEmpty ||
-            current.drafts.isNotEmpty)) {
+            current.drafts.isNotEmpty ||
+            current.groups.isNotEmpty)) {
       throw const FormatException(
         'Identity transfer requires an empty destination phone.',
       );
     }
     final plan = planBackup(current, data);
+    final groupPlan = [
+      for (final g in plan.data.groups) await GroupHistory.parse(g),
+    ];
     final pair = moveIdentity
         ? await Ed25519().newKeyPairFromSeed(base64Decode(data.seed))
         : identity;
@@ -115,6 +130,9 @@ class DemoStore extends LocalStore {
       _drafts[d['peer'] as String] = d['text'] as String;
     }
     identity = pair;
+    for (final g in groupPlan) {
+      _groups[g.id] = g;
+    }
     return plan;
   }
 
@@ -346,6 +364,7 @@ class DemoStore extends LocalStore {
 
   @override
   Future<void> clearHistory() async {
+    _groups.clear();
     _people.clear();
     _messages.clear();
     _unread.clear();
