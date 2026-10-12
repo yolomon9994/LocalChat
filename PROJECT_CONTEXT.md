@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-12. The workspace is authoritative; read README.md,
+Updated: 2026-10-13. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -24,13 +24,40 @@ Notifications were committed as `9bb6c60`, and background protection as `24d52b5
 Hosted group chats were committed as `819ac32`, and images as `aea566b`.
 Direct files were committed by the user as `3ec26b5`.
 Group images were committed by the user as `318b304`.
-The current milestone is file sharing in hosted groups.
+Group files were committed by the user as `5a92e71`.
+The current milestone is saved group drafts.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Group-draft milestone - implemented, 2026-10-12
+
+Baseline: `5a92e71`. Changes are saved locally, unstaged and uncommitted.
+The user handles Git. See docs/GROUP_DRAFTS.md and docs/VALIDATION.md.
+
+- The existing DraftController now distinguishes direct/group targets and shares
+  one queue across ChatController and GroupController for writes, backups,
+  deletion and atomic local acceptance. Standalone group controllers own their
+  draft controller; the app injects its existing instance.
+- Schema 10 adds encrypted group_drafts with separate authenticated domain
+  UTF-8 JSON ["LocalChat/group-draft/1", groupId]. Existing tables/keys remain.
+- Group screens load/restore exact drafts, allow offline editing, disable on
+  unreadable loads and expose Retry draft on failures. Text sends clear captured
+  drafts atomically; new edits, failed sends and attachment flows preserve text.
+- Payload v7 includes groupDrafts with validated group references and 1 MiB text
+  bounds, while retaining v1-v6 imports. Destination drafts win; conflicting
+  hosts cannot acquire imported drafts. Mixed imports/deletion/send cleanup roll
+  back on failure. Normal history-only and empty-phone identity imports work.
+- Final regression on 2026-10-13: **303 passed**, exit 0
+  (`.dart_tool/group-draft-final-tests.log`), using two-minute test timeouts for
+  the existing SQLite search stress check. All 10 group-screen checks pass,
+  analysis is clean and arm64 Android/browser builds pass. No new packages,
+  permissions or native changes. The user reviews/tests/commits next.
+- Browser demo remains memory only; no group outbox or automatic sends. Group
+  pin/archive and search are next; physical checks remain pending.
+
 ## Group-file milestone — implemented and validated, 2026-10-12
 
-Baseline: `318b304`. Changes are saved locally, unstaged and uncommitted.
+Baseline: `318b304`. The user committed this milestone as `5a92e71`.
 Do not stage/commit/push for the user. No packages, permissions or native changes.
 
 - `group_attachments.dart` now owns shared image/file room binding, per-link
@@ -222,8 +249,9 @@ Implemented:
 - Limits: eight members including host (hardware may allow fewer), 4096-byte
   text, 10,000 saved messages/group, 90-second joins and 30-second receipts.
   Original host can explicitly rehost with a fresh epoch/codes. No group outbox,
-  automatic retry/reconnect, host migration or background service. Group drafts,
-  pin/archive/search and browser simulation are backlog refinements.
+  automatic retry/reconnect, host migration or background service. Saved group
+  drafts are now implemented separately; pin/archive/search and browser
+  simulation remain backlog refinements.
 - Docs updated: README, SECURITY, BACKUPS, BACKGROUND_CONNECTION, DEVICE_TESTING,
   FEATURE_BACKLOG; full controls/trust/three-phone checklist in GROUP_CHATS.md.
 

@@ -53,6 +53,163 @@ void main() {
         outgoing: outgoing,
         status: 'sending',
       );
+  Future<GroupHistory> draftGroup() async => GroupHistory(
+    id: randomId(),
+    title: 'Draft room',
+    host: base64Encode((await store.identity.extractPublicKey()).bytes),
+    messages: [],
+    updated: 1,
+  );
+
+  test(
+    'schema 9 upgrades without changing existing text, direct drafts or group history',
+    () async {
+      final group = await draftGroup();
+      await store.saveGroupHistory(group);
+      await store.saveDraft('alice', 'Direct draft');
+      await store.saveMessage(message());
+      await store.close();
+      final old = await openDatabase(databasePath);
+      await old.execute('DROP TABLE group_drafts');
+      await old.execute('PRAGMA user_version = 9');
+      await old.close();
+      store = LocalStore();
+      await store.open();
+      expect(await (await openDatabase(databasePath)).getVersion(), 10);
+      expect((await store.messages('alice')).single.text, message().text);
+      expect(await store.draft('alice'), 'Direct draft');
+      expect((await store.groupHistories()).single.id, group.id);
+      await store.saveGroupDraft(group.id, 'New group draft');
+      expect(await store.groupDraft(group.id), 'New group draft');
+    },
+  );
+
+  test(
+    'group drafts encrypt exact text, authenticate room binding, reopen and merge',
+    () async {
+      final group = await draftGroup(), other = await draftGroup();
+      await store.saveGroupHistory(group);
+      await store.saveGroupHistory(other);
+      const text = '  private draft سلام 👋\nline two  ';
+      await store.saveGroupDraft(group.id, text);
+      final db = await openDatabase(databasePath);
+      final body = (await db.query('group_drafts')).single['body'];
+      expect(
+        utf8.decode(base64Decode(body as String), allowMalformed: true),
+        isNot(contains('private draft')),
+      );
+      await db.insert('group_drafts', {'id': other.id, 'body': body});
+      await expectLater(
+        store.groupDraft(other.id),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+      await db.delete('group_drafts', where: 'id = ?', whereArgs: [other.id]);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect(await store.groupDraft(group.id), text);
+      final backup = await store.exportBackup();
+      expect(backup.toJson()['version'], 7);
+      await store.clearHistory();
+      expect(
+        await (await openDatabase(databasePath)).query('group_drafts'),
+        isEmpty,
+      );
+      expect((await store.importBackup(backup)).newDrafts, 1);
+      expect(await store.groupDraft(group.id), text);
+      expect((await store.importBackup(backup)).newDrafts, 0);
+      await store.deleteGroupHistory(group.id);
+      expect(await store.groupDraft(group.id), '');
+      await expectLater(
+        store.saveGroupDraft(group.id, 'Orphan'),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test(
+    'failed atomic group draft cleanup rolls back message and keeps the draft',
+    () async {
+      final group = await draftGroup();
+      await store.saveGroupHistory(group);
+      await store.saveGroupDraft(group.id, 'Keep me');
+      final m = await GroupText.create(
+        store.identity,
+        store.name,
+        group: group.id,
+        host: group.host,
+        epoch: randomId(),
+        view: 1,
+        text: 'Keep me',
+        targets: [await identityId(group.host)],
+      );
+      final next = group.copy(messages: [m]);
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_draft_delete BEFORE DELETE ON group_drafts BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+      );
+      await expectLater(
+        store.saveOutgoingGroupHistory(next, clearDraft: true),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect((await store.groupHistories()).single.messages, isEmpty);
+      expect(await store.groupDraft(group.id), 'Keep me');
+      await expectLater(
+        store.deleteGroupHistory(group.id),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await store.groupHistories(), hasLength(1));
+      await db.execute('DROP TRIGGER fail_draft_delete');
+      await store.saveOutgoingGroupHistory(next, clearDraft: true);
+      expect(
+        (await store.groupHistories()).single.messages.single.text,
+        'Keep me',
+      );
+      expect(await store.groupDraft(group.id), '');
+    },
+  );
+
+  test(
+    'failed draft import rolls back its mixed direct and group history',
+    () async {
+      final source = DemoStore();
+      await source.open();
+      final group = await draftGroup();
+      await source.saveGroupHistory(group);
+      await source.saveGroupDraft(group.id, 'Incoming group');
+      await source.savePeer('new-peer', 'New peer');
+      await source.saveMessage(message(peer: 'new-peer'));
+      final data = await source.exportBackup();
+      final phone = BackupData(
+        seed: data.seed,
+        owner: data.owner,
+        name: data.name,
+        created: data.created,
+        demo: false,
+        peers: data.peers,
+        messages: data.messages,
+        drafts: data.drafts,
+        groups: data.groups,
+        groupDrafts: data.groupDrafts,
+      );
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_draft_insert BEFORE INSERT ON group_drafts BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+      );
+      await expectLater(
+        store.importBackup(phone),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await store.groupHistories(), isEmpty);
+      expect(
+        await (await openDatabase(databasePath)).query('group_drafts'),
+        isEmpty,
+      );
+      expect(await store.messages('new-peer'), isEmpty);
+      expect((await store.conversations()).map((p) => p.id), ['alice']);
+      await db.execute('DROP TRIGGER fail_draft_insert');
+    },
+  );
   test(
     'image bytes and metadata encrypted, atomic dedupe, reopen, backup and deletion',
     () async {
@@ -107,7 +264,7 @@ void main() {
       await store.open();
       expect((await store.messages('alice')).single.text, message().text);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 9);
+      expect(await upgraded.getVersion(), 10);
       expect(await upgraded.query('images'), isEmpty);
     },
   );
@@ -191,7 +348,7 @@ void main() {
       );
       expect((await store.exportBackup()).seed, seed);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 9);
+      expect(await upgraded.getVersion(), 10);
       expect(await upgraded.query('files'), isEmpty);
     },
   );
@@ -280,7 +437,7 @@ void main() {
         utf8.decode(base64Decode(ciphertext), allowMalformed: true),
         isNot(contains(m.image!.digest)),
       );
-      expect(await db.getVersion(), 9);
+      expect(await db.getVersion(), 10);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -340,7 +497,7 @@ void main() {
       final raw = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
       expect(raw, isNot(contains(m.file!.name)));
       expect(raw, isNot(contains(m.file!.digest)));
-      expect(await db.getVersion(), 9);
+      expect(await db.getVersion(), 10);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -770,7 +927,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 9);
+      expect(await upgraded.getVersion(), 10);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -1181,7 +1338,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 9);
+      expect(await (await openDatabase(databasePath)).getVersion(), 10);
     },
   );
   test(
@@ -1260,7 +1417,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 9);
+      expect(await (await openDatabase(databasePath)).getVersion(), 10);
     },
   );
 

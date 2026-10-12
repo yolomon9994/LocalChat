@@ -47,95 +47,104 @@ void main() {
     );
     await source.saveGroupHistory(history);
   });
-  test(
-    'v6 mixed encrypted archive retains files, images, signatures, identity and duplicate read state',
-    () async {
-      final png = await testImage(), m = history.messages.single;
-      final image = await GroupText.create(
-        source.identity,
-        'Image author',
-        group: history.id,
-        host: history.host,
-        epoch: m.envelope['epoch'] as String,
-        view: 1,
-        text: 'Image',
-        targets: m.targets,
-        imageBytes: png,
-      );
-      await source.saveGroupHistory(history.copy(messages: [m, image]));
-      await source.savePeer('peer', 'Peer');
-      await source.saveImageMessage(
-        ChatMessage(
-          id: 'image',
-          peerId: 'peer',
+  for (final version in [6, 7]) {
+    test(
+      'v$version mixed encrypted archive retains files, images, signatures, identity and duplicate read state',
+      () async {
+        final png = await testImage(), m = history.messages.single;
+        final image = await GroupText.create(
+          source.identity,
+          'Image author',
+          group: history.id,
+          host: history.host,
+          epoch: m.envelope['epoch'] as String,
+          view: 1,
           text: 'Image',
-          timestamp: 2,
-          outgoing: false,
-          status: 'received',
-          image: await ChatImage.fromBytes(png),
-        ),
-        png,
-      );
-      await source.saveFileMessage(
-        ChatMessage(
-          id: 'file',
-          peerId: 'peer',
-          text: 'File',
-          timestamp: 3,
-          outgoing: false,
-          status: 'received',
-          file: await ChatFile.fromBytes('direct.bin', bytes),
-        ),
-        bytes,
-      );
-      final data = await source.exportBackup();
-      expect(data.toJson()['version'], 6);
-      final codec = BackupCodec(
-        deriveKey: (password, salt) async => Uint8List.fromList(
-          (await Sha256().hash([...utf8.encode(password), ...salt])).bytes,
-        ),
-      );
-      final encoded = await codec.encrypt(data, 'group file backup password');
-      expect(
-        utf8.decode(encoded, allowMalformed: true),
-        isNot(contains(m.file!.name)),
-      );
-      final identity = (await destination.identity.extractPublicKey()).bytes;
-      final decoded = await codec.decrypt(
-        encoded,
-        'group file backup password',
-      );
-      expect((await destination.importBackup(decoded)).newMessages, 4);
-      var restored = (await destination.groupHistories()).single;
-      expect(restored.messages.first.fileBytes, bytes);
-      expect(restored.messages.last.imageBytes, png);
-      expect(
-        restored.messages.first.envelope['signature'],
-        m.envelope['signature'],
-      );
-      expect(
-        restored.messages.first.receipts.values,
-        everyElement('unconfirmed'),
-      );
-      await destination.saveGroupHistory(
-        restored.copy(
-          messages: restored.messages.map((m) => m.copy(read: true)).toList(),
-        ),
-      );
-      expect((await destination.importBackup(decoded)).duplicates, 4);
-      restored = (await destination.groupHistories()).single;
-      expect(restored.messages.every((m) => m.read), isTrue);
-      expect((await destination.identity.extractPublicKey()).bytes, identity);
-      expect(
-        await destination.fileBytes(
-          (await destination.messages(
-            'peer',
-          )).singleWhere((m) => m.file != null),
-        ),
-        bytes,
-      );
-    },
-  );
+          targets: m.targets,
+          imageBytes: png,
+        );
+        await source.saveGroupHistory(history.copy(messages: [m, image]));
+        await source.savePeer('peer', 'Peer');
+        await source.saveImageMessage(
+          ChatMessage(
+            id: 'image',
+            peerId: 'peer',
+            text: 'Image',
+            timestamp: 2,
+            outgoing: false,
+            status: 'received',
+            image: await ChatImage.fromBytes(png),
+          ),
+          png,
+        );
+        await source.saveFileMessage(
+          ChatMessage(
+            id: 'file',
+            peerId: 'peer',
+            text: 'File',
+            timestamp: 3,
+            outgoing: false,
+            status: 'received',
+            file: await ChatFile.fromBytes('direct.bin', bytes),
+          ),
+          bytes,
+        );
+        if (version == 7) {
+          await source.saveGroupDraft(history.id, 'Attachment draft');
+        }
+        final data = await source.exportBackup();
+        expect(data.toJson()['version'], version);
+        final codec = BackupCodec(
+          deriveKey: (password, salt) async => Uint8List.fromList(
+            (await Sha256().hash([...utf8.encode(password), ...salt])).bytes,
+          ),
+        );
+        final encoded = await codec.encrypt(data, 'group file backup password');
+        expect(
+          utf8.decode(encoded, allowMalformed: true),
+          isNot(contains(m.file!.name)),
+        );
+        final identity = (await destination.identity.extractPublicKey()).bytes;
+        final decoded = await codec.decrypt(
+          encoded,
+          'group file backup password',
+        );
+        expect((await destination.importBackup(decoded)).newMessages, 4);
+        expect(
+          await destination.groupDraft(history.id),
+          version == 7 ? 'Attachment draft' : '',
+        );
+        var restored = (await destination.groupHistories()).single;
+        expect(restored.messages.first.fileBytes, bytes);
+        expect(restored.messages.last.imageBytes, png);
+        expect(
+          restored.messages.first.envelope['signature'],
+          m.envelope['signature'],
+        );
+        expect(
+          restored.messages.first.receipts.values,
+          everyElement('unconfirmed'),
+        );
+        await destination.saveGroupHistory(
+          restored.copy(
+            messages: restored.messages.map((m) => m.copy(read: true)).toList(),
+          ),
+        );
+        expect((await destination.importBackup(decoded)).duplicates, 4);
+        restored = (await destination.groupHistories()).single;
+        expect(restored.messages.every((m) => m.read), isTrue);
+        expect((await destination.identity.extractPublicKey()).bytes, identity);
+        expect(
+          await destination.fileBytes(
+            (await destination.messages(
+              'peer',
+            )).singleWhere((m) => m.file != null),
+          ),
+          bytes,
+        );
+      },
+    );
+  }
   test(
     'versions before v6 cannot contain group files and corrupted bytes reject before import',
     () async {

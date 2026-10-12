@@ -290,6 +290,50 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
   bool _sending = false;
   GroupController get g => widget.controller.groups;
   @override
+  void initState() {
+    super.initState();
+    g.drafts.addListener(_draftChanged);
+    _restoreDraft();
+    if (g.drafts.errorFor(widget.id, group: true) == null) {
+      unawaited(g.drafts.load(widget.id, group: true));
+    }
+  }
+
+  void _restoreDraft() {
+    if (!g.drafts.isLoaded(widget.id, group: true)) return;
+    final text = g.drafts.textFor(widget.id, group: true);
+    if (_text.text != text) {
+      _text.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant GroupChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.groups.drafts.removeListener(_draftChanged);
+      g.drafts.addListener(_draftChanged);
+    }
+    if (oldWidget.id != widget.id ||
+        oldWidget.controller != widget.controller) {
+      _text.clear();
+      _restoreDraft();
+      if (g.drafts.errorFor(widget.id, group: true) == null) {
+        unawaited(g.drafts.load(widget.id, group: true));
+      }
+    }
+  }
+
+  void _draftChanged() {
+    if (!mounted) return;
+    _restoreDraft();
+    setState(() {});
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
@@ -313,6 +357,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
   void dispose() {
     widget.routeObserver?.unsubscribe(this);
     g.setVisible(_routeToken, widget.id, false);
+    g.drafts.removeListener(_draftChanged);
     _text.dispose();
     super.dispose();
   }
@@ -321,9 +366,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     if (_sending) return;
     setState(() => _sending = true);
     final text = _text.text;
-    final accepted = await g.sendText(text);
+    await g.sendText(
+      text,
+      draftText: text,
+      draftRevision: g.drafts.revisionFor(widget.id, group: true),
+    );
     if (!mounted) return;
-    if (accepted && _text.text == text) _text.clear();
     setState(() => _sending = false);
   }
 
@@ -463,7 +511,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
       builder: (context) => AlertDialog(
         title: const Text('Delete group history?'),
         content: const Text(
-          'This deletes saved messages on this phone and leaves the group if active. Other phones keep their copies.',
+          'This deletes saved messages and the draft on this phone and leaves the group if active. Other phones keep their copies.',
         ),
         actions: [
           TextButton(
@@ -680,6 +728,24 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                   ],
                 ),
               ),
+              if (g.drafts.errorFor(widget.id, group: true)
+                  case final String error)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(error)),
+                      TextButton(
+                        onPressed:
+                            widget.controller.appAccessible &&
+                                widget.controller.appForeground
+                            ? () => g.drafts.retry(widget.id, group: true)
+                            : null,
+                        child: const Text('Retry draft'),
+                      ),
+                    ],
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
@@ -688,19 +754,33 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                     Expanded(
                       child: TextField(
                         controller: _text,
-                        enabled: active && g.canSend,
+                        key: const ValueKey('group-message-composer'),
+                        enabled:
+                            history != null &&
+                            widget.controller.appAccessible &&
+                            widget.controller.appForeground &&
+                            g.drafts.isLoaded(widget.id, group: true),
+                        onChanged: (text) =>
+                            g.drafts.setText(widget.id, text, group: true),
+                        maxLength: 4096,
+                        textCapitalization: TextCapitalization.sentences,
                         minLines: 1,
                         maxLines: 4,
                         decoration: InputDecoration(
                           labelText: active && g.connected
                               ? 'Group message'
-                              : 'Join and verify to send',
+                              : 'Draft (join and verify to send)',
+                          counterText: '',
                           border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
                     IconButton(
-                      onPressed: active && g.canSend && !_sending
+                      onPressed:
+                          active &&
+                              g.canSend &&
+                              !_sending &&
+                              g.drafts.isLoaded(widget.id, group: true)
                           ? _send
                           : null,
                       tooltip: 'Send group message',

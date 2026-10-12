@@ -175,6 +175,7 @@ class _BackupScreenState extends State<BackupScreen>
             current.peers.isEmpty &&
             current.messages.isEmpty &&
             current.drafts.isEmpty &&
+            current.groupDrafts.isEmpty &&
             current.groups.isEmpty;
       });
     } catch (e) {
@@ -328,7 +329,7 @@ class _BackupScreenState extends State<BackupScreen>
               ),
               Text(
                 '${data.peers.length} direct chats • ${data.groups.length} groups • '
-                '${data.messages.length + data.groups.fold<int>(0, (sum, g) => sum + (g['messages'] as List).length)} messages • ${data.drafts.length} drafts',
+                '${data.messages.length + data.groups.fold<int>(0, (sum, g) => sum + (g['messages'] as List).length)} messages • ${data.drafts.length + data.groupDrafts.length} drafts',
               ),
               const SizedBox(height: 12),
               Text(

@@ -5,6 +5,7 @@ import '../core/group_models.dart';
 import '../core/local_store.dart';
 import '../core/secure_session.dart';
 import 'group_transport.dart';
+import 'draft_controller.dart';
 import 'chat_notifications.dart';
 import 'image_files.dart';
 import 'attachment_transfers.dart';
@@ -41,14 +42,21 @@ class GroupController extends ChangeNotifier {
     this.receiptTimeout = const Duration(seconds: 30),
     ImageFiles? imageFiles,
     ChatFiles? chatFiles,
+    DraftController? drafts,
     this.imageTimeout = const Duration(seconds: 30),
     this.fileTimeout = const Duration(seconds: 30),
     this.supportsImages = true,
     this.supportsFiles = true,
   }) : imageFiles = imageFiles ?? createImageFiles(),
-       chatFiles = chatFiles ?? createChatFiles();
+       chatFiles = chatFiles ?? createChatFiles(),
+       drafts = drafts ?? DraftController(store),
+       _ownsDrafts = drafts == null {
+    this.drafts.addListener(_notify);
+  }
   final GroupTransport transport;
   final LocalStore store;
+  final DraftController drafts;
+  final bool _ownsDrafts;
   final ChatNotifications? notifications;
   final Future<bool> Function() prepare;
   final bool Function() canAct;
@@ -647,7 +655,12 @@ class GroupController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _persist(GroupText message) async {
+  Future<bool> _persist(
+    GroupText message, {
+    bool outgoingText = false,
+    int? draftRevision,
+    String? draftText,
+  }) async {
     final group = active!;
     final old = group.messages.where((m) => m.key == message.key);
     if (old.isNotEmpty) {
@@ -689,7 +702,16 @@ class GroupController extends ChangeNotifier {
       ],
       updated: DateTime.now().millisecondsSinceEpoch,
     );
-    await store.saveGroupHistory(next);
+    if (outgoingText) {
+      await drafts.acceptGroupOutgoing(
+        next,
+        draftRevision: draftRevision,
+        draftText: draftText,
+        canAccept: () => canSend && active?.id == next.id,
+      );
+    } else {
+      await store.saveGroupHistory(next);
+    }
     active = next;
     await _reload();
     if (message.author != selfId) {
@@ -706,10 +728,15 @@ class GroupController extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> sendText(String text) async {
+  Future<bool> sendText(
+    String text, {
+    int? draftRevision,
+    String? draftText,
+  }) async {
+    final intendedGroup = active?.id;
     var sent = false;
     await _run(() async {
-      if (!canSend) return;
+      if (!canSend || active?.id != intendedGroup) return;
       text = text.trim();
       if (text.isEmpty || utf8.encode(text).length > 4096) {
         throw const FormatException('Messages must be 1–4096 UTF-8 bytes.');
@@ -728,7 +755,12 @@ class GroupController extends ChangeNotifier {
         targets: members.map((m) => m.id).toList(),
       );
       if (!canSend) return;
-      await _persist(m.copy(receipts: {...m.receipts, selfId!: 'received'}));
+      await _persist(
+        m.copy(receipts: {...m.receipts, selfId!: 'received'}),
+        outgoingText: true,
+        draftRevision: draftRevision,
+        draftText: draftText,
+      );
       _attempted.add(m.key);
       _receiptTimers[m.key] = Timer(
         receiptTimeout,
@@ -921,7 +953,7 @@ class GroupController extends ChangeNotifier {
   Future<void> delete(String id) => _run(() async {
     if (!canAct()) return;
     if (active?.id == id) await _stop();
-    await store.deleteGroupHistory(id);
+    await drafts.deleteGroupHistory(id);
     await _reload();
     _notify();
     unawaited(notifications?.cancel('group:$id'));
@@ -934,6 +966,8 @@ class GroupController extends ChangeNotifier {
   void dispose() {
     images.stop();
     files.stop();
+    drafts.removeListener(_notify);
+    if (_ownsDrafts) drafts.dispose();
     _disposed = true;
     _subscription?.cancel();
     _joinTimer?.cancel();

@@ -79,7 +79,7 @@ currently apply to direct chats; group refinements remain in the backlog.
 
 Encrypted backups include groups. Text-only group archives use payload version 2;
 group images use v5 and group files v6, while direct images/files select v3/v4.
-Current builds import v1–v6. The encrypted file envelope/KDF remains version
+Nonempty group drafts select v7. Current builds import v1-v7. The encrypted file envelope/KDF remains version
 1, but older builds reject the new payload rather than silently dropping groups.
 Import validates signatures and group/host references, merges by group + author +
 message ID, keeps existing conflicting records/read state, re-encrypts with local
@@ -95,6 +95,14 @@ does not make the destination the original host; explicit identity transfer can.
 
 Browser preview explains the Android requirement and can display imported demo
 group history; it does not simulate discovery, hosting or real group links.
+
+## Saved group drafts
+
+Group composers remember unfinished text independently, including while offline.
+Drafts restore through navigation, locking and Android restart; sends clear them
+only after atomic local acceptance. Failed saves show Retry draft. Group deletion
+removes its draft, and backups include them. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+Sending still requires verified members; reconnecting never sends drafts automatically.
 
 ## Physical three-phone checks
 

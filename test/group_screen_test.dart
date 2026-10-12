@@ -19,6 +19,7 @@ import 'package:local_chat/features/group_file_bubble.dart';
 import 'package:local_chat/services/chat_files.dart';
 import 'group_file_test_support.dart';
 import 'package:local_chat/core/chat_file.dart';
+import 'group_draft_test.dart' show DraftGroupStore;
 
 void main() {
   late GroupNetwork network;
@@ -39,6 +40,176 @@ void main() {
       guest.dispose();
     }
     c.dispose();
+  });
+  testWidgets(
+    'offline group drafts restore after navigation and remain isolated',
+    (tester) async {
+      late String first, second;
+      await tester.runAsync(() async {
+        await c.groups.host('First room');
+        first = c.groups.active!.id;
+        await c.groups.host('Second room');
+        second = c.groups.active!.id;
+        await c.groups.stop();
+        await c.drafts.load(first, group: true);
+        await c.drafts.load(second, group: true);
+      });
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(navigatorKey: navigator, home: const Scaffold()),
+      );
+      void open(String id) => navigator.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => GroupChatScreen(controller: c, id: id),
+        ),
+      );
+      final composer = find.byKey(const ValueKey('group-message-composer'));
+      open(first);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(composer).enabled, isTrue);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (w) => w is IconButton && w.tooltip == 'Send group message',
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.runAsync(() async {
+        await tester.enterText(composer, '  first سلام 👋\nline two  ');
+        await c.drafts.settled;
+      });
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      open(second);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(composer).controller!.text, '');
+      await tester.runAsync(() async {
+        await tester.enterText(composer, 'Second draft');
+        await c.drafts.settled;
+      });
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      open(first);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(composer).controller!.text,
+        '  first سلام 👋\nline two  ',
+      );
+      expect(await c.store.groupDraft(second), 'Second draft');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'failed group draft load disables editing; failed saves retain text with retry',
+    (tester) async {
+      late DraftGroupStore store;
+      late String id;
+      await tester.runAsync(() async {
+        network.controllers.remove(c.groups);
+        c.dispose();
+        store = DraftGroupStore();
+        c = ChatController(
+          DemoTransport(),
+          store,
+          groupTransport: FakeGroupTransport(network),
+        );
+        await c.initialize();
+        network.controllers.add(c.groups);
+        await c.groups.host('Errors');
+        id = c.groups.active!.id;
+        await c.groups.stop();
+        await store.saveGroupDraft(id, 'Saved text');
+        store.failRead = true;
+        await c.drafts.load(id, group: true);
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GroupChatScreen(controller: c, id: id),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final composer = find.byKey(const ValueKey('group-message-composer'));
+      expect(tester.widget<TextField>(composer).enabled, isFalse);
+      expect(find.textContaining('Could not load'), findsOneWidget);
+      store.failRead = false;
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Retry draft'));
+        await c.drafts.settled;
+      });
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(composer).controller!.text, 'Saved text');
+      store.failWrite = true;
+      await tester.runAsync(() async {
+        await tester.enterText(composer, 'Keep unsaved text');
+        await c.drafts.settled;
+      });
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Draft not saved'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(composer).controller!.text,
+        'Keep unsaved text',
+      );
+      store.failWrite = false;
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Retry draft'));
+        await c.drafts.settled;
+      });
+      await tester.pumpAndSettle();
+      expect(await store.groupDraft(id), 'Keep unsaved text');
+      expect(find.text('Retry draft'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('accepted group text clears its composer and stored draft', (
+    tester,
+  ) async {
+    late String id;
+    await tester.runAsync(() async {
+      await c.groups.host('Send draft');
+      final guest = await network.phone('Guest');
+      await network.join(guest);
+      await c.drafts.load(c.groups.active!.id, group: true);
+      id = c.groups.active!.id;
+      await c.drafts.load(id, group: true);
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GroupChatScreen(controller: c, id: id),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final composer = find.byKey(const ValueKey('group-message-composer'));
+    await tester.enterText(composer, '  Accepted draft  ');
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (w) => w is IconButton && w.tooltip == 'Send group message',
+            ),
+          )
+          .onPressed!();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    // Pump the widget zone between real crypto turns; awaiting its protocol
+    // queue inside runAsync would prevent fake-zone continuations from running.
+    for (var i = 0; i < 12; i++) {
+      await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(composer).controller!.text, '');
+    expect(await c.store.groupDraft(id), '');
+    expect(c.groups.active!.messages.single.text, 'Accepted draft');
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
     'small screen and large text keep verification and member controls usable',
@@ -120,6 +291,7 @@ void main() {
         await c.groups.host('Pictures');
         final guest = await network.phone('Guest');
         await network.join(guest);
+        await c.drafts.load(c.groups.active!.id, group: true);
       });
       await tester.pumpWidget(
         MaterialApp(
@@ -168,6 +340,7 @@ void main() {
         await c.groups.host('Private pictures');
         final guest = await network.phone('Guest');
         await network.join(guest);
+        await c.drafts.load(c.groups.active!.id, group: true);
         await guest.images.send(await testImage());
         await network.settle();
         id = c.groups.active!.id;
@@ -229,6 +402,7 @@ void main() {
         await c.groups.host('Documents');
         final guest = await network.phone('Guest');
         await network.join(guest);
+        await c.drafts.load(c.groups.active!.id, group: true);
       });
       await tester.pumpWidget(
         MaterialApp(
@@ -291,6 +465,7 @@ void main() {
         await c.groups.host('Private files');
         final guest = await network.phone('Guest');
         await network.join(guest);
+        await c.drafts.load(c.groups.active!.id, group: true);
         await guest.files.send(SelectedFile('report.pdf', bytes));
         await network.settle();
         id = c.groups.active!.id;
@@ -349,6 +524,7 @@ void main() {
       await c.groups.host('Saved');
       final guest = await network.phone('Guest');
       await network.join(guest);
+      await c.drafts.load(c.groups.active!.id, group: true);
       await guest.sendText('saved private group text');
       await network.settle();
       id = c.groups.active!.id;
@@ -361,7 +537,17 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('saved private group text'), findsOneWidget);
-      expect(tester.widget<TextField>(find.byType(TextField)).enabled, false);
+      expect(tester.widget<TextField>(find.byType(TextField)).enabled, true);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (w) => w is IconButton && w.tooltip == 'Send group message',
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
       await tester.tap(find.byTooltip('Delete group history'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
@@ -386,6 +572,7 @@ void main() {
         await c.groups.host('Private group');
         final guest = await network.phone('Guest');
         await network.join(guest);
+        await c.drafts.load(c.groups.active!.id, group: true);
         await guest.sendText('hidden group text');
         await network.settle();
         id = c.groups.active!.id;
@@ -393,6 +580,11 @@ void main() {
         await network.settle();
       });
       final platform = c.notifications.platform as MemoryNotificationPlatform;
+      await tester.runAsync(() async {
+        await c.drafts.load(id, group: true);
+        c.drafts.setText(id, 'hidden group draft', group: true);
+        await c.drafts.settled;
+      });
       platform.launchPeer = 'group:$id';
       final lock = testLock();
       await lock.initialize();
@@ -411,9 +603,35 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(GroupChatScreen), findsOneWidget);
       expect(find.text('hidden group text'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('group-message-composer')),
+            )
+            .controller!
+            .text,
+        'hidden group draft',
+      );
       lock.lock();
       await tester.pumpAndSettle();
       expect(find.text('hidden group text'), findsNothing);
+      expect(find.text('hidden group draft'), findsNothing);
+      await tester.runAsync(() => lock.unlockPin('123456'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        platform.tapEvents.add('group:$id');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('group-message-composer')),
+            )
+            .controller!
+            .text,
+        'hidden group draft',
+      );
       await tester.pumpWidget(const SizedBox());
     },
   );

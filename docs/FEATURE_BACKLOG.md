@@ -3,10 +3,26 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Files in hosted groups
+## Current milestone: Saved group drafts
 
-Implemented: 2026-10-12. Source/tests/docs are saved locally, unstaged and
-uncommitted; the user handles Git. See [GROUP_FILES.md](GROUP_FILES.md).
+Implemented: 2026-10-12. Source/tests/docs are saved locally; the user handles
+Git. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+
+- [x] Independent encrypted group drafts; offline editing and exact restoration.
+- [x] Restore on navigation, PIN unlock, rehosting and Android restart.
+- [x] Atomic text acceptance clears only the captured draft; failed sends and newer edits survive.
+- [x] Retry for load/save errors; image/file flows preserve drafts.
+- [x] Schema 10 preserves existing history; v7 backups retain v1-v6 imports.
+- [x] Safe merge, deletion and import/send race handling across direct/group drafts.
+- [x] All 303 tests pass, clean analysis, Android/browser builds and review;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical phone checks; see [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Files in hosted groups: implemented and committed
+
+Implemented: 2026-10-12. Committed by the user as `5a92e71`.
+See [GROUP_FILES.md](GROUP_FILES.md).
 
 - [x] Pick/review/discard local files up to 8 MiB; preserve composer text.
 - [x] Signed encrypted upload/host relay, progress/cancel and individual receipts.
@@ -17,7 +33,7 @@ uncommitted; the user handles Git. See [GROUP_FILES.md](GROUP_FILES.md).
 - [x] All 279 tests pass, clean analysis, final Android/browser builds and review;
       see [VALIDATION.md](VALIDATION.md).
 - [ ] Physical three-phone checks; see [GROUP_FILES.md](GROUP_FILES.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits group files (`5a92e71`).
 
 ## Images in hosted groups: implemented and committed
 
@@ -297,8 +313,9 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 
 ## Later refinements discussed
 
-- [ ] Group drafts, pin/archive/search, background protection and browser
-      simulation. Current refinements apply to direct chats.
+- [x] Saved group drafts; encrypted storage and backup support. Hardware checks pending.
+- [ ] Group pin/archive, then group search.
+- [ ] Group background protection and browser simulation.
 
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
 - [ ] Group delivery behavior when members leave or the host disconnects.
@@ -314,8 +331,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 5. Offline outbox and retry (committed), connection troubleshooting/manual
    reconnection and notifications (committed), background connection support (committed).
 6. Hosted group text chat (committed).
-7. Direct-chat image/file sharing and group images (committed), group files
-   (current), then group refinements.
+7. Direct-chat image/file sharing and group images/files (committed).
+8. Saved group drafts (current), then group pin/archive and search.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

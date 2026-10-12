@@ -77,8 +77,9 @@ prevent metadata substitution; the trusted host can still withhold files or lie
 about membership/receipts.
 
 Complete file bytes are inline in the existing authenticated encrypted group
-record, alongside images and receipts. SQLite schema remains 9 and uses existing
-group-history AAD; old direct/group records and messaging identity remain intact.
+record, alongside images and receipts. Files retain existing group-history AAD;
+group drafts add schema 10 with separate storage. Old direct/group records and
+messaging identity remain intact.
 Group history deletion also removes its attachments. Previews/notifications say
 **File**, keeping filenames out of those surfaces. App lock removes export dialogs.
 Managed-memory clearing is not guaranteed forensic erasure.
@@ -89,6 +90,9 @@ digests, author signatures and group bounds, merge duplicates/read state, re-enc
 locally and never start sends. Imported pending receipts become unconfirmed.
 Older builds reject v6. The encrypted envelope/KDF and 20 MiB archive limit remain
 unchanged. A failed group write rolls back the whole import. See [BACKUPS.md](BACKUPS.md).
+
+Group drafts are saved independently; backups containing them select payload v7.
+Current builds import v1-v7. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
 
 ## Three-phone checks — pending
 

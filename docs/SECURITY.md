@@ -54,7 +54,8 @@ filesystem paths. Signed offers and acknowledged chunks use the shared group
 attachment relay and existing per-link encrypted counters. Completion receipts
 follow local persistence; the trusted host saves before relay and can read files.
 Lock/background/membership changes stop partial transfers, with no auto-resume.
-Complete bytes stay inline in encrypted group records; schema remains 9. Export
+Complete bytes stay inline in encrypted group records; files use schema 9
+and group drafts add schema 10. Export
 requires confirmation and produces an unprotected copy outside the app. Payload-v6
 backups validate names/digests/signatures and combined group limits, retain v1–v5
 imports and the 20 MiB archive cap, and never send restored files. See
@@ -159,8 +160,13 @@ Opening search results uses the existing app-lock and visible-conversation read
 gates. Locking removes search routes and cancels pending result updates.
 
 Drafts use the same history key with fresh random nonces and a separate AAD
-domain: UTF-8 JSON `["LocalChat/draft/1", peerId]`. SQLite stores only the
-peer ID and encrypted draft body. Moving ciphertext between peers or modifying
+domain: UTF-8 JSON `["LocalChat/draft/1", peerId]`. Group drafts use a separate
+`group_drafts` table in schema 10 and domain `["LocalChat/group-draft/1", groupId]`.
+Their bodies are encrypted with the same history key; IDs remain metadata.
+One queue orders direct/group draft saves, backups, deletion and atomic message
+acceptance. v7 backups validate group references/bounds and keep existing local
+drafts. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md). Direct draft rows contain only the
+peer ID and encrypted body. Moving ciphertext between targets or modifying
 it fails authentication. Drafts do not enter message search or create plaintext
 preview copies. A serialized draft queue orders saves, send cleanup and history
 deletion. Clearing history deletes drafts too, subject to the same forensic-wipe

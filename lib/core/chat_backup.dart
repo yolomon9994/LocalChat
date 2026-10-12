@@ -22,19 +22,21 @@ class BackupData {
     required this.messages,
     required this.drafts,
     this.groups = const [],
+    this.groupDrafts = const [],
   });
   final String seed, owner, name;
   final int created;
   final bool demo;
   final List<Map<String, Object?>> peers, messages, drafts;
-  final List<Map<String, Object?>> groups;
+  final List<Map<String, Object?>> groups, groupDrafts;
   Map<String, Object?> toJson() => {
-    'version':
-        groups.any(
-          (g) => (g['messages'] as List).any(
-            (m) => (m as Map)['fileData'] != null,
-          ),
-        )
+    'version': groupDrafts.isNotEmpty
+        ? 7
+        : groups.any(
+            (g) => (g['messages'] as List).any(
+              (m) => (m as Map)['fileData'] != null,
+            ),
+          )
         ? 6
         : groups.any(
             (g) => (g['messages'] as List).any(
@@ -58,14 +60,16 @@ class BackupData {
     'messages': messages,
     'drafts': drafts,
     if (groups.isNotEmpty) 'groups': groups,
+    if (groupDrafts.isNotEmpty) 'groupDrafts': groupDrafts,
   };
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3, 4, 5, 6}.contains(raw['version'])) {
+    if (raw is! Map || !{1, 2, 3, 4, 5, 6, 7}.contains(raw['version'])) {
       throw invalid;
     }
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
+    if (raw.containsKey('groupDrafts') && raw['version'] != 7) throw invalid;
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
       if (value is! String ||
@@ -180,12 +184,25 @@ class BackupData {
         final group = await GroupHistory.parse(row);
         if (group.messages.any((m) => m.image != null) &&
                 (raw['version'] as int) < 5 ||
-            group.messages.any((m) => m.file != null) && raw['version'] != 6) {
+            group.messages.any((m) => m.file != null) &&
+                (raw['version'] as int) < 6) {
           throw invalid;
         }
         groupMessages += group.messages.length;
         if (!groupIds.add(group.id) || groupMessages > 100000) throw invalid;
         groups.add(group.toJson());
+      }
+    }
+    final groupDrafts = <Map<String, Object?>>[];
+    final draftGroups = <String>{};
+    if (raw.containsKey('groupDrafts')) {
+      for (final d in rows('groupDrafts', 500)) {
+        final group = string(d, 'group', 128);
+        if (!groupIds.contains(group) || !draftGroups.add(group)) throw invalid;
+        groupDrafts.add({
+          'group': group,
+          'text': string(d, 'text', 1024 * 1024),
+        });
       }
     }
     return BackupData(
@@ -198,6 +215,7 @@ class BackupData {
       messages: messages,
       drafts: drafts,
       groups: groups,
+      groupDrafts: groupDrafts,
     );
   }
 }
@@ -228,6 +246,9 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     for (final m in current.messages) (m['peer'], m['id'], m['outgoing']): m,
   };
   final drafts = {for (final d in current.drafts) d['peer']: d};
+  final groupDrafts = {for (final d in current.groupDrafts) d['group']: d};
+  final newGroupDrafts = <Map<String, Object?>>[];
+  final incomingGroups = {for (final g in incoming.groups) g['id']: g};
   final newPeers = <Map<String, Object?>>[],
       newMessages = <Map<String, Object?>>[],
       newDrafts = <Map<String, Object?>>[];
@@ -305,6 +326,18 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
       keptDrafts++;
     }
   }
+  for (final d in incoming.groupDrafts) {
+    final old = oldGroups[d['group']];
+    // A conflicting group ID must never receive another host's draft.
+    if (old != null && old['host'] != incomingGroups[d['group']]?['host']) {
+      continue;
+    }
+    if (!groupDrafts.containsKey(d['group'])) {
+      newGroupDrafts.add(d);
+    } else if (groupDrafts[d['group']]!['text'] != d['text']) {
+      keptDrafts++;
+    }
+  }
   final data = BackupData(
     seed: incoming.seed,
     owner: incoming.owner,
@@ -315,6 +348,7 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     messages: newMessages,
     drafts: newDrafts,
     groups: groupChanges,
+    groupDrafts: newGroupDrafts,
   );
   return BackupMerge(
     data,
@@ -322,7 +356,7 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     newMessages.length + newGroupMessages,
     duplicates,
     conflicts,
-    newDrafts.length,
+    newDrafts.length + newGroupDrafts.length,
     keptDrafts,
   );
 }

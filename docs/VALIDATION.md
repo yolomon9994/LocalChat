@@ -1,5 +1,47 @@
 # Validation for v0.1.0
 
+## Saved group drafts - final checks 2026-10-13
+
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **303 passed**, exit 0 (279 existing + 24 new).
+  Output: `.dart_tool/group-draft-final-tests.log` (local, ignored by Git).
+- 24 new checks: 16 draft/controller/backup tests, four SQLite checks, three
+  group-screen widgets and one additional v7 mixed-attachment archive check.
+- Draft/controller checks cover exact Unicode/whitespace restoration, room and
+  same-ID direct isolation, failed loads/saves/retry, pending-save exports,
+  backup error gates, local acceptance, newer edits during acceptance/import,
+  failed message writes, access rejection, deletion invalidating queued edits,
+  failed deletion, delete-all, offline edits and rehosting.
+- Backup checks cover encrypted v7 group drafts, empty-phone identity transfer,
+  history-only identity preservation, existing-draft precedence, absent drafts
+  without new messages, conflicting hosts, old-version fields, orphan/duplicate/
+  empty/oversize drafts and mixed direct/group images/files. v1-v6 regressions remain.
+- SQLite checks verify schema-9 upgrades to schema 10 preserving existing
+  history/direct drafts, ciphertext and authenticated group-ID binding, reopen,
+  v7 merge/dedupe/deletion, atomic send/delete rollback, and mixed-import rollback.
+- Final group-screen run: **10 passed**, exit 0; output
+  `.dart_tool/group-draft-final-widgets.log`. Includes offline navigation,
+  load/save errors and retry, accepted sends, attachment preview/discard,
+  small-screen/large-text layout, offline exports, and PIN hide/unlock/reopen.
+  Fixtures preload drafts before entering text and advance real crypto and
+  widget clocks separately. The initial full run had 302 passes and one PIN
+  fixture failure: it wrote storage after the controller had loaded its cache.
+  The corrected fixture uses the normal draft-edit path and passes. A later
+  302-pass run hit the existing SQLite search stress test's default 30-second
+  timeout; it had passed in the first full run. Final validation allows two
+  minutes per test without removing checks or weakening assertions.
+- Final `flutter analyze`: no issues, exit 0; `.dart_tool/group-draft-analyze.log`.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0; `.dart_tool/group-draft-apk-build.log`.
+  APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Final `flutter build web --no-wasm-dry-run`: passed, exit 0;
+  `.dart_tool/group-draft-web-build.log`. Existing optional Cupertino font warning
+  remains; the app uses Material icons.
+- Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
+- Physical upgrade/navigation/restart/PIN/network/migration checks remain pending;
+  see [GROUP_DRAFTS.md](GROUP_DRAFTS.md). No hardware success is claimed.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Hosted group files — final checks 2026-10-12
 
 - Full `flutter test --reporter expanded`: **279 passed**, exit 0 (250 existing
@@ -34,7 +76,7 @@
 - Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
 - Physical three-phone/provider/Wi-Fi Direct/throughput/lifecycle checks remain
   pending; see [GROUP_FILES.md](GROUP_FILES.md). No hardware success is claimed.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed group files as `5a92e71`; hardware checks remain pending.
 
 ## Hosted group images — final checks 2026-10-12
 

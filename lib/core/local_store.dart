@@ -43,7 +43,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -60,6 +60,7 @@ class LocalStore {
         await db.execute('CREATE TABLE backup_receipt (id TEXT PRIMARY KEY)');
         await _createOutboxIndex(db);
         await _createGroups(db);
+        await _createGroupDrafts(db);
         await _createImages(db);
         await _createFiles(db);
       },
@@ -82,6 +83,7 @@ class LocalStore {
         if (oldVersion < 7) await _createGroups(db);
         if (oldVersion < 8) await _createImages(db);
         if (oldVersion < 9) await _createFiles(db);
+        if (oldVersion < 10) await _createGroupDrafts(db);
       },
     );
     await _recoverIdentity();
@@ -152,6 +154,13 @@ class LocalStore {
           },
       });
     }
+    final groupDraftResult = <Map<String, Object?>>[];
+    for (final d in await db.query('group_drafts')) {
+      groupDraftResult.add({
+        'group': d['id'],
+        'text': await _decodeGroupDraft(d),
+      });
+    }
     final draftResult = <Map<String, Object?>>[];
     for (final d in drafts) {
       draftResult.add({'peer': d['peer'], 'text': await _decodeDraft(d)});
@@ -175,6 +184,7 @@ class LocalStore {
           .toList(),
       messages: result,
       drafts: draftResult,
+      groupDrafts: groupDraftResult,
       groups: (await _groupHistories(db)).map((g) => g.toJson()).toList(),
     );
   }
@@ -193,6 +203,7 @@ class LocalStore {
       if (current.peers.isNotEmpty ||
           current.messages.isNotEmpty ||
           current.drafts.isNotEmpty ||
+          current.groupDrafts.isNotEmpty ||
           current.groups.isNotEmpty) {
         throw const FormatException(
           'Identity transfer requires an empty destination phone.',
@@ -215,6 +226,7 @@ class LocalStore {
             (current.peers.isNotEmpty ||
                 current.messages.isNotEmpty ||
                 current.drafts.isNotEmpty ||
+                current.groupDrafts.isNotEmpty ||
                 current.groups.isNotEmpty)) {
           throw const FormatException(
             'Identity transfer requires an empty destination phone.',
@@ -327,6 +339,13 @@ class LocalStore {
             ]),
           });
         }
+        for (final d in plan.data.groupDrafts) {
+          await _writeGroupDraft(
+            txn,
+            d['group'] as String,
+            d['text'] as String,
+          );
+        }
         if (moveIdentity) {
           final pending =
               jsonDecode(
@@ -349,6 +368,10 @@ class LocalStore {
       'CREATE INDEX message_peer_unread ON messages(peer, outgoing, is_read)',
     );
   }
+
+  static Future<void> _createGroupDrafts(Database db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS group_drafts (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
+  );
 
   static Future<void> _createGroups(Database db) => db.execute(
     'CREATE TABLE IF NOT EXISTS group_history (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
@@ -529,7 +552,79 @@ class LocalStore {
   Future<void> saveGroupHistory(GroupHistory group) =>
       _writeGroup(_database, group);
   Future<void> deleteGroupHistory(String id) =>
-      _database.delete('group_history', where: 'id = ?', whereArgs: [id]);
+      _database.transaction((txn) async {
+        await txn.delete('group_drafts', where: 'id = ?', whereArgs: [id]);
+        await txn.delete('group_history', where: 'id = ?', whereArgs: [id]);
+      });
+
+  Future<void> saveOutgoingGroupHistory(
+    GroupHistory group, {
+    bool clearDraft = false,
+  }) => _database.transaction((txn) async {
+    await _writeGroup(txn, group);
+    if (clearDraft) {
+      await txn.delete('group_drafts', where: 'id = ?', whereArgs: [group.id]);
+    }
+  });
+
+  Future<String> groupDraft(String id) async {
+    final rows = await _database.query(
+      'group_drafts',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? '' : _decodeGroupDraft(rows.single);
+  }
+
+  Future<String> _decodeGroupDraft(Map<String, Object?> row) async {
+    final bytes = base64Decode(row['body'] as String);
+    final clear = await _cipher.decrypt(
+      SecretBox(
+        bytes.sublist(40),
+        nonce: bytes.sublist(0, 24),
+        mac: Mac(bytes.sublist(24, 40)),
+      ),
+      secretKey: _historyKey,
+      aad: utf8.encode(jsonEncode(['LocalChat/group-draft/1', row['id']])),
+    );
+    return utf8.decode(clear);
+  }
+
+  Future<void> _writeGroupDraft(
+    DatabaseExecutor db,
+    String id,
+    String text,
+  ) async {
+    if (utf8.encode(text).length > 1024 * 1024) {
+      throw const FormatException('Draft exceeds the 1 MiB limit.');
+    }
+    if (text.isEmpty) {
+      await db.delete('group_drafts', where: 'id = ?', whereArgs: [id]);
+      return;
+    }
+    if ((await db.query(
+      'group_history',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    )).isEmpty) {
+      throw const FormatException('This group has been deleted.');
+    }
+    final box = await _cipher.encrypt(
+      utf8.encode(text),
+      secretKey: _historyKey,
+      aad: utf8.encode(jsonEncode(['LocalChat/group-draft/1', id])),
+    );
+    await db.insert('group_drafts', {
+      'id': id,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> saveGroupDraft(String id, String text) =>
+      _database.transaction((txn) => _writeGroupDraft(txn, id, text));
 
   static Future<void> _createOutboxIndex(Database db) => db.execute(
     'CREATE INDEX IF NOT EXISTS message_outbox ON messages(peer, outgoing, status)',
@@ -965,6 +1060,7 @@ class LocalStore {
 
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
+      await txn.delete('group_drafts');
       await txn.delete('group_history');
       await txn.delete('files');
       await txn.delete('images');

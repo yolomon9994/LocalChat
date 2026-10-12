@@ -14,6 +14,7 @@ class DemoStore extends LocalStore {
   final _messages = <(String, String, bool), ChatMessage>{};
   final _unread = <(String, String, bool)>{};
   final _drafts = <String, String>{};
+  final _groupDrafts = <String, String>{};
   final _groups = <String, GroupHistory>{};
   final _images = <(String, String, bool), Uint8List>{};
   @override
@@ -68,7 +69,36 @@ class DemoStore extends LocalStore {
   Future<void> saveGroupHistory(GroupHistory group) async =>
       _groups[group.id] = group;
   @override
-  Future<void> deleteGroupHistory(String id) async => _groups.remove(id);
+  Future<void> deleteGroupHistory(String id) async {
+    _groups.remove(id);
+    _groupDrafts.remove(id);
+  }
+
+  @override
+  Future<String> groupDraft(String id) async => _groupDrafts[id] ?? '';
+  @override
+  Future<void> saveGroupDraft(String id, String text) async {
+    if (utf8.encode(text).length > 1024 * 1024) {
+      throw const FormatException('Draft exceeds the 1 MiB limit.');
+    }
+    if (text.isEmpty) {
+      _groupDrafts.remove(id);
+      return;
+    }
+    if (!_groups.containsKey(id)) {
+      throw const FormatException('This group has been deleted.');
+    }
+    _groupDrafts[id] = text;
+  }
+
+  @override
+  Future<void> saveOutgoingGroupHistory(
+    GroupHistory group, {
+    bool clearDraft = false,
+  }) async {
+    await saveGroupHistory(group);
+    if (clearDraft) _groupDrafts.remove(group.id);
+  }
 
   @override
   Future<BackupData> exportBackup() async {
@@ -117,6 +147,9 @@ class DemoStore extends LocalStore {
             },
           )
           .toList(),
+      groupDrafts: _groupDrafts.entries
+          .map((e) => <String, Object?>{'group': e.key, 'text': e.value})
+          .toList(),
       drafts: _drafts.entries
           .map((e) => <String, Object?>{'peer': e.key, 'text': e.value})
           .toList(),
@@ -134,6 +167,7 @@ class DemoStore extends LocalStore {
         (current.peers.isNotEmpty ||
             current.messages.isNotEmpty ||
             current.drafts.isNotEmpty ||
+            current.groupDrafts.isNotEmpty ||
             current.groups.isNotEmpty)) {
       throw const FormatException(
         'Identity transfer requires an empty destination phone.',
@@ -199,6 +233,9 @@ class DemoStore extends LocalStore {
     identity = pair;
     for (final g in groupPlan) {
       _groups[g.id] = g;
+    }
+    for (final d in plan.data.groupDrafts) {
+      _groupDrafts[d['group'] as String] = d['text'] as String;
     }
     return plan;
   }
@@ -449,6 +486,7 @@ class DemoStore extends LocalStore {
     _messages.clear();
     _unread.clear();
     _drafts.clear();
+    _groupDrafts.clear();
   }
 
   @override

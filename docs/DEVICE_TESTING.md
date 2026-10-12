@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Saved group drafts require the [draft checklist](GROUP_DRAFTS.md), including
+navigation/PIN/restart restoration, offline editing, sends and migration.
+
 Hosted group chats additionally require the [three-phone checklist](GROUP_CHATS.md).
 Group images have a separate [three-phone checklist](GROUP_IMAGES.md), including
 host/guest relays, individual receipts and membership/lock interruptions.

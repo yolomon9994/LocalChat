@@ -13,6 +13,8 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   Group files support local selection up to 8 MiB, signed encrypted relay,
   per-member receipts, cancellation, backups and confirmed offline Save to phone.
   See [group-file controls and testing](docs/GROUP_FILES.md).
+  Groups also save encrypted offline drafts through navigation, PIN and restart;
+  backups include them. See [group draft testing](docs/GROUP_DRAFTS.md).
 
 - Advertise a display name and discover nearby LocalChat phones using Wi-Fi Direct DNS-SD.
 - Connect through Android's Wi-Fi Direct pairing flow and exchange framed TCP messages.

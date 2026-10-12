@@ -1,5 +1,9 @@
 # Saved message drafts
 
+Direct-chat behavior is described below. Hosted groups also have independent
+encrypted drafts; see [GROUP_DRAFTS.md](GROUP_DRAFTS.md) for offline editing,
+atomic send cleanup and v7 backups. Both use one application save queue.
+
 Open any saved conversation and type a message. The composer remembers each
 chat's unfinished text separately, including whitespace, newlines and emoji.
 You can write a draft while offline and tap **Queue message** in a saved chat.
