@@ -15,6 +15,10 @@ import 'image_test_support.dart';
 import 'image_screen_test.dart' show FixedPicker;
 import 'package:local_chat/features/group_image_bubble.dart';
 import 'package:local_chat/features/chat_image_view.dart';
+import 'package:local_chat/features/group_file_bubble.dart';
+import 'package:local_chat/services/chat_files.dart';
+import 'group_file_test_support.dart';
+import 'package:local_chat/core/chat_file.dart';
 
 void main() {
   late GroupNetwork network;
@@ -198,6 +202,141 @@ void main() {
       expect(find.byType(AppLockScreen), findsOneWidget);
       expect(find.byType(ChatImageViewer), findsNothing);
       expect(find.byType(Image), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'small screen group file preview discards safely and keeps composer text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.runAsync(() async {
+        network.controllers.remove(c.groups);
+        c.dispose();
+        c = ChatController(
+          DemoTransport(),
+          DemoStore(),
+          groupTransport: FakeGroupTransport(network),
+          chatFiles: MemoryGroupFiles(
+            SelectedFile('../report?.pdf', Uint8List.fromList([1, 2, 3])),
+          ),
+        );
+        await c.initialize();
+        network.controllers.add(c.groups);
+        await c.groups.host('Documents');
+        final guest = await network.phone('Guest');
+        await network.join(guest);
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(320, 568),
+              textScaler: TextScaler.linear(1.8),
+            ),
+            child: GroupChatScreen(controller: c, id: c.groups.active!.id),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'keep this draft');
+      await tester.runAsync(() async {
+        await tester.tap(find.byTooltip('Attach group file'));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Send group file?'), findsOneWidget);
+      expect(find.text(ChatFile.safeName('../report?.pdf')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.runAsync(() async {
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Discard'),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(c.groups.active!.messages, isEmpty);
+      expect(c.groups.files.pendingGroup, isNull);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'keep this draft',
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'offline group file export needs confirmation and PIN removes its dialog',
+    (tester) async {
+      late String id;
+      late MemoryGroupFiles files;
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      await tester.runAsync(() async {
+        network.controllers.remove(c.groups);
+        c.dispose();
+        files = MemoryGroupFiles(null);
+        c = ChatController(
+          DemoTransport(),
+          DemoStore(),
+          groupTransport: FakeGroupTransport(network),
+          chatFiles: files,
+        );
+        await c.initialize();
+        network.controllers.add(c.groups);
+        await c.groups.host('Private files');
+        final guest = await network.phone('Guest');
+        await network.join(guest);
+        await guest.files.send(SelectedFile('report.pdf', bytes));
+        await network.settle();
+        id = c.groups.active!.id;
+        await c.groups.stop();
+        await network.settle();
+      });
+      (c.notifications.platform as MemoryNotificationPlatform).launchPeer =
+          'group:$id';
+      final lock = testLock();
+      await lock.initialize();
+      await lock.enable('123456');
+      lock.lock();
+      final appearance = AppearanceController(MemoryAppearanceStorage());
+      addTearDown(lock.dispose);
+      addTearDown(appearance.dispose);
+      await tester.pumpWidget(
+        LocalChatApp(controller: c, appLock: lock, appearance: appearance),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() => lock.unlockPin('123456'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GroupFileBubble), findsOneWidget);
+      await tester.ensureVisible(find.text('Save to phone'));
+      await tester.tap(find.text('Save to phone'));
+      await tester.pumpAndSettle();
+      expect(files.saved, isEmpty);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(files.saved, isEmpty);
+      await tester.tap(find.text('Save to phone'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.widgetWithText(FilledButton, 'Save file'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(files.saved.single.bytes, bytes);
+      expect(files.saved.single.name, 'report.pdf');
+      await tester.tap(find.text('Save to phone'));
+      await tester.pumpAndSettle();
+      lock.lock();
+      await tester.pumpAndSettle();
+      expect(find.byType(AppLockScreen), findsOneWidget);
+      expect(find.text('Save file to phone?'), findsNothing);
+      expect(find.text('report.pdf'), findsNothing);
+      expect(files.saved.length, 1);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

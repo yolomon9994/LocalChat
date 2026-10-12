@@ -63,7 +63,7 @@ Chat/all-history deletion removes image rows transactionally; it does not erase
 the other phone or guarantee forensic deletion.
 
 Image archives use payload version 3 with validated inline bytes/metadata/digest.
-New builds import versions 1 through 5; older builds reject image archives. The
+New builds import versions 1 through 6; older builds reject image archives. The
 encrypted envelope/KDF and total 20 MiB archive bound are unchanged, so images
 reduce how much history fits in an export. Imports re-encrypt with destination
 keys and use existing duplicate/conflict rules. Imported sending attempts become

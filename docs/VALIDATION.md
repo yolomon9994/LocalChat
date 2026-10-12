@@ -1,5 +1,41 @@
 # Validation for v0.1.0
 
+## Hosted group files — final checks 2026-10-12
+
+- Full `flutter test --reporter expanded`: **279 passed**, exit 0 (250 existing
+  + 29 new group-file checks). Output: `.dart_tool/group-file-milestone-tests.log`,
+  local and ignored by Git. All prior group-image and direct-file checks pass.
+- New checks: 21 protocol/controller/picker/export tests, four backup/bounds tests,
+  two widgets and two SQLite encryption/reopen/backup/rollback tests.
+- Targeted final run: 68 passed, exit 0. Protocol checks cover signed guest upload
+  before host relay, individual receipts, text/image/file interleaving, safe names,
+  host and recipient persistence failures, missing receipts, lock/background/cancel,
+  membership cancellation, legacy capability gates, author/signature tampering,
+  corrupt bytes, wrong recipients/epoch, byte bounds and late/locked picker returns.
+- Offline exports check stored names/bytes, locked rejection, access changes while
+  history loads, provider cancellation/errors and deleted history. No export occurs
+  automatically when a file arrives.
+- Backup checks exercise encrypted v6 mixed direct/group images/files, identity
+  preservation, signatures/digests, duplicate read state, older-version rejection,
+  unsafe names, missing bytes, type confusion and the combined 16 MiB group cap.
+- SQLite verifies encrypted names/metadata/bytes, schema 9, reopen, backup/dedupe
+  and deletion. A failed group-file write rolls back the entire mixed import,
+  preserving existing direct history.
+- Widgets cover 320 × 568 at 1.8× text, file preview/discard preserving composer
+  text, offline confirmed save and PIN removing export dialogs. Final review
+  corrected Windows-encoded punctuation in progress labels. The seven group-screen
+  checks were rerun afterward: all passed, exit 0 (`group-file-final-widgets.log`).
+- Final `flutter analyze`: no issues, exit 0.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0. APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Final `flutter build web --no-wasm-dry-run`: passed, exit 0. Both final artifacts
+  include the progress-label cleanup. Existing optional Cupertino font warning
+  remains; the app uses Material icons.
+- Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
+- Physical three-phone/provider/Wi-Fi Direct/throughput/lifecycle checks remain
+  pending; see [GROUP_FILES.md](GROUP_FILES.md). No hardware success is claimed.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Hosted group images — final checks 2026-10-12
 
 - Full `flutter test --reporter expanded`: **250 passed**, exit 0 (228 existing
@@ -28,7 +64,7 @@
 - Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
 - Physical three-phone provider/Wi-Fi Direct/throughput/lifecycle checks remain
   pending; see [GROUP_IMAGES.md](GROUP_IMAGES.md). No hardware success is claimed.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed group images as `318b304`; hardware checks remain pending.
 
 ## Direct-chat files — final checks 2026-10-12
 

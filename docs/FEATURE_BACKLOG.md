@@ -3,10 +3,26 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Images in hosted groups
+## Current milestone: Files in hosted groups
 
 Implemented: 2026-10-12. Source/tests/docs are saved locally, unstaged and
-uncommitted. The user handles Git. See [GROUP_IMAGES.md](GROUP_IMAGES.md).
+uncommitted; the user handles Git. See [GROUP_FILES.md](GROUP_FILES.md).
+
+- [x] Pick/review/discard local files up to 8 MiB; preserve composer text.
+- [x] Signed encrypted upload/host relay, progress/cancel and individual receipts.
+- [x] Shared group attachment handling, safe names, independent capability gates.
+- [x] Foreground/privacy/membership gates and encrypted pending selections.
+- [x] Encrypted stored files and confirmed offline export; PIN covers dialogs.
+- [x] Payload-v6 mixed backups retain v1–v5 imports; SQLite stays schema 9.
+- [x] All 279 tests pass, clean analysis, final Android/browser builds and review;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical three-phone checks; see [GROUP_FILES.md](GROUP_FILES.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Images in hosted groups: implemented and committed
+
+Implemented: 2026-10-12. Committed by the user as `318b304`.
+See [GROUP_IMAGES.md](GROUP_IMAGES.md).
 
 - [x] Group image pick/review/discard, signed upload and trusted host relay.
 - [x] Per-link progress/cancel and complete-store individual receipts.
@@ -17,7 +33,7 @@ uncommitted. The user handles Git. See [GROUP_IMAGES.md](GROUP_IMAGES.md).
 - [x] All 250 tests pass, clean analysis, Android/browser builds and diff review;
       see [VALIDATION.md](VALIDATION.md).
 - [ ] Physical three-phone checks; see [GROUP_IMAGES.md](GROUP_IMAGES.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits group images (`318b304`).
 
 ## File sharing in direct chats: implemented and committed
 
@@ -275,7 +291,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
       storage/backups and explicit offline export; hardware checks pending.
 - [x] Group images: signed encrypted upload/relay, progress/cancellation,
       individual receipts, offline viewing and backups; hardware checks pending.
-- [ ] Group files: transfer progress, cancellation and size limits.
+- [x] Group files: signed upload/relay, progress/cancel, individual receipts,
+      encrypted history/backups and confirmed offline export; hardware checks pending.
 - [ ] Private local contact nicknames independent of advertised display names.
 
 ## Later refinements discussed
@@ -297,8 +314,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 5. Offline outbox and retry (committed), connection troubleshooting/manual
    reconnection and notifications (committed), background connection support (committed).
 6. Hosted group text chat (committed).
-7. Direct-chat image/file sharing (committed), group images (current), then
-   group files and refinements.
+7. Direct-chat image/file sharing and group images (committed), group files
+   (current), then group refinements.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

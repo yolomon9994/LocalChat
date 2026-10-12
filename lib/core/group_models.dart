@@ -3,9 +3,11 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'secure_session.dart';
 import 'chat_image.dart';
+import 'chat_file.dart';
 
 const groupLimit = 8; // Host plus seven guests; hardware may support fewer.
 const groupImageHistoryMaxBytes = 16 * 1024 * 1024;
+const groupAttachmentHistoryMaxBytes = groupImageHistoryMaxBytes;
 bool groupIdValid(Object? value) =>
     value is String && RegExp(r'^[A-Za-z0-9_-]{24}$').hasMatch(value);
 Future<String> identityId(String public) async =>
@@ -17,14 +19,17 @@ class GroupMember {
     this.name,
     this.public, {
     this.supportsImages = false,
+    this.supportsFiles = false,
   });
   final String id, name, public;
   final bool supportsImages;
+  final bool supportsFiles;
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
     'public': public,
     'images': supportsImages,
+    'files': supportsFiles,
   };
   static Future<GroupMember> parse(Map raw) async {
     final public = raw['public'], name = raw['name'];
@@ -35,7 +40,8 @@ class GroupMember {
         name.trim().isEmpty ||
         name.length > 32 ||
         raw['id'] != await identityId(public) ||
-        (raw.containsKey('images') && raw['images'] is! bool)) {
+        (raw.containsKey('images') && raw['images'] is! bool) ||
+        (raw.containsKey('files') && raw['files'] is! bool)) {
       throw const FormatException('Invalid group member');
     }
     return GroupMember(
@@ -43,6 +49,7 @@ class GroupMember {
       name,
       public,
       supportsImages: raw['images'] == true,
+      supportsFiles: raw['files'] == true,
     );
   }
 }
@@ -54,11 +61,15 @@ class GroupText {
     this.receipts = const {},
     this.read = false,
     this.imageBytes,
+    this.fileBytes,
   });
   final Map<String, dynamic> envelope;
   final Map<String, String> receipts;
   final bool read;
   final Uint8List? imageBytes;
+  final Uint8List? fileBytes;
+  ChatFile? get file =>
+      envelope.containsKey('file') ? ChatFile.parse(envelope['file']) : null;
   ChatImage? get image =>
       envelope.containsKey('image') ? ChatImage.parse(envelope['image']) : null;
   String get id => envelope['id'] as String;
@@ -72,11 +83,13 @@ class GroupText {
     Map<String, String>? receipts,
     bool? read,
     Uint8List? imageBytes,
+    Uint8List? fileBytes,
   }) => GroupText(
     envelope,
     receipts: receipts ?? this.receipts,
     read: read ?? this.read,
     imageBytes: imageBytes ?? this.imageBytes,
+    fileBytes: fileBytes ?? this.fileBytes,
   );
   Map<String, Object?> toJson() => {
     'envelope': envelope,
@@ -84,10 +97,13 @@ class GroupText {
     'read': read,
     if (image != null && imageBytes != null)
       'imageData': base64Encode(imageBytes!),
+    if (file != null && fileBytes != null) 'fileData': base64Encode(fileBytes!),
   };
   static List<int> _bytes(Map e) => utf8.encode(
     jsonEncode([
-      e.containsKey('image')
+      e.containsKey('file')
+          ? 'LocalChat/group-file/1'
+          : e.containsKey('image')
           ? 'LocalChat/group-image/1'
           : 'LocalChat/group-text/1',
       e['group'],
@@ -100,6 +116,7 @@ class GroupText {
       e['timestamp'],
       e['text'],
       if (e.containsKey('image')) ChatImage.parse(e['image']).toJson(),
+      if (e.containsKey('file')) ChatFile.parse(e['file']).toJson(),
       e['targets'],
     ]),
   );
@@ -113,7 +130,12 @@ class GroupText {
     required String text,
     required List<String> targets,
     Uint8List? imageBytes,
+    Uint8List? fileBytes,
+    String? fileName,
   }) async {
+    if (imageBytes != null && fileBytes != null) {
+      throw const FormatException('Choose one attachment type');
+    }
     final public = base64Encode((await identity.extractPublicKey()).bytes);
     final e = <String, dynamic>{
       'group': group,
@@ -129,6 +151,11 @@ class GroupText {
       'targets': [...targets]..sort(),
       if (imageBytes != null)
         'image': (await ChatImage.fromBytes(imageBytes)).toJson(),
+      if (fileBytes != null)
+        'file': (await ChatFile.fromBytes(
+          fileName ?? 'attachment.bin',
+          fileBytes,
+        )).toJson(),
     };
     e['signature'] = base64Encode(
       (await Ed25519().sign(_bytes(e), keyPair: identity)).bytes,
@@ -138,6 +165,7 @@ class GroupText {
       read: true,
       receipts: {for (final id in targets) id: 'pending'},
       imageBytes: imageBytes == null ? null : Uint8List.fromList(imageBytes),
+      fileBytes: fileBytes == null ? null : Uint8List.fromList(fileBytes),
     );
   }
 
@@ -145,6 +173,7 @@ class GroupText {
     Map raw, {
     bool verifySignature = true,
     bool requireImageData = true,
+    bool requireFileData = true,
   }) async {
     if (raw['envelope'] is! Map ||
         raw['receipts'] is! Map ||
@@ -153,6 +182,22 @@ class GroupText {
     }
     final e = Map<String, dynamic>.from(raw['envelope'] as Map);
     final image = e.containsKey('image') ? ChatImage.parse(e['image']) : null;
+    final file = e.containsKey('file') ? ChatFile.parse(e['file']) : null;
+    if ((image != null && file != null) ||
+        (file != null && e['text'] != 'File') ||
+        (file == null && raw.containsKey('fileData'))) {
+      throw const FormatException('Invalid group file record');
+    }
+    Uint8List? fileBytes;
+    if (file != null && (requireFileData || raw.containsKey('fileData'))) {
+      final encoded = raw['fileData'];
+      if (encoded is! String ||
+          encoded.length > ((fileMaxBytes + 2) ~/ 3) * 4) {
+        throw const FormatException('Invalid group file contents');
+      }
+      fileBytes = base64Decode(encoded);
+      await file.verify(fileBytes);
+    }
     if ((image != null && e['text'] != 'Image') ||
         (image == null && raw.containsKey('imageData'))) {
       throw const FormatException('Invalid group image record');
@@ -226,6 +271,7 @@ class GroupText {
       receipts: receipts,
       read: raw['read'] as bool,
       imageBytes: imageBytes,
+      fileBytes: fileBytes,
     );
   }
 }
@@ -287,10 +333,10 @@ class GroupHistory {
         throw const FormatException('Conflicting group history');
       }
       messages.add(m);
-      imageBytes += m.image?.length ?? 0;
-      if (imageBytes > groupImageHistoryMaxBytes) {
+      imageBytes += (m.image?.length ?? 0) + (m.file?.length ?? 0);
+      if (imageBytes > groupAttachmentHistoryMaxBytes) {
         throw const FormatException(
-          'Group image history exceeds 16 MiB. Export and delete it before continuing.',
+          'Group attachment history exceeds 16 MiB. Export and delete it before continuing.',
         );
       }
     }

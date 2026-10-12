@@ -8,7 +8,7 @@ docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes
 LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first, with direct
-text/images/files and hosted text/image groups. Video playback, Bluetooth, multi-hop relaying, iOS and
+text/images/files and hosted text/image/file groups. Video playback, Bluetooth, multi-hop relaying, iOS and
 automatic reconnect are also future work. Local notifications and optional
 background protection of the current running verified session are implemented;
 Doze/vendor restrictions still apply and hardware reliability is unvalidated.
@@ -23,13 +23,64 @@ Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
 Notifications were committed as `9bb6c60`, and background protection as `24d52b5`.
 Hosted group chats were committed as `819ac32`, and images as `aea566b`.
 Direct files were committed by the user as `3ec26b5`.
-The current milestone is image sharing in hosted groups; group files are next.
+Group images were committed by the user as `318b304`.
+The current milestone is file sharing in hosted groups.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Group-image milestone — implemented and validated, 2026-10-12
+## Group-file milestone — implemented and validated, 2026-10-12
 
-Baseline: `3ec26b5`. Source/tests/docs are saved locally, unstaged and uncommitted.
+Baseline: `318b304`. Changes are saved locally, unstaged and uncommitted.
+Do not stage/commit/push for the user. No packages, permissions or native changes.
+
+- `group_attachments.dart` now owns shared image/file room binding, per-link
+  attachment engines, host relay, individual receipts, cancellation and privacy.
+  `GroupImages` preserves existing image behavior; `GroupFiles` uses the existing
+  local ChatFiles picker/save bridge. Both share serialized session counters,
+  while keeping independent transfer and capability state.
+- Encrypted `group-file-v1` must be supported by every admitted member. Older
+  image builds keep text/images. Signed `LocalChat/group-file/1` metadata includes
+  canonical filename/MIME/length/SHA-256 plus exact group/host/epoch/roster/author/
+  time/recipients. Existing text/image signatures are unchanged. The trusted host
+  decrypts/saves uploads before relay; recipients save before completion receipts.
+- Nonempty opaque files up to 8 MiB, safe names (120 Unicode code points), 12 KiB
+  acknowledged chunks, 30-second stage/receipt waits, per-member progress/cancel.
+  Images/files can interleave on the same encrypted links. Each kind has one
+  outgoing per author/link; busy recipients become unconfirmed rather than queued.
+- Group screen provides attach/review/discard preserving composer text, safe file
+  bubbles and confirmed Save to phone while offline. Exported copies leave app
+  encryption and may finish if the authorized system save picker triggers locking.
+  Rechecks prevent invoking the picker if access changes while loading history.
+- Lock/background/disconnect/membership changes stop partial transfers, preserve
+  received receipts and complete copies, and invalidate late/pending selections.
+  Author backgrounding after upload sends host abort. No automatic retry/resume;
+  explicitly selecting/sending again uses a fresh ID. Pending names/bytes are sealed
+  in memory while locked. Notification/list previews use the generic label File.
+- Inline file bytes use existing encrypted group-history records/AAD; schema stays
+  9. The 16 MiB cap now counts group images/files combined; 10,000 messages remain.
+  Backup payload v6 supports mixed attachments and retains v1–v5 imports. Envelope,
+  KDF and the 20 MiB plaintext archive limit (including base64) are unchanged.
+- New tests: 21 protocol/controller/picker/export checks, four backup/bounds checks,
+  two widgets and two SQLite encryption/reopen/backup/rollback checks. The shared
+  relay regression caught an incorrect type guard; corrected file and image tests
+  pass. Targeted final run: 68 passed. Full regression: **279 passed**, exit 0
+  (250 existing + 29 new checks). Final review fixed Windows-encoded progress
+  punctuation; all seven group-screen tests pass afterward. Final analysis is
+  clean, and refreshed arm64 APK/web builds passed, exit 0, including that cleanup.
+  Existing optional Cupertino font warning remains on web. Final diff/code/docs
+  review is clean. Results are in `docs/VALIDATION.md`.
+- `docs/GROUP_FILES.md` records controls, trust, protocol/storage, limits and pending
+  three-phone checks. Runtime logs stay local/ignored at `.dart_tool/group-file-*`.
+
+APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+Remaining: physical three-phone checks and user's review/commit/push.
+Do not repeat passing checks unless code changes or a new concern justify it.
+Generation helper `.dart_tool/group_file_implementation.py` has already run;
+do not rerun it or old file helpers (they duplicate edits).
+
+## Group-image milestone — committed, 2026-10-12
+
+Committed by the user as `318b304`, based on `3ec26b5`.
 Do not stage/commit/push for the user. No packages, permissions or native changes.
 
 - `group_images.dart` adapts the existing ImageTransfers/attachment engine per
@@ -66,7 +117,7 @@ review and diff whitespace check are clean. Logs remain local/ignored under
 `.dart_tool/group-image-*`. APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
 Do not repeat passing checks unless changes or a new concern justify it.
 
-Remaining: physical three-phone tests and user's review/commit/push.
+Remaining for group images: physical three-phone tests.
 Do not rerun old `.dart_tool/file_*.py` generation helpers.
 
 ## Direct-chat file milestone — committed, 2026-10-12

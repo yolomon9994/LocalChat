@@ -27,7 +27,7 @@ There is no Double Ratchet, post-compromise recovery, offline prekey messaging o
 Direct chats use one socket. Hosted groups use a trusted host and separate
 host–guest sockets, ephemeral keys, counters and both fresh confirmations. Guests
 verify the host and trust its admission of other members. The host decrypts,
-stores and forwards text and images; group encryption does not conceal them from the host.
+stores and forwards text, images and files; group encryption does not conceal them from the host.
 Names, titles and pairing prompts remain untrusted. See the detailed
 [hosted group trust model and wire design](GROUP_CHATS.md).
 
@@ -41,10 +41,24 @@ The host saves uploads before forwarding; recipients save before final receipts.
 Generic `groupReceipt` cannot replace a recipient's image completion at the host.
 Host trust still permits withholding and false receipt claims. All apps need
 foreground unlock; membership changes cancel active images. Source/prepared limits
-match direct images, with 16 MiB saved image bytes per group. Inline image bytes
+match direct images, with 16 MiB saved image/file bytes combined per group. Inline image bytes
 use existing encrypted group-record AAD, without a schema change. Payload-v5
 backups validate signatures/hashes and retain v1–v4 imports and the 20 MiB archive
 cap. See [group-image protocol and interruptions](GROUP_IMAGES.md).
+
+Group files negotiate encrypted `group-file-v1` independently of image support.
+Authors sign the same room context under `LocalChat/group-file/1`, including
+canonical name/MIME/length/SHA-256. Existing text/image signature bytes are
+unchanged. Opaque nonempty files are bounded to 8 MiB; safe names never become
+filesystem paths. Signed offers and acknowledged chunks use the shared group
+attachment relay and existing per-link encrypted counters. Completion receipts
+follow local persistence; the trusted host saves before relay and can read files.
+Lock/background/membership changes stop partial transfers, with no auto-resume.
+Complete bytes stay inline in encrypted group records; schema remains 9. Export
+requires confirmation and produces an unprotected copy outside the app. Payload-v6
+backups validate names/digests/signatures and combined group limits, retain v1–v5
+imports and the 20 MiB archive cap, and never send restored files. See
+[group-file protocol and physical checks](GROUP_FILES.md).
 
 Group types `groupVerified`, `groupRoster`, `groupText`, `groupReceipt` and
 `groupRejected` travel inside existing sealed frames. Authors sign ordered UTF-8

@@ -5,9 +5,10 @@ open; group background protection is a later refinement.
 Images and files require both phones unlocked and foregrounded; backgrounding
 cancels partial transfers. This setting does not resume them. See
 [IMAGE_SHARING.md](IMAGE_SHARING.md) and [FILE_SHARING.md](FILE_SHARING.md).
-Group images also require participating apps unlocked and foregrounded. Lock,
+Group images and files also require participating apps unlocked and foregrounded. Lock,
 backgrounding or membership changes stop partial transfers without resuming;
-confirmed copies remain. See [GROUP_IMAGES.md](GROUP_IMAGES.md).
+confirmed copies remain. See [GROUP_IMAGES.md](GROUP_IMAGES.md) and
+[GROUP_FILES.md](GROUP_FILES.md).
 
 On each phone, open **Settings → Background connection** and turn on **Keep
 connection active**. This choice is off on a fresh install and stays local to the

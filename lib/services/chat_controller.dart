@@ -396,6 +396,7 @@ class ChatController extends ChangeNotifier {
     _groupTransport,
     store,
     imageFiles: imageFiles,
+    chatFiles: chatFiles,
     prepare: _prepareGroup,
     notifications: notifications,
     canAct: () => initialized && !_disposed && _appAccessible && _appForeground,

@@ -22,7 +22,7 @@ version 1, while older builds reject group archives. Group sessions/keys are nev
 restored, and imported pending receipts become unconfirmed. Import ends the current
 group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
 Archives containing direct-chat images use payload version 3, including bounded
-image bytes, dimensions and SHA-256 digest. New builds import v1–v5; older
+image bytes, dimensions and SHA-256 digest. New builds import v1–v6; older
 builds reject image archives. Images are re-encrypted with destination history
 keys and restored pending attempts remain unconfirmed. The 20 MiB total archive
 limit still applies; image-heavy exports can exceed it without changing history.
@@ -40,6 +40,14 @@ PNG hashes, preserves duplicate/read state and re-encrypts the whole group recor
 Group sessions never resume, and pending receipts become unconfirmed. Older
 builds reject v5. The existing encrypted envelope/KDF and 20 MiB plaintext cap
 remain unchanged, including base64 image data. See [GROUP_IMAGES.md](GROUP_IMAGES.md).
+Archives containing group files use payload **v6**, with signed safe filenames,
+MIME/length/digests and complete inline bytes. Mixed direct/group images and files
+are supported. Imports validate signatures/hashes and the 16 MiB combined group
+attachment cap, preserve read state on duplicates, re-encrypt locally and never
+resume transfers. Pending receipts become unconfirmed. Older builds reject v6;
+current builds retain v1–v5 imports. The envelope/KDF and 20 MiB total plaintext
+limit remain unchanged. Group/direct writes roll back together on failure.
+See [GROUP_FILES.md](GROUP_FILES.md).
 Export does not delete or change source history. Failed draft saves/loads must
 be resolved before export so the backup does not silently omit unsaved edits.
 

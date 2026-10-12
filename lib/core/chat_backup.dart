@@ -32,9 +32,15 @@ class BackupData {
     'version':
         groups.any(
           (g) => (g['messages'] as List).any(
-            (m) => (m as Map)['imageData'] != null,
+            (m) => (m as Map)['fileData'] != null,
           ),
         )
+        ? 6
+        : groups.any(
+            (g) => (g['messages'] as List).any(
+              (m) => (m as Map)['imageData'] != null,
+            ),
+          )
         ? 5
         : messages.any((m) => m['file'] != null)
         ? 4
@@ -56,7 +62,9 @@ class BackupData {
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3, 4, 5}.contains(raw['version'])) throw invalid;
+    if (raw is! Map || !{1, 2, 3, 4, 5, 6}.contains(raw['version'])) {
+      throw invalid;
+    }
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
@@ -170,7 +178,9 @@ class BackupData {
     if (raw['version'] == 2 || raw.containsKey('groups')) {
       for (final row in rows('groups', 500)) {
         final group = await GroupHistory.parse(row);
-        if (group.messages.any((m) => m.image != null) && raw['version'] != 5) {
+        if (group.messages.any((m) => m.image != null) &&
+                (raw['version'] as int) < 5 ||
+            group.messages.any((m) => m.file != null) && raw['version'] != 6) {
           throw invalid;
         }
         groupMessages += group.messages.length;

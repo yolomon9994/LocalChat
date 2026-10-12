@@ -3,6 +3,8 @@
 Hosted group chats additionally require the [three-phone checklist](GROUP_CHATS.md).
 Group images have a separate [three-phone checklist](GROUP_IMAGES.md), including
 host/guest relays, individual receipts and membership/lock interruptions.
+Group files require the [file checklist](GROUP_FILES.md), including three-phone
+relay, provider save failures, offline export and mixed attachment backups.
 Direct-chat images have a separate [two-phone checklist](IMAGE_SHARING.md) for
 picker locking, progress/cancel, retries, offline viewing and image backups.
 Direct-chat files have a [file-sharing checklist](FILE_SHARING.md) for selection,

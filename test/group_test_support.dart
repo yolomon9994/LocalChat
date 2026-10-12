@@ -3,6 +3,7 @@ import 'package:local_chat/services/group_transport.dart';
 import 'package:local_chat/services/group_controller.dart';
 import 'package:local_chat/demo/demo_store.dart';
 import 'package:local_chat/services/image_files.dart';
+import 'package:local_chat/services/chat_files.dart';
 
 class GroupNetwork {
   FakeGroupTransport? host;
@@ -15,8 +16,11 @@ class GroupNetwork {
     Duration receiptTimeout = const Duration(seconds: 30),
     Duration timeout = const Duration(seconds: 90),
     ImageFiles? imageFiles,
+    ChatFiles? chatFiles,
     bool supportsImages = true,
+    bool supportsFiles = true,
     Duration imageTimeout = const Duration(seconds: 30),
+    Duration fileTimeout = const Duration(seconds: 30),
   }) async {
     store ??= DemoStore();
     await store.open();
@@ -30,8 +34,11 @@ class GroupNetwork {
       receiptTimeout: receiptTimeout,
       timeout: timeout,
       imageFiles: imageFiles,
+      chatFiles: chatFiles,
       supportsImages: supportsImages,
+      supportsFiles: supportsFiles,
       imageTimeout: imageTimeout,
+      fileTimeout: fileTimeout,
     );
     controllers.add(c);
     await c.initialize();

@@ -30,7 +30,8 @@ real host or group transfer.
 
 - Source: at most 8 MiB and 40 megapixels. Preparation uses the first frame,
   resizes to at most 1600 pixels per side and re-encodes PNG without source
-  metadata. Prepared PNG: at most 2 MiB. Camera capture and files are later work.
+  metadata. Prepared PNG: at most 2 MiB. Camera capture is later work; group
+  files are covered in [GROUP_FILES.md](GROUP_FILES.md).
 - One outgoing image per author and one outgoing/incoming image per host–guest
   link. A busy relay link marks that recipient unconfirmed; it does not queue
   another image. Send one group image at a time for predictable delivery.
@@ -48,7 +49,7 @@ real host or group transfer.
 - A picker returning while locked retains only an encrypted pending selection in
   memory. Unlock and explicitly review/send. Membership changes, leaving or
   deleting the group invalidate that selection and late picker results.
-- Saved groups are bounded to 10,000 messages and 16 MiB of complete image bytes
+- Saved groups are bounded to 10,000 messages and 16 MiB of complete image/file bytes
   per group. Export and delete a full group before continuing. The backup's
   separate 20 MiB plaintext limit includes base64, direct attachments and history;
   an image-heavy group can exceed that archive limit before reaching its own cap.
@@ -62,6 +63,8 @@ metadata (dimensions, byte length, SHA-256) and sorted recipient identities.
 The host binds an upload's author to its verified sending link. Receivers check
 the current epoch, exact roster and metadata before accepting bounded chunks.
 
+`group_attachments.dart` shares image/file relay, privacy and receipt handling;
+the image wire format and signature domain remain compatible.
 `groupImageOffer/Ready/Chunk/ChunkAck/Complete/Result/Cancel`, plus receipt-status
 and author-abort messages, travel inside the existing per-link encrypted session.
 The shared attachment engine checks order, length, digest and decoded pixels.
@@ -75,7 +78,8 @@ files and old group records are preserved. Pending receipts become unconfirmed
 after restarting. No packages, Android permissions or native transport changes
 were needed. Cache eviction on locking is not guaranteed forensic memory erasure.
 
-Archives with group images use payload **v5**, retaining imports of v1–v4.
+Archives with group images use payload **v5**, or **v6** when group files are
+also present. Current builds retain imports of v1–v5.
 They can include direct text/images/files and groups together. Import validates
 author signatures and PNG bytes, safely merges by group/author/ID, re-encrypts
 locally and never starts transfers. Older builds reject v5. The encrypted file

@@ -7,12 +7,16 @@ import '../core/secure_session.dart';
 import 'group_transport.dart';
 import 'chat_notifications.dart';
 import 'image_files.dart';
-import 'image_transfers.dart';
+import 'attachment_transfers.dart';
+import 'chat_files.dart';
+import '../core/chat_file.dart';
 import 'image_content.dart';
 import '../core/models.dart';
 import 'package:cryptography/cryptography.dart';
 
 part 'group_images.dart';
+part 'group_attachments.dart';
+part 'group_files.dart';
 
 class GroupLink {
   GroupLink(this.id, this.session);
@@ -20,6 +24,7 @@ class GroupLink {
   final SecureSession session;
   bool localVerified = false, remoteVerified = false, admitted = false;
   bool supportsImages = false;
+  bool supportsFiles = false;
   Timer? timer;
   bool get verified => localVerified && remoteVerified;
   String get name => session.peerName ?? 'Connecting member';
@@ -35,19 +40,25 @@ class GroupController extends ChangeNotifier {
     this.timeout = const Duration(seconds: 90),
     this.receiptTimeout = const Duration(seconds: 30),
     ImageFiles? imageFiles,
+    ChatFiles? chatFiles,
     this.imageTimeout = const Duration(seconds: 30),
+    this.fileTimeout = const Duration(seconds: 30),
     this.supportsImages = true,
-  }) : imageFiles = imageFiles ?? createImageFiles();
+    this.supportsFiles = true,
+  }) : imageFiles = imageFiles ?? createImageFiles(),
+       chatFiles = chatFiles ?? createChatFiles();
   final GroupTransport transport;
   final LocalStore store;
   final ChatNotifications? notifications;
   final Future<bool> Function() prepare;
   final bool Function() canAct;
   final Duration timeout, receiptTimeout;
-  final Duration imageTimeout;
-  final bool supportsImages;
+  final Duration imageTimeout, fileTimeout;
+  final bool supportsImages, supportsFiles;
   final ImageFiles imageFiles;
+  final ChatFiles chatFiles;
   late final images = GroupImages(this);
+  late final files = GroupFiles(this);
   Future<void> _queue = Future.value();
   Future<void> get idle => _queue;
   StreamSubscription<Map<String, dynamic>>? _subscription;
@@ -159,6 +170,7 @@ class GroupController extends ChangeNotifier {
             store.name,
             selfPublic!,
             supportsImages: supportsImages,
+            supportsFiles: supportsFiles,
           ),
         ];
         active =
@@ -260,7 +272,10 @@ class GroupController extends ChangeNotifier {
       await _send(link, {
         'type': 'groupVerified',
         'version': 1,
-        'features': [if (supportsImages) 'group-image-v1'],
+        'features': [
+          if (supportsImages) 'group-image-v1',
+          if (supportsFiles) 'group-file-v1',
+        ],
       });
       link.localVerified = true;
       await _admit(link);
@@ -306,6 +321,7 @@ class GroupController extends ChangeNotifier {
   Future<void> _roster() async {
     if (!hosting || active == null) return;
     await images.membershipChanged();
+    await files.membershipChanged();
     view++;
     await _broadcast({
       'type': 'groupRoster',
@@ -326,6 +342,7 @@ class GroupController extends ChangeNotifier {
       'name': link.name,
       'public': linkRemotePublic(link),
       'images': link.supportsImages,
+      'files': link.supportsFiles,
     });
     if (members.length >= groupLimit || members.any((m) => m.id == member.id)) {
       await _drop(link.id);
@@ -343,8 +360,10 @@ class GroupController extends ChangeNotifier {
   Future<void> accessChanged() {
     final pause = !canAct();
     images.accessChanged(pause);
+    files.accessChanged(pause);
     return _run(() async {
       if (pause) await images.cancel();
+      if (pause) await files.cancel();
       if (canAct() && hosting) {
         for (final link in links.values.toList()) {
           await _admit(link);
@@ -435,10 +454,20 @@ class GroupController extends ChangeNotifier {
       link.supportsImages =
           p['features'] is List &&
           (p['features'] as List).contains('group-image-v1');
+      link.supportsFiles =
+          p['features'] is List &&
+          (p['features'] as List).contains('group-file-v1');
       await _admit(link);
       return;
     }
     if (!link.verified) throw const FormatException('Unverified group member');
+    if (p['type'] is String && (p['type'] as String).startsWith('groupFile')) {
+      if (!link.admitted || !link.supportsFiles || !supportsFiles) {
+        throw const FormatException('Unsupported group file');
+      }
+      await files.handle(link, p);
+      return;
+    }
     if ((p['type'] as Object?) is String &&
         (p['type'] as String).startsWith('groupImage')) {
       if (!link.admitted || !link.supportsImages || !supportsImages) {
@@ -490,6 +519,7 @@ class GroupController extends ChangeNotifier {
               )
             : old.first;
         await images.membershipChanged();
+        await files.membershipChanged();
         members = roster;
         epoch = p['epoch'] as String;
         view = p['view'] as int;
@@ -508,8 +538,8 @@ class GroupController extends ChangeNotifier {
           'receipts': <String, String>{},
           'read': false,
         });
-        if (m.image != null) {
-          throw const FormatException('Use group image transfers');
+        if (m.image != null || m.file != null) {
+          throw const FormatException('Use group attachment transfers');
         }
         if (m.envelope['group'] != active!.id ||
             m.envelope['host'] != active!.host ||
@@ -581,9 +611,9 @@ class GroupController extends ChangeNotifier {
         final message = active?.messages.where((m) => m.key == key);
         if (message == null || message.isEmpty) return;
         final m = message.first;
-        if (hosting && m.image != null) {
+        if (hosting && (m.image != null || m.file != null)) {
           throw const FormatException(
-            'Image receipts must complete their transfer',
+            'Attachment receipts must complete their transfer',
           );
         }
         if (!m.targets.contains(member) ||
@@ -631,15 +661,20 @@ class GroupController extends ChangeNotifier {
         'Group history is full. Export and delete it before continuing.',
       );
     }
-    if (message.image != null) {
-      if (message.imageBytes == null) {
-        throw const FormatException('Incomplete group image');
+    if (message.image != null || message.file != null) {
+      if (message.image != null && message.imageBytes == null ||
+          message.file != null && message.fileBytes == null) {
+        throw const FormatException('Incomplete group attachment');
       }
-      if (group.messages.fold<int>(0, (n, m) => n + (m.image?.length ?? 0)) +
-              message.image!.length >
-          groupImageHistoryMaxBytes) {
+      if (group.messages.fold<int>(
+                0,
+                (n, m) => n + (m.image?.length ?? 0) + (m.file?.length ?? 0),
+              ) +
+              (message.image?.length ?? 0) +
+              (message.file?.length ?? 0) >
+          groupAttachmentHistoryMaxBytes) {
         throw const FormatException(
-          'Group image history is full (16 MiB). Export and delete it before continuing.',
+          'Group attachment history is full (16 MiB). Export and delete it before continuing.',
         );
       }
     }
@@ -749,6 +784,7 @@ class GroupController extends ChangeNotifier {
       _receiptTimers.remove(key)?.cancel();
     }
     images.receiptsChanged();
+    files.receiptsChanged();
   }
 
   Future<void> _uncertain(String key) async {
@@ -772,6 +808,7 @@ class GroupController extends ChangeNotifier {
     active = next;
     await _reload();
     images.receiptsChanged();
+    files.receiptsChanged();
   }
 
   Future<void> _drop(
@@ -783,10 +820,12 @@ class GroupController extends ChangeNotifier {
     _publicByLink.remove(id);
     if (link == null) return;
     link.timer?.cancel();
-    try {
-      await images.drop(id);
-    } catch (_) {
-      error = 'Image delivery is unconfirmed.';
+    for (final hub in <GroupAttachments<dynamic>>[images, files]) {
+      try {
+        await hub.drop(id);
+      } catch (_) {
+        error = 'Attachment delivery is unconfirmed.';
+      }
     }
     if (close) {
       try {
@@ -809,6 +848,7 @@ class GroupController extends ChangeNotifier {
   });
   Future<void> _stop() async {
     images.stop();
+    files.stop();
     _joinTimer?.cancel();
     _joinTimer = null;
     for (final l in links.values) {
@@ -893,6 +933,7 @@ class GroupController extends ChangeNotifier {
   @override
   void dispose() {
     images.stop();
+    files.stop();
     _disposed = true;
     _subscription?.cancel();
     _joinTimer?.cancel();

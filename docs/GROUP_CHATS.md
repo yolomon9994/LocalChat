@@ -1,11 +1,12 @@
 # Hosted nearby group chats
 
 Implemented: 2026-10-11. Open the **Group chats** icon in the home toolbar.
-Saved groups also appear in **Chats**. Groups support text and images with one
+Saved groups also appear in **Chats**. Groups support text, images and files with one
 Android phone acting as host and up to seven guests (eight phones total).
 Actual Wi-Fi Direct capacity and discovery behavior depend on the phones.
 Image controls, foreground requirements, limits and three-phone checks are in
-[GROUP_IMAGES.md](GROUP_IMAGES.md). Group files remain planned.
+[GROUP_IMAGES.md](GROUP_IMAGES.md). File controls and tests are in
+[GROUP_FILES.md](GROUP_FILES.md).
 
 ## Create and join
 
@@ -77,8 +78,8 @@ before continuing. Confirmed deletion affects this phone and ends its active gro
 currently apply to direct chats; group refinements remain in the backlog.
 
 Encrypted backups include groups. Text-only group archives use payload version 2;
-group images use v5, while direct images/files select v3/v4. Current builds import
-v1–v5. The encrypted file envelope/KDF remains version
+group images use v5 and group files v6, while direct images/files select v3/v4.
+Current builds import v1–v6. The encrypted file envelope/KDF remains version
 1, but older builds reject the new payload rather than silently dropping groups.
 Import validates signatures and group/host references, merges by group + author +
 message ID, keeps existing conflicting records/read state, re-encrypts with local

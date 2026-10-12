@@ -305,6 +305,125 @@ void main() {
     },
   );
   test(
+    'group files remain encrypted with safe signed names across reopen and v6 import',
+    () async {
+      final public = base64Encode(
+            (await store.identity.extractPublicKey()).bytes,
+          ),
+          id = randomId();
+      final bytes = Uint8List.fromList(List.generate(40000, (i) => i % 251));
+      final m = await GroupText.create(
+        store.identity,
+        'Private file author',
+        group: id,
+        host: public,
+        epoch: randomId(),
+        view: 1,
+        text: 'File',
+        targets: [await identityId(public)],
+        fileBytes: bytes,
+        fileName: '../private?.pdf',
+      );
+      await store.saveGroupHistory(
+        GroupHistory(
+          id: id,
+          title: 'Private file group',
+          host: public,
+          messages: [m],
+          updated: 1000,
+        ),
+      );
+      final db = await openDatabase(databasePath);
+      final ciphertext =
+          (await db.query('group_history')).single['body'] as String;
+      expect(ciphertext, isNot(contains(base64Encode(bytes))));
+      final raw = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
+      expect(raw, isNot(contains(m.file!.name)));
+      expect(raw, isNot(contains(m.file!.digest)));
+      expect(await db.getVersion(), 9);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final saved = (await store.groupHistories()).single.messages.single;
+      expect(saved.fileBytes, bytes);
+      expect(saved.file!.name, ChatFile.safeName('../private?.pdf'));
+      expect(saved.envelope['signature'], m.envelope['signature']);
+      final backup = await store.exportBackup();
+      expect(backup.toJson()['version'], 6);
+      await store.clearHistory();
+      await store.importBackup(backup);
+      expect(
+        (await store.groupHistories()).single.messages.single.fileBytes,
+        bytes,
+      );
+      expect((await store.importBackup(backup)).duplicates, 1);
+      await store.deleteGroupHistory(id);
+      expect(
+        await (await openDatabase(databasePath)).query('group_history'),
+        isEmpty,
+      );
+    },
+  );
+  test(
+    'failed group-file backup write rolls back direct and group records together',
+    () async {
+      final source = DemoStore();
+      await source.open();
+      final public = base64Encode(
+            (await source.identity.extractPublicKey()).bytes,
+          ),
+          id = randomId();
+      final m = await GroupText.create(
+        source.identity,
+        'Author',
+        group: id,
+        host: public,
+        epoch: randomId(),
+        view: 1,
+        text: 'File',
+        targets: [await identityId(public)],
+        fileBytes: Uint8List.fromList([1, 2, 3]),
+        fileName: 'report.pdf',
+      );
+      await source.saveGroupHistory(
+        GroupHistory(
+          id: id,
+          title: 'Incoming',
+          host: public,
+          messages: [m],
+          updated: 1,
+        ),
+      );
+      await source.savePeer('new-peer', 'New peer');
+      await source.saveMessage(
+        ChatMessage(
+          id: 'direct',
+          peerId: 'new-peer',
+          text: 'Imported direct text',
+          timestamp: 1,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      await store.saveMessage(message());
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_group_file BEFORE INSERT ON group_history BEGIN SELECT RAISE(ABORT, 'test'); END",
+      );
+      await expectLater(
+        store.importBackup(await source.exportBackup()),
+        throwsA(anything),
+      );
+      expect(await store.groupHistories(), isEmpty);
+      expect(await store.messages('new-peer'), isEmpty);
+      expect((await store.messages('alice')).single.text, message().text);
+      expect(
+        (await store.conversations()).map((p) => p.id),
+        isNot(contains('new-peer')),
+      );
+    },
+  );
+  test(
     'group titles/authors/text/receipts are encrypted and preserved across reopen',
     () async {
       final public = base64Encode(

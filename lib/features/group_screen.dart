@@ -5,6 +5,7 @@ import '../services/chat_controller.dart';
 import '../services/group_controller.dart';
 import 'chats_tab.dart' show formatConversationTime;
 import 'group_image_bubble.dart';
+import 'group_file_bubble.dart';
 
 class GroupHubScreen extends StatefulWidget {
   const GroupHubScreen({
@@ -392,6 +393,69 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     }
   }
 
+  Future<void> _pickFile() async {
+    await g.files.pick();
+    if (mounted) await _reviewFile();
+  }
+
+  Future<void> _reviewFile() async {
+    final c = widget.controller,
+        access = widget.controller.accessRevision,
+        view = g.view,
+        epoch = g.epoch;
+    final selection = await g.files.review(widget.id);
+    if (!mounted ||
+        selection == null ||
+        !c.appAccessible ||
+        !c.appForeground ||
+        access != c.accessRevision) {
+      return;
+    }
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Send group file?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(selection.name),
+            Text(
+              '${(selection.bytes.length / 1024).ceil()} KiB · ${g.members.length - 1} recipients. The host receives and relays this file. Keep all apps unlocked and open.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Discard'),
+          ),
+          FilledButton(
+            onPressed: g.files.canSend
+                ? () => Navigator.pop(context, true)
+                : null,
+            child: const Text('Send file'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted ||
+        !c.appAccessible ||
+        !c.appForeground ||
+        access != c.accessRevision ||
+        g.active?.id != widget.id ||
+        epoch != g.epoch ||
+        view != g.view) {
+      return;
+    }
+    if (send == true) {
+      await g.files.send(selection);
+    } else if (send == false) {
+      g.files.discard();
+    }
+  }
+
   Future<void> _delete() async {
     final token = widget.controller.accessRevision;
     final yes = await showDialog<bool>(
@@ -444,6 +508,18 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                       )
                     : const Icon(Icons.add_photo_alternate_outlined),
               ),
+            if (active && (g.connected || g.files.picking))
+              IconButton(
+                tooltip: 'Attach group file',
+                onPressed: g.files.canSend ? _pickFile : null,
+                icon: g.files.picking
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.attach_file),
+              ),
             IconButton(
               onPressed: _delete,
               icon: const Icon(Icons.delete_outline),
@@ -480,49 +556,18 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                         child: const Text('Host this group again'),
                       ),
                     if (active) ...[
-                      if (g.connected && !g.images.available)
-                        const Text(
-                          'Images require at least two verified members, with every member using an updated app.',
-                        ),
-                      for (final p in g.images.progress)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${p.transfer.outgoing ? 'Sending to' : 'Receiving from'} ${p.member} · ${(p.transfer.fraction * 100).round()}%',
-                              ),
-                              LinearProgressIndicator(
-                                value: p.transfer.fraction,
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (g.images.waiting && g.images.progress.isEmpty)
-                        const Text(
-                          'Image saved locally; waiting for recipient receipts.',
-                        ),
-                      if (g.images.progress.isNotEmpty || g.images.waiting)
-                        TextButton(
-                          onPressed: g.images.cancelByUser,
-                          child: const Text('Cancel image transfers'),
-                        ),
-                      if (g.images.notice != null) Text(g.images.notice!),
-                      if (g.images.pendingGroup == widget.id)
-                        Wrap(
-                          children: [
-                            TextButton.icon(
-                              onPressed: _reviewImage,
-                              icon: const Icon(Icons.image_outlined),
-                              label: const Text('Review group image'),
-                            ),
-                            TextButton(
-                              onPressed: g.images.discard,
-                              child: const Text('Discard'),
-                            ),
-                          ],
-                        ),
+                      _GroupAttachmentControls(
+                        hub: g.images,
+                        connected: g.connected,
+                        groupId: widget.id,
+                        review: _reviewImage,
+                      ),
+                      _GroupAttachmentControls(
+                        hub: g.files,
+                        connected: g.connected,
+                        groupId: widget.id,
+                        review: _reviewFile,
+                      ),
                       GroupVerification(controller: c),
                       Text(
                         'Members (${g.members.length})',
@@ -595,7 +640,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                                     : '${message.name} • ${message.author.substring(0, 8)}',
                                 style: Theme.of(context).textTheme.labelLarge,
                               ),
-                              if (message.image != null)
+                              if (message.file != null)
+                                GroupFileBubble(
+                                  key: ValueKey(message.key),
+                                  controller: c,
+                                  groupId: widget.id,
+                                  message: message,
+                                )
+                              else if (message.image != null)
                                 GroupImageBubble(
                                   key: ValueKey(message.key),
                                   controller: c,
@@ -663,4 +715,64 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
       );
     },
   );
+}
+
+class _GroupAttachmentControls extends StatelessWidget {
+  const _GroupAttachmentControls({
+    required this.hub,
+    required this.connected,
+    required this.groupId,
+    required this.review,
+  });
+  final GroupAttachments<dynamic> hub;
+  final bool connected;
+  final String groupId;
+  final Future<void> Function() review;
+  @override
+  Widget build(BuildContext context) {
+    final label = hub.fileMode ? 'File' : 'Image', kind = label.toLowerCase();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (connected && !hub.available)
+          Text(
+            '${label}s require at least two verified members, with every member using an updated app.',
+          ),
+        for (final p in hub.progress)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$label: ${p.transfer.outgoing ? 'Sending to' : 'Receiving from'} ${p.member} (${(p.transfer.fraction * 100).round()}%)',
+                ),
+                LinearProgressIndicator(value: p.transfer.fraction),
+              ],
+            ),
+          ),
+        if (hub.waiting && hub.progress.isEmpty)
+          Text('$label saved locally; waiting for recipient receipts.'),
+        if (hub.progress.isNotEmpty || hub.waiting)
+          TextButton(
+            onPressed: hub.cancelByUser,
+            child: Text('Cancel $kind transfers'),
+          ),
+        if (hub.notice != null) Text(hub.notice!),
+        if (hub.pendingGroup == groupId)
+          Wrap(
+            children: [
+              TextButton.icon(
+                onPressed: review,
+                icon: Icon(
+                  hub.fileMode ? Icons.attach_file : Icons.image_outlined,
+                ),
+                label: Text('Review group $kind'),
+              ),
+              TextButton(onPressed: hub.discard, child: const Text('Discard')),
+            ],
+          ),
+      ],
+    );
+  }
 }
