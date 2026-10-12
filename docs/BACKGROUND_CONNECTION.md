@@ -2,6 +2,8 @@
 
 This setting currently protects direct chats. Hosted groups should keep the host
 open; group background protection is a later refinement.
+Images require both phones unlocked and foregrounded; backgrounding cancels
+partial image transfers. This setting does not resume them. See [IMAGE_SHARING.md](IMAGE_SHARING.md).
 
 On each phone, open **Settings → Background connection** and turn on **Keep
 connection active**. This choice is off on a fresh install and stays local to the

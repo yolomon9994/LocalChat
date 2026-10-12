@@ -72,6 +72,21 @@ Sealed frame fields: `v`, `kind=sealed`, `session`, `seq`, `nonce`, `body`, `tag
 
 Payload types are `verified`, `text` and `ack`. Message IDs, timestamps and content are inside authenticated ciphertext. Text is limited to 4096 UTF-8 bytes. Acknowledgements are also encrypted and sent only after successful decryption and local persistence.
 
+Direct-chat images negotiate `image-v1` in encrypted verification. Image offers,
+ready/chunk/receipt/completion/cancellation payloads use the same sealed frames
+and ordered counters; older peers continue text without image support. Source
+images are decoded/resized/re-encoded without source metadata. Transfers are
+bounded to 2 MiB and 1600 pixels/side with one 12 KiB chunk outstanding per
+direction. Exact order/size/hash and decoding precede an atomic receiver commit
+and final receipt. Both apps require foreground unlock; cancellation/lock/loss
+discard partial incoming bytes and leave outgoing attempts unconfirmed. No
+automatic image outbox/resume operates; explicit retry retains original IDs.
+Schema 8 encrypts image bytes and metadata separately under the history key,
+binding peer, ID, direction and image kind through separate AAD namespaces.
+Kind and existing message metadata remain plaintext. V3 backups include bounded
+validated images while retaining v1/v2 imports and the existing archive cap/KDF.
+See [image limits, wire/storage design and phone checks](IMAGE_SHARING.md).
+
 Saved chats accept an encrypted offline outbox. Queued messages transmit only
 after both phones verify the current session, for that identity, with the sender
 unlocked and foregrounded. At most four attempts await ACK; after 30 seconds,

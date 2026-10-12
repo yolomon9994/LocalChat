@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import '../core/secure_session.dart';
 import '../services/transport.dart';
+import '../core/chat_image.dart';
 
 /// A peer entirely inside this process. No channels, sockets or network calls.
 /// Real protocol frames exercise the shared controller, but the peer's trust
 /// confirmation and all delivery acknowledgements are simulated.
 class DemoTransport implements Transport {
+  DemoTransport({this.supportsImages = true});
+  final bool supportsImages;
   static const devices = {'demo-ava': 'Ava (Demo)', 'demo-noah': 'Noah (Demo)'};
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   final _identities = <String, SimpleKeyPair>{};
@@ -16,6 +20,10 @@ class DemoTransport implements Transport {
   bool _verified = false;
   int _generation = 0;
   int _reply = 0;
+  ChatImage? _image;
+  String? _imageId;
+  BytesBuilder? _imageBytes;
+  int _imageIndex = 0;
 
   @override
   Stream<Map<String, dynamic>> get events => _events.stream;
@@ -87,7 +95,10 @@ class DemoTransport implements Transport {
     switch (payload['type']) {
       case 'verified':
         _verified = true;
-        await _emitPayload(peer, {'type': 'verified'});
+        await _emitPayload(peer, {
+          'type': 'verified',
+          if (supportsImages) 'features': ['image-v1'],
+        });
         await _message(
           peer,
           'Hello from a simulated friend! Send a message to try the chat. '
@@ -107,6 +118,48 @@ class DemoTransport implements Transport {
       case 'ack':
         // The demo peer has no persistent outbox.
         break;
+      case 'imageOffer':
+        if (!_verified) throw StateError('Confirm the demo code first.');
+        _image = ChatImage.parse(payload['image']);
+        _imageId = payload['id'] as String;
+        _imageBytes = BytesBuilder(copy: false);
+        _imageIndex = 0;
+        await _emitPayload(peer, {'type': 'imageReady', 'id': _imageId});
+      case 'imageChunk':
+        if (payload['id'] != _imageId ||
+            payload['index'] != _imageIndex ||
+            _imageBytes == null) {
+          throw const FormatException('Invalid demo image chunk.');
+        }
+        final bytes = base64Decode(payload['data'] as String);
+        if (_imageBytes!.length + bytes.length > _image!.length) {
+          throw const FormatException('Demo image limit exceeded.');
+        }
+        _imageBytes!.add(bytes);
+        await _emitPayload(peer, {
+          'type': 'imageChunkAck',
+          'id': _imageId,
+          'index': _imageIndex++,
+        });
+      case 'imageComplete':
+        if (payload['id'] != _imageId ||
+            _image == null ||
+            _imageBytes == null) {
+          throw const FormatException('No demo image transfer.');
+        }
+        await _image!.verify(_imageBytes!.takeBytes());
+        await _emitPayload(peer, {
+          'type': 'imageResult',
+          'id': _imageId,
+          'received': true,
+        });
+        _image = null;
+        _imageId = null;
+        _imageBytes = null;
+      case 'imageCancel':
+        _image = null;
+        _imageId = null;
+        _imageBytes = null;
       default:
         throw const FormatException('Unsupported demo payload');
     }
@@ -117,6 +170,9 @@ class DemoTransport implements Transport {
     ++_generation;
     _peer = null;
     _verified = false;
+    _image = null;
+    _imageId = null;
+    _imageBytes = null;
     // ChatController resets state after an intentional disconnect. Emitting
     // another event here would leave a redundant reset queued during disposal.
   }

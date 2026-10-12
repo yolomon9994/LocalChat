@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import '../core/chat_backup.dart';
 import '../core/local_store.dart';
 import '../core/models.dart';
 import '../core/group_models.dart';
+import '../core/chat_image.dart';
 
 /// Preview-only state. Never opens SQLite or platform secure storage.
 class DemoStore extends LocalStore {
@@ -12,6 +14,29 @@ class DemoStore extends LocalStore {
   final _unread = <(String, String, bool)>{};
   final _drafts = <String, String>{};
   final _groups = <String, GroupHistory>{};
+  final _images = <(String, String, bool), Uint8List>{};
+  @override
+  Future<Uint8List> imageBytes(ChatMessage message) async {
+    final m = message;
+    final bytes = _images[(m.peerId, m.id, m.outgoing)];
+    if (bytes == null || m.image == null) {
+      throw const FormatException('Image is unavailable.');
+    }
+    await m.image!.verify(bytes);
+    return Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<bool> saveImageMessage(ChatMessage message, Uint8List bytes) async {
+    final m = message;
+    await m.image!.verify(bytes);
+    final inserted = await saveMessage(m);
+    if (inserted) {
+      _images[(m.peerId, m.id, m.outgoing)] = Uint8List.fromList(bytes);
+    }
+    return inserted;
+  }
+
   @override
   Future<List<GroupHistory>> groupHistories() async =>
       _groups.values.toList()..sort((a, b) => b.updated.compareTo(a.updated));
@@ -55,6 +80,11 @@ class DemoStore extends LocalStore {
               'outgoing': e.value.outgoing,
               'status': e.value.status,
               'read': !_unread.contains(e.key),
+              if (e.value.image != null)
+                'image': {
+                  ...e.value.image!.toJson(),
+                  'data': base64Encode(_images[e.key]!),
+                },
             },
           )
           .toList(),
@@ -112,7 +142,11 @@ class DemoStore extends LocalStore {
         timestamp: m['timestamp'] as int,
         outgoing: key.$3,
         status: m['status'] as String,
+        image: m['image'] == null ? null : ChatImage.parse(m['image']),
       );
+      if (m['image'] != null) {
+        _images[key] = base64Decode((m['image'] as Map)['data'] as String);
+      }
       if (!key.$3 && m['read'] == false) _unread.add(key);
       final p = _people[key.$1]!;
       final activity = activityByPeer[key.$1]!;
@@ -206,6 +240,8 @@ class DemoStore extends LocalStore {
     final previous = _messages[key];
     if (previous != null) {
       if (previous.text != message.text ||
+          jsonEncode(previous.image?.toJson()) !=
+              jsonEncode(message.image?.toJson()) ||
           previous.timestamp != message.timestamp) {
         throw const FormatException('Conflicting message ID');
       }
@@ -286,6 +322,7 @@ class DemoStore extends LocalStore {
       timestamp: message.timestamp,
       outgoing: true,
       status: status,
+      image: message.image,
     );
   }
 
@@ -309,7 +346,9 @@ class DemoStore extends LocalStore {
     for (final message in _messages.values.toList().reversed) {
       if (isCancelled?.call() == true) return const LocalSearchResults();
       final peer = _people[message.peerId];
-      if (peer != null && message.text.toLowerCase().contains(needle)) {
+      if (peer != null &&
+          message.image == null &&
+          message.text.toLowerCase().contains(needle)) {
         if (hits.length == limit) {
           return LocalSearchResults(
             conversations: names,
@@ -358,6 +397,7 @@ class DemoStore extends LocalStore {
   Future<void> deleteConversation(String peer) async {
     _people.remove(peer);
     _messages.removeWhere((key, _) => key.$1 == peer);
+    _images.removeWhere((key, _) => key.$1 == peer);
     _unread.removeWhere((key) => key.$1 == peer);
     _drafts.remove(peer);
   }
@@ -365,6 +405,7 @@ class DemoStore extends LocalStore {
   @override
   Future<void> clearHistory() async {
     _groups.clear();
+    _images.clear();
     _people.clear();
     _messages.clear();
     _unread.clear();

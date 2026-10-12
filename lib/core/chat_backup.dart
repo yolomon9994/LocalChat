@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'group_models.dart';
+import 'chat_image.dart';
 
 /// Version one fixes the KDF cost; files cannot request arbitrary work.
 const backupMaxPlaintext = 20 * 1024 * 1024;
@@ -27,7 +28,11 @@ class BackupData {
   final List<Map<String, Object?>> peers, messages, drafts;
   final List<Map<String, Object?>> groups;
   Map<String, Object?> toJson() => {
-    'version': groups.isEmpty ? 1 : 2,
+    'version': messages.any((m) => m['image'] != null)
+        ? 3
+        : groups.isEmpty
+        ? 1
+        : 2,
     'seed': seed,
     'owner': owner,
     'name': name,
@@ -41,7 +46,7 @@ class BackupData {
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2}.contains(raw['version'])) throw invalid;
+    if (raw is! Map || !{1, 2, 3}.contains(raw['version'])) throw invalid;
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
@@ -99,6 +104,19 @@ class BackupData {
       final outgoing = boolean(m, 'outgoing');
       if (!ids.contains(peer) || !keys.add((peer, id, outgoing))) throw invalid;
       string(m, 'text', 4096);
+      if (m.containsKey('image')) {
+        if (raw['version'] != 3 || m['image'] is! Map || m['text'] != 'Image') {
+          throw invalid;
+        }
+        final image = ChatImage.parse(m['image']);
+        final encoded = (m['image'] as Map)['data'];
+        if (encoded is! String ||
+            encoded.length > ((imageMaxBytes + 2) ~/ 3) * 4) {
+          throw invalid;
+        }
+        await image.verify(base64Decode(encoded));
+        m['image'] = {...image.toJson(), 'data': encoded};
+      }
       number(m, 'timestamp');
       boolean(m, 'read');
       if (!{
@@ -121,7 +139,7 @@ class BackupData {
     final groups = <Map<String, Object?>>[];
     final groupIds = <String>{};
     var groupMessages = 0;
-    if (raw['version'] == 2) {
+    if (raw['version'] == 2 || raw.containsKey('groups')) {
       for (final row in rows('groups', 500)) {
         final group = await GroupHistory.parse(row);
         groupMessages += group.messages.length;
@@ -230,7 +248,9 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
             ? 'unconfirmed'
             : m['status'],
       });
-    } else if (old['text'] == m['text'] && old['timestamp'] == m['timestamp']) {
+    } else if (old['text'] == m['text'] &&
+        old['timestamp'] == m['timestamp'] &&
+        jsonEncode(old['image']) == jsonEncode(m['image'])) {
       duplicates++;
     } else {
       conflicts++;

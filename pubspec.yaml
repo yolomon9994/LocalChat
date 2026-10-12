@@ -1,5 +1,5 @@
 name: local_chat
-description: Offline, verified, encrypted nearby text chat for Android.
+description: Offline, verified, encrypted nearby chat for Android.
 publish_to: none
 version: 0.1.0+1
 environment:

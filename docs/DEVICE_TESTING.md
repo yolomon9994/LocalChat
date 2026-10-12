@@ -1,6 +1,8 @@
 # Two-device acceptance tests
 
 Hosted group chats additionally require the [three-phone checklist](GROUP_CHATS.md).
+Direct-chat images have a separate [two-phone checklist](IMAGE_SHARING.md) for
+picker locking, progress/cancel, retries, offline viewing and image backups.
 
 These tests require physical hardware and are **not marked as passed** by the automated protocol tests. Record phone model, Android version and outcomes when testing.
 

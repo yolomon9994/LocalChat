@@ -3,7 +3,21 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Hosted nearby group text chats
+## Current milestone: Image sharing in direct chats
+
+- [x] Pick a local image, preview/discard and explicitly send after verification.
+- [x] Bound source size/pixels; resize/re-encode PNG without source metadata.
+- [x] Encrypted acknowledged chunks, progress/cancellation and complete-store receipts.
+- [x] Foreground/unlock gates; no automatic image outbox, retry or resume.
+- [x] Encrypted saved images, offline zoom viewing, unread/privacy/deletion behavior.
+- [x] Schema 8 preserves existing records; v3 backups include validated images
+      while retaining v1/v2 imports and safe merge/identity rules.
+- [x] Older peers retain text support; browser recipient/receipts remain simulated.
+- [x] All 203 tests pass, clean final analysis and Android/browser builds;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical two-phone checks and user's commit; see [IMAGE_SHARING.md](IMAGE_SHARING.md).
+
+## Hosted nearby group text chats: implemented and committed
 
 - [x] Create/find/join one nearby Android-hosted group; up to eight members
       including the host, subject to hardware capacity.
@@ -19,7 +33,8 @@ Work on one feature at a time; validate it before the user commits and starts th
       or group background-service claim. Direct outbox/background mode stay intact.
 - [x] All 185 tests pass, clean final analysis and Android/browser builds;
       see [VALIDATION.md](VALIDATION.md).
-- [ ] Physical three-phone checks and user's commit; see [GROUP_CHATS.md](GROUP_CHATS.md).
+- [x] User commits hosted group chats (`819ac32`).
+- [ ] Physical three-phone checks; see [GROUP_CHATS.md](GROUP_CHATS.md).
 
 ## Optional background connection protection: implemented and committed
 
@@ -223,7 +238,9 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [ ] Reply to messages, copy actions, and starred messages.
 - [ ] QR scanning for session verification (bind to the verified session).
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
-- [ ] Images and files: transfer progress, cancellation and size limits.
+- [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
+      preview, offline viewer and encrypted backup support; hardware checks pending.
+- [ ] Other files and group attachments: transfer progress, cancellation and size limits.
 - [ ] Private local contact nicknames independent of advertised display names.
 
 ## Later refinements discussed
@@ -244,7 +261,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 4. Encrypted backups and phone migration (committed).
 5. Offline outbox and retry (committed), connection troubleshooting/manual
    reconnection and notifications (committed), background connection support (committed).
-6. Hosted group text chat (current), then attachments and group refinements.
+6. Hosted group text chat (committed).
+7. Direct-chat image sharing (current), then other files, group attachments and refinements.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

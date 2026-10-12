@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as path;
@@ -6,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import 'models.dart';
 import 'chat_backup.dart';
 import 'group_models.dart';
+import 'chat_image.dart';
 
 class LocalStore {
   LocalStore({DateTime Function()? now, FlutterSecureStorage? vault})
@@ -40,7 +42,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -57,6 +59,7 @@ class LocalStore {
         await db.execute('CREATE TABLE backup_receipt (id TEXT PRIMARY KEY)');
         await _createOutboxIndex(db);
         await _createGroups(db);
+        await _createImages(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -75,6 +78,7 @@ class LocalStore {
         }
         if (oldVersion < 6) await _createOutboxIndex(db);
         if (oldVersion < 7) await _createGroups(db);
+        if (oldVersion < 8) await _createImages(db);
       },
     );
     await _recoverIdentity();
@@ -133,6 +137,11 @@ class LocalStore {
         'outgoing': m.outgoing,
         'status': m.status,
         'read': row['is_read'] == 1,
+        if (m.image != null)
+          'image': {
+            ...m.image!.toJson(),
+            'data': base64Encode(await _imageBytes(db, m)),
+          },
       });
     }
     final draftResult = <Map<String, Object?>>[];
@@ -222,9 +231,20 @@ class LocalStore {
         for (final m in plan.data.messages) {
           final direction = m['outgoing'] == true ? 1 : 0;
           final box = await _cipher.encrypt(
-            utf8.encode(m['text'] as String),
+            utf8.encode(
+              m['image'] == null
+                  ? m['text'] as String
+                  : jsonEncode(ChatImage.parse(m['image']).toJson()),
+            ),
             secretKey: _historyKey,
-            aad: utf8.encode('${m['peer']}/${m['id']}/$direction'),
+            aad: utf8.encode(
+              _messageAad(
+                m['peer'] as String,
+                m['id'] as String,
+                direction,
+                image: m['image'] != null,
+              ),
+            ),
           );
           await txn.insert('messages', {
             'id': m['id'],
@@ -238,7 +258,24 @@ class LocalStore {
             'outgoing': direction,
             'status': m['status'],
             'is_read': direction == 1 || m['read'] == true ? 1 : 0,
+            'kind': m['image'] == null ? 'text' : 'image',
           });
+          if (m['image'] != null) {
+            final message = ChatMessage(
+              id: m['id'] as String,
+              peerId: m['peer'] as String,
+              text: 'Image',
+              timestamp: m['timestamp'] as int,
+              outgoing: direction == 1,
+              status: m['status'] as String,
+              image: ChatImage.parse(m['image']),
+            );
+            await _writeImage(
+              txn,
+              message,
+              base64Decode((m['image'] as Map)['data'] as String),
+            );
+          }
           await txn.rawUpdate(
             'UPDATE peers SET updated = MAX(updated, ?) WHERE id = ?',
             [peerActivity[m['peer']], m['peer']],
@@ -285,6 +322,78 @@ class LocalStore {
   static Future<void> _createGroups(Database db) => db.execute(
     'CREATE TABLE IF NOT EXISTS group_history (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
   );
+
+  static Future<void> _createImages(Database db) async {
+    if (!(await db.rawQuery(
+      'PRAGMA table_info(messages)',
+    )).any((c) => c['name'] == 'kind')) {
+      await db.execute(
+        "ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'",
+      );
+    }
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS images (peer TEXT NOT NULL, id TEXT NOT NULL, outgoing INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(peer, id, outgoing))',
+    );
+  }
+
+  String _imageAad(ChatMessage m) =>
+      'LocalChat/image/1/${m.peerId}/${m.id}/${m.outgoing ? 1 : 0}';
+  String _messageAad(
+    String peer,
+    String id,
+    int direction, {
+    bool image = false,
+  }) => '${image ? 'LocalChat/image-message/1/' : ''}$peer/$id/$direction';
+  Future<void> _writeImage(
+    DatabaseExecutor db,
+    ChatMessage m,
+    Uint8List bytes,
+  ) async {
+    await m.image!.verify(bytes);
+    final box = await _cipher.encrypt(
+      bytes,
+      secretKey: _historyKey,
+      aad: utf8.encode(_imageAad(m)),
+    );
+    await db.insert('images', {
+      'peer': m.peerId,
+      'id': m.id,
+      'outgoing': m.outgoing ? 1 : 0,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    });
+  }
+
+  Future<Uint8List> _imageBytes(DatabaseExecutor db, ChatMessage m) async {
+    if (m.image == null) {
+      throw const FormatException('This message has no image.');
+    }
+    final rows = await db.query(
+      'images',
+      where: 'peer = ? AND id = ? AND outgoing = ?',
+      whereArgs: [m.peerId, m.id, m.outgoing ? 1 : 0],
+      limit: 1,
+    );
+    if (rows.isEmpty) throw const FormatException('Image is unavailable.');
+    final bytes = base64Decode(rows.single['body'] as String);
+    final clear = Uint8List.fromList(
+      await _cipher.decrypt(
+        SecretBox(
+          bytes.sublist(40),
+          nonce: bytes.sublist(0, 24),
+          mac: Mac(bytes.sublist(24, 40)),
+        ),
+        secretKey: _historyKey,
+        aad: utf8.encode(_imageAad(m)),
+      ),
+    );
+    await m.image!.verify(clear);
+    return clear;
+  }
+
+  Future<Uint8List> imageBytes(ChatMessage message) =>
+      _imageBytes(_database, message);
+  Future<bool> saveImageMessage(ChatMessage message, Uint8List bytes) =>
+      _saveMessage(message, imageBytes: bytes);
 
   Future<List<GroupHistory>> _groupHistories(DatabaseExecutor db) async {
     final result = <GroupHistory>[];
@@ -365,6 +474,7 @@ class LocalStore {
 
   Future<void> deleteConversation(String peer) =>
       _database.transaction((txn) async {
+        await txn.delete('images', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('messages', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('peers', where: 'id = ?', whereArgs: [peer]);
@@ -436,7 +546,7 @@ class LocalStore {
   Future<List<Conversation>> conversations() async {
     final rows = await _database.rawQuery('''
       SELECT p.id AS peer_id, p.name, p.updated, p.pinned, p.archived,
-             m.id, m.peer, m.body, m.timestamp, m.outgoing, m.status,
+             m.id, m.peer, m.body, m.timestamp, m.outgoing, m.status, m.kind,
              (SELECT COUNT(*) FROM messages u
               WHERE u.peer = p.id AND u.outgoing = 0 AND u.is_read = 0) AS unread_count,
              (SELECT COUNT(*) FROM messages q
@@ -481,12 +591,28 @@ class LocalStore {
   Future<bool> _saveMessage(
     ChatMessage message, {
     bool clearDraft = false,
+    Uint8List? imageBytes,
   }) async {
+    if (message.image != null) {
+      if (imageBytes == null) {
+        throw const FormatException('Missing image contents.');
+      }
+      await message.image!.verify(imageBytes);
+    }
     final box = await _cipher.encrypt(
-      utf8.encode(message.text),
+      utf8.encode(
+        message.image == null
+            ? message.text
+            : jsonEncode(message.image!.toJson()),
+      ),
       secretKey: _historyKey,
       aad: utf8.encode(
-        '${message.peerId}/${message.id}/${message.outgoing ? 1 : 0}',
+        _messageAad(
+          message.peerId,
+          message.id,
+          message.outgoing ? 1 : 0,
+          image: message.image != null,
+        ),
       ),
     );
     return _database.transaction((txn) async {
@@ -499,6 +625,8 @@ class LocalStore {
       if (existing.isNotEmpty) {
         final previous = await _decodeMessage(existing.single);
         if (previous.text != message.text ||
+            jsonEncode(previous.image?.toJson()) !=
+                jsonEncode(message.image?.toJson()) ||
             previous.timestamp != message.timestamp) {
           throw const FormatException('Conflicting message ID');
         }
@@ -516,7 +644,9 @@ class LocalStore {
         'outgoing': message.outgoing ? 1 : 0,
         'status': message.status,
         'is_read': message.outgoing ? 1 : 0,
+        'kind': message.image == null ? 'text' : 'image',
       });
+      if (message.image != null) await _writeImage(txn, message, imageBytes!);
       await txn.update(
         'peers',
         {'updated': _now().millisecondsSinceEpoch},
@@ -616,12 +746,22 @@ class LocalStore {
         mac: Mac(bytes.sublist(24, 40)),
       ),
       secretKey: _historyKey,
-      aad: utf8.encode('$peer/${r['id']}/${r['outgoing']}'),
+      aad: utf8.encode(
+        _messageAad(
+          peer,
+          r['id'] as String,
+          r['outgoing'] as int,
+          image: r['kind'] == 'image',
+        ),
+      ),
     );
     return ChatMessage(
       id: r['id'] as String,
       peerId: peer,
-      text: utf8.decode(clear),
+      text: r['kind'] == 'image' ? 'Image' : utf8.decode(clear),
+      image: r['kind'] == 'image'
+          ? ChatImage.parse(jsonDecode(utf8.decode(clear)))
+          : null,
       timestamp: r['timestamp'] as int,
       outgoing: r['outgoing'] == 1,
       status: r['status'] as String,
@@ -670,7 +810,10 @@ class LocalStore {
       for (final row in rows) {
         if (isCancelled?.call() == true) return const LocalSearchResults();
         final message = await _decodeMessage(row);
-        if (!message.text.toLowerCase().contains(needle)) continue;
+        if (message.image != null ||
+            !message.text.toLowerCase().contains(needle)) {
+          continue;
+        }
         if (hits.length == limit) {
           return LocalSearchResults(
             conversations: names,
@@ -702,6 +845,7 @@ class LocalStore {
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
       await txn.delete('group_history');
+      await txn.delete('images');
       await txn.delete('messages');
       await txn.delete('drafts');
       await txn.delete('peers');

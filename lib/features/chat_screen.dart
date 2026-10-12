@@ -4,6 +4,7 @@ import '../core/models.dart';
 import '../services/chat_controller.dart';
 import 'outgoing_message_actions.dart';
 import 'connection_help.dart';
+import 'chat_image_view.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -98,6 +99,73 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   final _focusScroll = ScrollController();
   late bool _showTarget = widget.focusMessage != null;
   bool _sending = false;
+  Future<void> _pickImage() async {
+    await widget.controller.pickImage();
+    if (mounted &&
+        widget.controller.appAccessible &&
+        widget.controller.appForeground &&
+        widget.controller.pendingImagePeer == widget.controller.selectedPeer) {
+      await _reviewImage();
+    }
+  }
+
+  Future<void> _reviewImage() async {
+    final c = widget.controller, peer = widget.controller.selectedPeer;
+    final access = c.accessRevision;
+    final bytes = await c.reviewPendingImage();
+    if (!mounted ||
+        bytes == null ||
+        !c.appAccessible ||
+        access != c.accessRevision) {
+      return;
+    }
+    try {
+      final send = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Send image?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.memory(bytes, height: 200, fit: BoxFit.contain),
+              const SizedBox(height: 8),
+              Text(
+                '${(bytes.length / 1024).ceil()} KiB · resized to at most 1600 pixels. Source metadata removed.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Discard'),
+            ),
+            FilledButton(
+              onPressed: c.canSendImage
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: const Text('Send image'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted ||
+          !c.appAccessible ||
+          !c.appForeground ||
+          access != c.accessRevision ||
+          c.selectedPeer != peer) {
+        return;
+      }
+      if (send == true) {
+        await c.sendImage(bytes);
+      } else if (send == false) {
+        c.discardPendingImage();
+      }
+    } finally {
+      unawaited(MemoryImage(bytes).evict());
+    }
+  }
+
   Future<void> _send() async {
     if (_sending || !widget.controller.canSubmit || _text.text.trim().isEmpty) {
       return;
@@ -178,7 +246,10 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   ).textTheme.labelMedium?.copyWith(color: foreground),
                 ),
               ),
-            SelectableText(message.text, style: TextStyle(color: foreground)),
+            if (message.image != null)
+              ChatImageBubble(controller: widget.controller, message: message)
+            else
+              SelectableText(message.text, style: TextStyle(color: foreground)),
             const SizedBox(height: 5),
             Text(
               '$stamp${message.outgoing ? ' · ${message.status}' : ''}',
@@ -186,7 +257,8 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                 context,
               ).textTheme.labelSmall?.copyWith(color: foreground),
             ),
-            if (message.outgoing &&
+            if (message.image == null &&
+                message.outgoing &&
                 (message.status == 'queued' || message.status == 'unconfirmed'))
               OutgoingMessageActions(
                 controller: widget.controller,
@@ -450,6 +522,80 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   ),
                 ),
             if (!verifying)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * .2,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final transfer in c.images.progress.where(
+                        (p) => p.peer == c.selectedPeer,
+                      ))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${transfer.outgoing ? 'Sending' : 'Receiving'} image · ${(transfer.fraction * 100).round()}%',
+                                    ),
+                                    LinearProgressIndicator(
+                                      value: transfer.fraction,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Cancel image transfer',
+                                onPressed: c.cancelImageTransfers,
+                                icon: const Icon(Icons.cancel_outlined),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (c.images.notice != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            c.images.notice!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      if (c.pendingImagePeer == c.selectedPeer &&
+                          c.pendingImagePeer != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              TextButton.icon(
+                                onPressed: _reviewImage,
+                                icon: const Icon(Icons.image_outlined),
+                                label: const Text('Review image'),
+                              ),
+                              TextButton(
+                                onPressed: c.discardPendingImage,
+                                child: const Text('Discard'),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            if (!verifying)
               SafeArea(
                 top: false,
                 child: Padding(
@@ -457,6 +603,22 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
+                      if (c.canSend || c.pickingImage)
+                        IconButton(
+                          tooltip: c.remoteSupportsImages
+                              ? 'Attach image'
+                              : 'Images require both phones to use the updated app',
+                          onPressed: c.canSendImage ? _pickImage : null,
+                          icon: c.pickingImage
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.add_photo_alternate_outlined),
+                        ),
                       Expanded(
                         child: TextField(
                           key: const ValueKey('message-composer'),

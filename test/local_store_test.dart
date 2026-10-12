@@ -8,6 +8,8 @@ import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
 import 'package:local_chat/core/chat_backup.dart';
 import 'package:local_chat/core/group_models.dart';
+import 'package:local_chat/core/chat_image.dart';
+import 'image_test_support.dart';
 import 'package:local_chat/core/secure_session.dart';
 import 'package:local_chat/demo/demo_store.dart';
 import 'package:path/path.dart' as path;
@@ -49,6 +51,64 @@ void main() {
         outgoing: outgoing,
         status: 'sending',
       );
+  test(
+    'image bytes and metadata encrypted, atomic dedupe, reopen, backup and deletion',
+    () async {
+      final bytes = await testImage();
+      final m = ChatMessage(
+        id: 'image',
+        peerId: 'alice',
+        text: 'Image',
+        timestamp: 2,
+        outgoing: false,
+        status: 'received',
+        image: await ChatImage.fromBytes(bytes),
+      );
+      expect(await store.saveImageMessage(m, bytes), isTrue);
+      expect(await store.saveImageMessage(m, bytes), isFalse);
+      final db = await openDatabase(databasePath);
+      final row = (await db.query('images')).single;
+      expect(row['body'], isNot(base64Encode(bytes)));
+      expect(
+        (await db.query('messages')).single['body'],
+        isNot(contains(m.image!.digest)),
+      );
+      expect((await store.conversations()).single.unreadCount, 1);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final saved = (await store.messages('alice')).single;
+      expect(await store.imageBytes(saved), bytes);
+      final backup = await store.exportBackup();
+      expect(backup.toJson()['version'], 3);
+      await store.clearHistory();
+      await store.importBackup(backup);
+      expect(
+        await store.imageBytes((await store.messages('alice')).single),
+        bytes,
+      );
+      await store.deleteConversation('alice');
+      expect(await (await openDatabase(databasePath)).query('images'), isEmpty);
+    },
+  );
+  test(
+    'schema 7 upgrades preserve encrypted text and add image storage',
+    () async {
+      await store.saveMessage(message());
+      await store.close();
+      final db = await openDatabase(databasePath);
+      await db.execute('DROP TABLE images');
+      await db.execute('ALTER TABLE messages DROP COLUMN kind');
+      await db.execute('PRAGMA user_version = 7');
+      await db.close();
+      store = LocalStore();
+      await store.open();
+      expect((await store.messages('alice')).single.text, message().text);
+      final upgraded = await openDatabase(databasePath);
+      expect(await upgraded.getVersion(), 8);
+      expect(await upgraded.query('images'), isEmpty);
+    },
+  );
   test(
     'group titles/authors/text/receipts are encrypted and preserved across reopen',
     () async {
@@ -358,9 +418,10 @@ void main() {
     () async {
       await store.saveMessage(message(outgoing: false));
       final db = await openDatabase(databasePath);
-      final oldMessage = Map<String, Object?>.from(
-        (await db.query('messages')).single,
-      )..remove('is_read');
+      final oldMessage =
+          Map<String, Object?>.from((await db.query('messages')).single)
+            ..remove('is_read')
+            ..remove('kind');
       final oldPeer =
           Map<String, Object?>.from((await db.query('peers')).single)
             ..remove('pinned')
@@ -395,7 +456,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 7);
+      expect(await upgraded.getVersion(), 8);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -806,7 +867,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 7);
+      expect(await (await openDatabase(databasePath)).getVersion(), 8);
     },
   );
   test(
@@ -885,7 +946,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 7);
+      expect(await (await openDatabase(databasePath)).getVersion(), 8);
     },
   );
 

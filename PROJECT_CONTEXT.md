@@ -7,8 +7,8 @@ docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes
 
 LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
-backend, Firebase or cloud database. Version 0.1 is Android-first and text only.
-Images and videos are planned later. Bluetooth, multi-hop relaying, iOS and
+backend, Firebase or cloud database. Version 0.1 is Android-first, with direct
+text/images and hosted text groups. Other files/video, Bluetooth, multi-hop relaying, iOS and
 automatic reconnect are also future work. Local notifications and optional
 background protection of the current running verified session are implemented;
 Doze/vendor restrictions still apply and hardware reliability is unvalidated.
@@ -21,14 +21,52 @@ Chats list improvements were committed as `c233159`, and local search as
 `8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
 Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
 Notifications were committed as `9bb6c60`, and background protection as `24d52b5`.
-The current milestone is hosted nearby group text chats.
+Hosted group chats were committed as `819ac32`.
+The current milestone is image sharing in one-to-one chats.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Hosted group milestone — ready for phone testing, 2026-10-12
+## Direct-chat image milestone — 2026-10-12
 
-All work remains local and uncommitted. The user resumed after the saved pause.
-Do not stage, commit or push; the user handles Git after phone testing.
+All image changes stay local, unstaged and uncommitted. The user handles Git.
+
+- Android `ImageFiles.kt` uses a local-only image document picker and bounded
+  reads, without a new package or storage/gallery permission. Browser selection
+  uses local file APIs with a clearly simulated recipient.
+- `image_content.dart` bounds sources to 8 MiB/40 MP, resizes to at most 1600
+  pixels/side and re-encodes PNG to strip source metadata; first frame only.
+  Prepared images are bounded to 2 MiB.
+- `ImageTransfers` uses the existing serialized secure session with negotiated
+  `image-v1`, one acknowledged 12 KiB chunk at a time, per-direction transfer
+  bounds, exact order/size/hash checks, decoding, 30-second stage timers and
+  persistence before final receipts. Text interleaves with images. Both apps
+  must be unlocked/foregrounded; lock/background/cancel/disconnect discard
+  partial incoming bytes and mark outgoing attempts unconfirmed. No auto-resume.
+- ChatScreen provides attach/preview/discard, bounded scrollable transfer
+  controls, progress/cancel and offline zoom. Explicit image retry reuses its
+  original ID; receiver dedupe retains read state and suppresses repeat alerts.
+  Prepared picker selections survive locking encrypted in memory, bound to
+  their intended identity; review/send wait for unlock. Deletion invalidates
+  late picker results. Text drafts are preserved.
+- Schema 8 adds message kind and encrypted image rows with separate AAD for
+  image bytes and image-message metadata. Message/bytes insert atomically;
+  deletion and backup imports are transactional. Existing text/group ciphertext
+  and identity remain compatible. Payload-v3 backups contain validated images;
+  v1/v2 still import, envelope/KDF and 20 MiB archive bound stay unchanged.
+- Image notification/list preview is “Image”; text search excludes image bodies.
+  Existing app lock removes viewer/preview routes. Temporary pixels may exist
+  in managed memory; cache eviction is not guaranteed forensic erasure.
+- `docs/IMAGE_SHARING.md` records controls, limits, wire/storage design, sources
+  and the pending two-phone checklist. Final results go in `docs/VALIDATION.md`.
+- Full regression suite: 203 tests pass (185 existing + 18 image checks), with
+  the final text acknowledgement and offline layout fixes. Final analysis is
+  clean and final Android arm64/browser builds pass. The browser retains its
+  existing optional Cupertino font warning. Diff check is clean. Physical
+  two-phone tests remain pending; the user stages/commits/pushes after testing.
+
+## Hosted group milestone — committed, 2026-10-12
+
+The user committed this milestone as `819ac32`. Hardware checks remain pending.
 
 Implemented:
 - `GroupTransport.kt` owns dedicated Android group channels, Wi-Fi Direct owner
@@ -75,7 +113,7 @@ Verified:
 
 Next: install the updated APK on three Android phones and follow
 `docs/GROUP_CHATS.md`. Hardware discovery/pairing/capacity, Doze/vendor behavior
-and battery checks remain pending. User stages, commits and pushes after testing.
+and battery checks remain pending.
 
 ## Background connection milestone
 

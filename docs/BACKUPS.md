@@ -21,6 +21,12 @@ Archives containing groups use payload version 2; current builds also import
 version 1, while older builds reject group archives. Group sessions/keys are never
 restored, and imported pending receipts become unconfirmed. Import ends the current
 group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
+Archives containing direct-chat images use payload version 3, including bounded
+image bytes, dimensions and SHA-256 digest. New builds import v1/v2/v3; older
+builds reject image archives. Images are re-encrypted with destination history
+keys and restored pending attempts remain unconfirmed. The 20 MiB total archive
+limit still applies; image-heavy exports can exceed it without changing history.
+See [IMAGE_SHARING.md](IMAGE_SHARING.md).
 Export does not delete or change source history. Failed draft saves/loads must
 be resolved before export so the backup does not silently omit unsaved edits.
 
@@ -50,7 +56,8 @@ confirmed can finish while the UI is hidden; it is a single database transaction
 
 - Dedupe by peer ID, message ID and outgoing/incoming direction. Matching text
   and timestamp count as a duplicate; differing text/timestamp count as a conflict.
-  Existing message text, timestamp, read state and status always win.
+  Image metadata/bytes must also match for a duplicate. Existing message content,
+  timestamp, read state and status always win.
 - Existing chat names and pin/archive choices win. New chats inherit the archive
   choices. New message activity can advance a chat; duplicate-only imports do not.
 - Fill empty/missing drafts; retain existing nonempty drafts. Newer local edits

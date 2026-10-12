@@ -1,3 +1,5 @@
+import 'chat_image.dart';
+
 class Peer {
   const Peer(this.address, this.name);
   final String address;
@@ -12,6 +14,7 @@ class ChatMessage {
     required this.timestamp,
     required this.outgoing,
     required this.status,
+    this.image,
   });
   final String id;
   final String peerId;
@@ -19,6 +22,7 @@ class ChatMessage {
   final int timestamp;
   final bool outgoing;
   final String status;
+  final ChatImage? image;
 }
 
 class Conversation {

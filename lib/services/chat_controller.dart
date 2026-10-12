@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import '../core/local_store.dart';
@@ -14,6 +15,9 @@ import 'chat_notifications.dart';
 import 'background_connection.dart';
 import 'group_controller.dart';
 import 'group_transport.dart';
+import 'image_files.dart';
+import 'image_content.dart';
+import 'image_transfers.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -26,6 +30,8 @@ class ChatController extends ChangeNotifier {
     ChatNotifications? notifications,
     BackgroundConnection? background,
     GroupTransport? groupTransport,
+    ImageFiles? imageFiles,
+    this.imageTimeout = const Duration(seconds: 30),
   }) : nearbyTools =
            nearbyTools ??
            (transport is WifiDirectTransport
@@ -47,12 +53,183 @@ class ChatController extends ChangeNotifier {
                  : MemoryBackgroundPlatform(),
              isDemo: isDemo,
            ),
+       imageFiles = imageFiles ?? createImageFiles(),
        _groupTransport =
            groupTransport ??
            (transport is WifiDirectTransport
                ? WifiGroupTransport()
                : UnavailableGroupTransport());
   final GroupTransport _groupTransport;
+  final ImageFiles imageFiles;
+  final Duration imageTimeout;
+  bool remoteSupportsImages = false;
+  bool pickingImage = false;
+  SecretBox? _pendingImage;
+  SecretKey? _pendingImageKey;
+  String? pendingImagePeer;
+  int _imageSelectionRevision = 0;
+  bool get canSendImage =>
+      canSend &&
+      remoteSupportsImages &&
+      _appAccessible &&
+      _appForeground &&
+      !images.sending &&
+      !pickingImage;
+  late final images = ImageTransfers(
+    store: store,
+    peer: () => connectedPeer,
+    canAct: () =>
+        !_disposed && initialized && ready && _appAccessible && _appForeground,
+    send: _sendImagePayload,
+    enqueue: _run,
+    changed: notifyListeners,
+    persisted: _imagePersisted,
+    timeout: imageTimeout,
+  );
+
+  Future<void> _sendImagePayload(
+    Map<String, dynamic> payload,
+    bool origin,
+  ) async {
+    final session = _session;
+    if (session == null || !ready) {
+      throw const FormatException('Verify both phones first.');
+    }
+    final access = accessRevision;
+    if (origin && (!_appAccessible || !_appForeground)) return;
+    try {
+      final frame = await session.encrypt(payload);
+      if (!identical(session, _session) ||
+          (origin &&
+              (!_appAccessible ||
+                  !_appForeground ||
+                  access != accessRevision))) {
+        await _disconnect();
+        throw const FormatException(
+          'Image transfer interrupted by app locking.',
+        );
+      }
+      await transport.send(jsonEncode(frame));
+    } catch (_) {
+      if (identical(session, _session)) await _disconnect();
+      rethrow;
+    }
+  }
+
+  Future<void> _imagePersisted(ChatMessage message, bool inserted) async {
+    historyRevision++;
+    if (inserted && !message.outgoing) {
+      final target = message.peerId;
+      unawaited(
+        notifications.incoming(
+          target,
+          _session?.peerName ?? 'Nearby phone',
+          'Image',
+          isReading: () => selectedPeer == target && _canReadSelected,
+        ),
+      );
+    }
+    try {
+      await _refresh();
+    } catch (_) {
+      error = 'Image saved. Reopen this chat to refresh history.';
+    }
+    notifyListeners();
+  }
+
+  void discardPendingImage() {
+    _imageSelectionRevision++;
+    _pendingImage = null;
+    _pendingImageKey = null;
+    pendingImagePeer = null;
+    notifyListeners();
+  }
+
+  Future<void> pickImage() async {
+    if (!canSendImage || selectedPeer == null) return;
+    final target = selectedPeer!;
+    final selection = _imageSelectionRevision;
+    pickingImage = true;
+    error = null;
+    notifyListeners();
+    try {
+      final source = await imageFiles.pick();
+      if (source == null || _disposed) return;
+      final bytes = await normalizeImage(source);
+      final cipher = Xchacha20.poly1305Aead();
+      final key = await cipher.newSecretKey();
+      final box = await cipher.encrypt(bytes, secretKey: key);
+      if (_disposed ||
+          selection != _imageSelectionRevision ||
+          !(await store.conversations()).any((p) => p.id == target)) {
+        return;
+      }
+      _pendingImageKey = key;
+      _pendingImage = box;
+      pendingImagePeer = target;
+    } catch (_) {
+      error =
+          'Could not prepare this image. Choose an image under 8 MiB; prepared images must be under 2 MiB.';
+    } finally {
+      pickingImage = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Uint8List?> reviewPendingImage() async {
+    if (!_appAccessible ||
+        !_appForeground ||
+        selectedPeer != pendingImagePeer ||
+        _pendingImage == null ||
+        _pendingImageKey == null) {
+      return null;
+    }
+    final access = accessRevision;
+    final selection = _imageSelectionRevision;
+    final bytes = Uint8List.fromList(
+      await Xchacha20.poly1305Aead().decrypt(
+        _pendingImage!,
+        secretKey: _pendingImageKey!,
+      ),
+    );
+    if (_disposed ||
+        selection != _imageSelectionRevision ||
+        selectedPeer != pendingImagePeer ||
+        !_appAccessible ||
+        !_appForeground ||
+        access != accessRevision) {
+      return null;
+    }
+    return bytes;
+  }
+
+  Future<bool> sendImage(Uint8List bytes, {ChatMessage? retry}) async {
+    final target = selectedPeer, access = accessRevision;
+    var accepted = false;
+    await _run(() async {
+      if (!canSendImage ||
+          selectedPeer != target ||
+          access != accessRevision ||
+          (retry != null && retry.peerId != target)) {
+        return;
+      }
+      error = null;
+      accepted = await images.start(bytes, retry: retry);
+      if (accepted && pendingImagePeer == target) discardPendingImage();
+    });
+    return accepted;
+  }
+
+  Future<void> cancelImageTransfers() {
+    images.requestCancel();
+    return _run(images.cancel);
+  }
+
+  void _pauseImages() {
+    images.requestCancel();
+    if (images.progress.isNotEmpty) unawaited(_run(images.cancel));
+  }
+
   late final groups = GroupController(
     _groupTransport,
     store,
@@ -194,6 +371,7 @@ class ChatController extends ChangeNotifier {
   void setAppAccess(bool accessible) {
     if (_appAccessible == accessible) return;
     _appAccessible = accessible;
+    if (!accessible) _pauseImages();
     notifications.setAccessible(_appAccessible && _appForeground);
     accessRevision++;
     unawaited(groups.accessChanged());
@@ -274,6 +452,7 @@ class ChatController extends ChangeNotifier {
   void setAppForeground(bool foreground) {
     if (_appForeground == foreground) return;
     _appForeground = foreground;
+    if (!foreground) _pauseImages();
     unawaited(groups.accessChanged());
     notifications.setAccessible(_appAccessible && _appForeground);
     _readVisible();
@@ -632,6 +811,9 @@ class ChatController extends ChangeNotifier {
           throw const FormatException('Repeated verification');
         }
         remoteVerified = true;
+        remoteSupportsImages =
+            payload['features'] is List &&
+            (payload['features'] as List).contains('image-v1');
         await _updateReady();
       case 'text':
         if (!ready) throw const FormatException('Peer has not been verified');
@@ -698,6 +880,17 @@ class ChatController extends ChangeNotifier {
                 'Could not save delivery confirmation. This message may be unconfirmed.';
           }
         }
+      case 'imageOffer':
+      case 'imageReady':
+      case 'imageChunk':
+      case 'imageChunkAck':
+      case 'imageComplete':
+      case 'imageResult':
+      case 'imageCancel':
+        if (!ready || !remoteSupportsImages) {
+          throw const FormatException('Unsupported image transfer.');
+        }
+        await images.handle(payload);
       default:
         throw const FormatException('Unsupported payload type');
     }
@@ -709,7 +902,10 @@ class ChatController extends ChangeNotifier {
     }
     error = null;
     try {
-      await _sendPayload({'type': 'verified'});
+      await _sendPayload({
+        'type': 'verified',
+        'features': ['image-v1'],
+      });
       localVerified = true;
       await _updateReady();
     } catch (_) {
@@ -857,6 +1053,7 @@ class ChatController extends ChangeNotifier {
       _ackTimers.length < 4;
 
   bool _validOutgoing(ChatMessage m) =>
+      m.image == null &&
       m.outgoing &&
       RegExp(r'^[A-Za-z0-9_-]{24}$').hasMatch(m.id) &&
       m.text.trim().isNotEmpty &&
@@ -1140,6 +1337,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> _clearHistory() => _run(() async {
+    if (images.progress.isNotEmpty) await images.cancel();
+    discardPendingImage();
     await drafts.clearHistory();
     await groups.refreshHistory();
     unawaited(notifications.cancel(null));
@@ -1188,6 +1387,7 @@ class ChatController extends ChangeNotifier {
       error = null;
       try {
         if (connectedPeer == peer) await _disconnect();
+        if (pendingImagePeer == peer || pickingImage) discardPendingImage();
         await drafts.deleteConversation(peer);
         unawaited(notifications.cancel(peer));
         historyRevision++;
@@ -1216,6 +1416,13 @@ class ChatController extends ChangeNotifier {
     _ackTimers.clear();
     _attemptedIds.clear();
     _session = null;
+    remoteSupportsImages = false;
+    try {
+      await images.stop();
+    } catch (_) {
+      error =
+          'Could not save interrupted image status. Reopen the app before retrying.';
+    }
     localVerified = false;
     remoteVerified = false;
     state = started ? 'Available nearby' : 'Offline';
@@ -1258,6 +1465,10 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    images.dispose();
+    _pendingImage = null;
+    _pendingImageKey = null;
+    pendingImagePeer = null;
     groups.removeListener(_groupChanged);
     groups.dispose();
     _disposed = true;

@@ -1,5 +1,37 @@
 # Validation for v0.1.0
 
+## Direct-chat image sharing — 2026-10-12
+
+- Full `flutter test --reporter expanded`: **203 passed** (185 existing + 18
+  image checks), exit 0. Final run includes the acknowledgement and layout fixes.
+- New checks: 11 controller/protocol/picker-lifecycle tests, two image backups,
+  two widgets, two SQLite encryption/migration tests and one native-picker contract.
+- Final `flutter analyze`: no issues.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  successful final APK at `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+  Includes the native picker and final acknowledgement/layout fixes.
+- `flutter build web --no-wasm-dry-run`: successful browser build; the existing
+  optional Cupertino font warning remains (the UI uses Material icons).
+- `git -c core.safecrlf=false diff --check`: clean.
+
+Checks exercise real encrypted multi-chunk transfers alongside delivered text,
+per-stage timeout, missing receipts, original-ID retries/dedupe, locked rejection,
+sender cancellation, persistence failures without delivery, invalid chunk order
+and content hash, byte/pixel bounds, older-peer text compatibility, picker return
+while locked and late selection after deletion. Image backups round-trip encrypted
+bytes, validate hashes/version gates and re-encrypt safely. SQLite checks include
+atomic duplicate handling, encrypted bytes/metadata, reopen, deletion, backup restore
+and schema-7 upgrade without losing text. UI checks cover 320 × 568 at 1.8× text,
+preview/discard and saved-image zoom routes removed by PIN lock.
+
+Regression testing caught a misplaced text-ACK branch and narrowed offline
+composer layout; both were fixed. The v1 fixture omits the new kind column, and
+image UI fixtures use real scheduling for crypto and dialog completion.
+
+Physical picker/providers, Wi-Fi Direct throughput, cancellation/lock timing,
+orientation and Android lifecycle behavior remain pending. Follow
+[IMAGE_SHARING.md](IMAGE_SHARING.md). Changes remain unstaged and uncommitted.
+
 ## Hosted nearby group text chats — final checks 2026-10-12
 
 - Full `flutter test` on 2026-10-11: **185 passed** (162 existing + 23 group
