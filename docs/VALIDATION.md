@@ -1,5 +1,33 @@
 # Validation for v0.1.0
 
+## Direct-chat files — final checks 2026-10-12
+
+- Full `flutter test --reporter expanded`: **228 passed**, exit 0 (203 existing
+  + 25 file checks). Latest output: `.dart_tool/file-milestone-tests.log`, local
+  and ignored by Git. Includes the final filename boundary fix.
+- Final `flutter analyze`: no issues, exit 0.
+- New checks: 14 controller/protocol/picker/save tests, two file backup tests,
+  four SQLite encryption/migration/rollback tests, two widgets and three
+  filename/metadata/native-channel contract tests.
+- Checks cover real encrypted multi-chunk transfers alongside delivered text,
+  timeout/missing receipts, original-ID retry/dedupe, lock/background/cancel,
+  receiver persistence failures, forged digest/chunk order, bounds, capability
+  compatibility, sealed picker return and late-result deletion. Offline save
+  checks include lock gates, cancellation and errors. SQLite preserves existing
+  text/images/identity across schema 8 to 9 and rolls back file write/import failures.
+  Widgets cover 320 × 568 at 1.8× text, review/discard and PIN removing export dialogs.
+- Review found and fixed filename truncation leaving a trailing dot/space.
+  A new test checks canonical shortened names, including Unicode.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0. APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+  Includes the native file picker/save bridge and final filename fix.
+- Final `flutter build web --no-wasm-dry-run`: passed, exit 0. Existing optional
+  Cupertino font warning remains; the app uses Material icons.
+- Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
+- Physical provider/Wi-Fi Direct/lifecycle/export checks remain pending;
+  see [FILE_SHARING.md](FILE_SHARING.md).
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Direct-chat image sharing — 2026-10-12
 
 - Full `flutter test --reporter expanded`: **203 passed** (185 existing + 18

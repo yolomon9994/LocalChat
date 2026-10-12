@@ -9,6 +9,8 @@ import 'package:local_chat/core/models.dart';
 import 'package:local_chat/core/chat_backup.dart';
 import 'package:local_chat/core/group_models.dart';
 import 'package:local_chat/core/chat_image.dart';
+import 'package:local_chat/core/chat_file.dart';
+import 'dart:typed_data';
 import 'image_test_support.dart';
 import 'package:local_chat/core/secure_session.dart';
 import 'package:local_chat/demo/demo_store.dart';
@@ -105,10 +107,143 @@ void main() {
       await store.open();
       expect((await store.messages('alice')).single.text, message().text);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 8);
+      expect(await upgraded.getVersion(), 9);
       expect(await upgraded.query('images'), isEmpty);
     },
   );
+  test(
+    'file bytes and metadata encrypted, atomic dedupe, reopen, backup and deletion',
+    () async {
+      final bytes = Uint8List.fromList(utf8.encode('Private document body'));
+      final m = ChatMessage(
+        id: 'file',
+        peerId: 'alice',
+        text: 'File',
+        timestamp: 2,
+        outgoing: false,
+        status: 'received',
+        file: await ChatFile.fromBytes('private-report.pdf', bytes),
+      );
+      expect(await store.saveFileMessage(m, bytes), isTrue);
+      expect(await store.saveFileMessage(m, bytes), isFalse);
+      final db = await openDatabase(databasePath);
+      final row = (await db.query('files')).single;
+      expect(row['body'], isNot(base64Encode(bytes)));
+      expect(
+        (await db.query('messages')).single['body'],
+        isNot(contains(m.file!.digest)),
+      );
+      expect(
+        (await db.query('messages')).single['body'],
+        isNot(contains('private-report.pdf')),
+      );
+      await db.update('messages', {'kind': 'image'});
+      await expectLater(store.messages('alice'), throwsA(anything));
+      await db.update('messages', {'kind': 'file'});
+      expect((await store.conversations()).single.unreadCount, 1);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final saved = (await store.messages('alice')).single;
+      expect(await store.fileBytes(saved), bytes);
+      final backup = await store.exportBackup();
+      expect(backup.toJson()['version'], 4);
+      await store.clearHistory();
+      await store.importBackup(backup);
+      expect(
+        await store.fileBytes((await store.messages('alice')).single),
+        bytes,
+      );
+      await store.deleteConversation('alice');
+      expect(await (await openDatabase(databasePath)).query('files'), isEmpty);
+    },
+  );
+  test(
+    'schema 8 upgrades preserve encrypted text/images and add file storage',
+    () async {
+      await store.saveMessage(message());
+      final bytes = await testImage();
+      await store.saveImageMessage(
+        ChatMessage(
+          id: 'old-image',
+          peerId: 'alice',
+          text: 'Image',
+          timestamp: 1,
+          outgoing: false,
+          status: 'received',
+          image: await ChatImage.fromBytes(bytes),
+        ),
+        bytes,
+      );
+      final seed = (await store.exportBackup()).seed;
+      await store.close();
+      final db = await openDatabase(databasePath);
+      await db.execute('DROP TABLE files');
+      await db.execute('PRAGMA user_version = 8');
+      await db.close();
+      store = LocalStore();
+      await store.open();
+      final records = await store.messages('alice');
+      expect(records.singleWhere((m) => m.image == null).text, message().text);
+      expect(
+        await store.imageBytes(records.singleWhere((m) => m.image != null)),
+        bytes,
+      );
+      expect((await store.exportBackup()).seed, seed);
+      final upgraded = await openDatabase(databasePath);
+      expect(await upgraded.getVersion(), 9);
+      expect(await upgraded.query('files'), isEmpty);
+    },
+  );
+  test('file write failure rolls back metadata and activity', () async {
+    final bytes = Uint8List.fromList([1, 2, 3]);
+    final m = ChatMessage(
+      id: 'file-atomic',
+      peerId: 'alice',
+      text: 'File',
+      timestamp: 1,
+      outgoing: false,
+      status: 'received',
+      file: await ChatFile.fromBytes('a.bin', bytes),
+    );
+    final db = await openDatabase(databasePath);
+    await db.execute(
+      "CREATE TRIGGER fail_file BEFORE INSERT ON files BEGIN SELECT RAISE(ABORT, 'test'); END",
+    );
+    final activity = (await store.conversations()).single.updated;
+    await expectLater(store.saveFileMessage(m, bytes), throwsA(anything));
+    expect(await store.messages('alice'), isEmpty);
+    expect(await db.query('files'), isEmpty);
+    expect((await store.conversations()).single.updated, activity);
+  });
+  test('file backup insert failure rolls back the entire import', () async {
+    final bytes = Uint8List.fromList([1, 2, 3]);
+    await store.saveFileMessage(
+      ChatMessage(
+        id: 'archive-file',
+        peerId: 'alice',
+        text: 'File',
+        timestamp: 1,
+        outgoing: false,
+        status: 'received',
+        file: await ChatFile.fromBytes('a.bin', bytes),
+      ),
+      bytes,
+    );
+    final archive = await store.exportBackup();
+    await store.clearHistory();
+    await store.savePeer('bob', 'Bob');
+    await store.saveMessage(message(peer: 'bob'));
+    final db = await openDatabase(databasePath);
+    await db.execute(
+      "CREATE TRIGGER fail_file BEFORE INSERT ON files BEGIN SELECT RAISE(ABORT, 'test'); END",
+    );
+    await expectLater(store.importBackup(archive), throwsA(anything));
+    expect((await store.conversations()).single.id, 'bob');
+    expect(await store.messages('alice'), isEmpty);
+    expect((await store.messages('bob')).single.text, message().text);
+    expect(await db.query('files'), isEmpty);
+  });
   test(
     'group titles/authors/text/receipts are encrypted and preserved across reopen',
     () async {
@@ -456,7 +591,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 8);
+      expect(await upgraded.getVersion(), 9);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -867,7 +1002,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 8);
+      expect(await (await openDatabase(databasePath)).getVersion(), 9);
     },
   );
   test(
@@ -946,7 +1081,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 8);
+      expect(await (await openDatabase(databasePath)).getVersion(), 9);
     },
   );
 

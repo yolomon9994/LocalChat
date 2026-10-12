@@ -3,7 +3,22 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Image sharing in direct chats
+## Current milestone: File sharing in direct chats
+
+Implemented and validated, 2026-10-12. Source and tests are saved locally,
+unstaged and uncommitted; see PROJECT_CONTEXT.md for context.
+
+- [x] Pick a local nonempty file up to 8 MiB, review/discard and explicitly send.
+- [x] Shared encrypted chunk engine, safe names, digest/length checks, progress/cancel.
+- [x] Foreground/unlock gates, sealed pending selections and explicit original-ID retry.
+- [x] Encrypted saved files, offline confirmed export, unread/privacy/deletion behavior.
+- [x] Schema 9 and v4 backups retain existing history and older archive imports.
+- [x] All 228 tests pass and final analysis is clean; see [VALIDATION.md](VALIDATION.md).
+- [x] Final code/diff review, Android/browser builds and documentation.
+- [ ] Physical two-phone checks; see [FILE_SHARING.md](FILE_SHARING.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Image sharing in direct chats: implemented and committed
 
 - [x] Pick a local image, preview/discard and explicitly send after verification.
 - [x] Bound source size/pixels; resize/re-encode PNG without source metadata.
@@ -15,7 +30,8 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [x] Older peers retain text support; browser recipient/receipts remain simulated.
 - [x] All 203 tests pass, clean final analysis and Android/browser builds;
       see [VALIDATION.md](VALIDATION.md).
-- [ ] Physical two-phone checks and user's commit; see [IMAGE_SHARING.md](IMAGE_SHARING.md).
+- [x] User commits image sharing (`aea566b`).
+- [ ] Physical two-phone checks; see [IMAGE_SHARING.md](IMAGE_SHARING.md).
 
 ## Hosted nearby group text chats: implemented and committed
 
@@ -240,7 +256,9 @@ Work on one feature at a time; validate it before the user commits and starts th
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
 - [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
       preview, offline viewer and encrypted backup support; hardware checks pending.
-- [ ] Other files and group attachments: transfer progress, cancellation and size limits.
+- [x] Direct-chat files: implemented with bounds/progress/cancel, encrypted
+      storage/backups and explicit offline export; hardware checks pending.
+- [ ] Group attachments: transfer progress, cancellation and size limits.
 - [ ] Private local contact nicknames independent of advertised display names.
 
 ## Later refinements discussed
@@ -262,7 +280,7 @@ Work on one feature at a time; validate it before the user commits and starts th
 5. Offline outbox and retry (committed), connection troubleshooting/manual
    reconnection and notifications (committed), background connection support (committed).
 6. Hosted group text chat (committed).
-7. Direct-chat image sharing (current), then other files, group attachments and refinements.
+7. Direct-chat image sharing (committed), file sharing (current), then group attachments and refinements.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

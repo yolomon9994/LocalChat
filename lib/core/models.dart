@@ -1,4 +1,5 @@
 import 'chat_image.dart';
+import 'chat_file.dart';
 
 class Peer {
   const Peer(this.address, this.name);
@@ -15,6 +16,7 @@ class ChatMessage {
     required this.outgoing,
     required this.status,
     this.image,
+    this.file,
   });
   final String id;
   final String peerId;
@@ -23,6 +25,7 @@ class ChatMessage {
   final bool outgoing;
   final String status;
   final ChatImage? image;
+  final ChatFile? file;
 }
 
 class Conversation {

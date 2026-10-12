@@ -5,6 +5,7 @@ import '../services/chat_controller.dart';
 import 'outgoing_message_actions.dart';
 import 'connection_help.dart';
 import 'chat_image_view.dart';
+import 'chat_file_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -166,6 +167,65 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     }
   }
 
+  Future<void> _pickFile() async {
+    final c = widget.controller;
+    await c.pickFile();
+    if (mounted &&
+        c.appAccessible &&
+        c.appForeground &&
+        c.pendingFilePeer == c.selectedPeer) {
+      await _reviewFile();
+    }
+  }
+
+  Future<void> _reviewFile() async {
+    final c = widget.controller,
+        peer = widget.controller.selectedPeer,
+        access = widget.controller.accessRevision;
+    final selection = await c.reviewPendingFile();
+    if (!mounted ||
+        selection == null ||
+        !c.appAccessible ||
+        !c.appForeground ||
+        access != c.accessRevision) {
+      return;
+    }
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Send file?'),
+        content: Text(
+          '${selection.name}\n${(selection.bytes.length / 1024).ceil()} KiB · maximum 8 MiB. The complete file will be shared, including any metadata it contains.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Discard'),
+          ),
+          FilledButton(
+            onPressed: c.canSendFile
+                ? () => Navigator.pop(context, true)
+                : null,
+            child: const Text('Send file'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted ||
+        !c.appAccessible ||
+        !c.appForeground ||
+        access != c.accessRevision ||
+        c.selectedPeer != peer) {
+      return;
+    }
+    if (send == true) {
+      await c.sendFile(selection);
+    } else if (send == false) {
+      c.discardPendingFile();
+    }
+  }
+
   Future<void> _send() async {
     if (_sending || !widget.controller.canSubmit || _text.text.trim().isEmpty) {
       return;
@@ -246,7 +306,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   ).textTheme.labelMedium?.copyWith(color: foreground),
                 ),
               ),
-            if (message.image != null)
+            if (message.file != null)
+              ChatFileBubble(controller: widget.controller, message: message)
+            else if (message.image != null)
               ChatImageBubble(controller: widget.controller, message: message)
             else
               SelectableText(message.text, style: TextStyle(color: foreground)),
@@ -258,6 +320,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
               ).textTheme.labelSmall?.copyWith(color: foreground),
             ),
             if (message.image == null &&
+                message.file == null &&
                 message.outgoing &&
                 (message.status == 'queued' || message.status == 'unconfirmed'))
               OutgoingMessageActions(
@@ -349,6 +412,20 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             ],
           ),
           actions: [
+            if (!verifying && (c.canSend || c.pickingFile))
+              IconButton(
+                tooltip: c.remoteSupportsFiles
+                    ? 'Attach file'
+                    : 'Files require both phones to use the updated app',
+                onPressed: c.canSendFile ? _pickFile : null,
+                icon: c.pickingFile
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.attach_file),
+              ),
             if (c.queuedCount > 0)
               IconButton(
                 tooltip: 'Why messages are queued',
@@ -586,6 +663,69 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                               ),
                               TextButton(
                                 onPressed: c.discardPendingImage,
+                                child: const Text('Discard'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      for (final transfer in c.files.progress.where(
+                        (p) => p.peer == c.selectedPeer,
+                      ))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${transfer.outgoing ? 'Sending' : 'Receiving'} file · ${(transfer.fraction * 100).round()}%',
+                                    ),
+                                    LinearProgressIndicator(
+                                      value: transfer.fraction,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Cancel file transfer',
+                                onPressed: c.cancelFileTransfers,
+                                icon: const Icon(Icons.cancel_outlined),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (c.files.notice != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            c.files.notice!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      if (c.pendingFilePeer == c.selectedPeer &&
+                          c.pendingFilePeer != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              TextButton.icon(
+                                onPressed: _reviewFile,
+                                icon: const Icon(
+                                  Icons.insert_drive_file_outlined,
+                                ),
+                                label: const Text('Review file'),
+                              ),
+                              TextButton(
+                                onPressed: c.discardPendingFile,
                                 child: const Text('Discard'),
                               ),
                             ],

@@ -45,6 +45,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     private var background: BackgroundConnection? = null
     private var groups: GroupTransport? = null
     private var images: ImageFiles? = null
+    private var files: ChatFiles? = null
     private var manager: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
     private val main = Handler(Looper.getMainLooper())
@@ -82,6 +83,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         images = ImageFiles(this, flutterEngine.dartExecutor.binaryMessenger)
+        files = ChatFiles(this, flutterEngine.dartExecutor.binaryMessenger)
         // Protect the initial window until Flutter has read persisted settings.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         notifications = MessageNotifications(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/notifications"))
@@ -199,6 +201,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
     @Deprecated("Used for the Flutter platform channel file picker")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (files?.onActivityResult(requestCode, resultCode, data) == true) return
         if (images?.onActivityResult(requestCode, resultCode, data) == true) return
         if (requestCode != BACKUP_PICK && requestCode != BACKUP_SAVE) return
         val result = backupResult ?: return
@@ -580,6 +583,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         if (registered) { unregisterReceiver(receiver); registered = false }
     }
     override fun onDestroy() {
+        files?.dispose()
         images?.dispose()
         groups?.dispose()
         background?.dispose()

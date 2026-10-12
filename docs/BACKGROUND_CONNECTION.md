@@ -2,8 +2,9 @@
 
 This setting currently protects direct chats. Hosted groups should keep the host
 open; group background protection is a later refinement.
-Images require both phones unlocked and foregrounded; backgrounding cancels
-partial image transfers. This setting does not resume them. See [IMAGE_SHARING.md](IMAGE_SHARING.md).
+Images and files require both phones unlocked and foregrounded; backgrounding
+cancels partial transfers. This setting does not resume them. See
+[IMAGE_SHARING.md](IMAGE_SHARING.md) and [FILE_SHARING.md](FILE_SHARING.md).
 
 On each phone, open **Settings → Background connection** and turn on **Keep
 connection active**. This choice is off on a fresh install and stays local to the
@@ -33,7 +34,7 @@ locked/backgrounded waits for foreground unlock before starting protection.
 - Turning the Settings switch off removes protection but keeps the current
   conversation connected for normal use. Disconnect in Nearby to close the link.
   Disabling message alerts/clearing history never removes the service notification.
-- While protected and backgrounded, received verified messages decrypt, persist
+- While protected and backgrounded, received verified text messages decrypt, persist
   and ACK, with generic message alerts if enabled. They stay unread until actually
   viewed. PIN locking, hidden previews and both-phone verification stay in force.
   Queued sending still requires foreground unlock; the service does not drain it

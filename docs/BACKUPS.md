@@ -22,11 +22,18 @@ version 1, while older builds reject group archives. Group sessions/keys are nev
 restored, and imported pending receipts become unconfirmed. Import ends the current
 group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
 Archives containing direct-chat images use payload version 3, including bounded
-image bytes, dimensions and SHA-256 digest. New builds import v1/v2/v3; older
+image bytes, dimensions and SHA-256 digest. New builds import v1/v2/v3/v4; older
 builds reject image archives. Images are re-encrypted with destination history
 keys and restored pending attempts remain unconfirmed. The 20 MiB total archive
 limit still applies; image-heavy exports can exceed it without changing history.
 See [IMAGE_SHARING.md](IMAGE_SHARING.md).
+Archives containing direct-chat files use payload version 4 with sanitized
+filenames, bounded bytes and SHA-256 digests. Images and groups can coexist in
+the same archive. Builds without file support reject these archives. Imports
+re-encrypt file metadata/bytes atomically and never send them automatically.
+The same 20 MiB total limit applies, including base64 attachment data; large
+attachments can exhaust it. Source history stays intact after an oversized export.
+See [FILE_SHARING.md](FILE_SHARING.md).
 Export does not delete or change source history. Failed draft saves/loads must
 be resolved before export so the backup does not silently omit unsaved edits.
 
@@ -56,7 +63,7 @@ confirmed can finish while the UI is hidden; it is a single database transaction
 
 - Dedupe by peer ID, message ID and outgoing/incoming direction. Matching text
   and timestamp count as a duplicate; differing text/timestamp count as a conflict.
-  Image metadata/bytes must also match for a duplicate. Existing message content,
+  Image/file metadata and bytes must also match for a duplicate. Existing message content,
   timestamp, read state and status always win.
 - Existing chat names and pin/archive choices win. New chats inherit the archive
   choices. New message activity can advance a chat; duplicate-only imports do not.

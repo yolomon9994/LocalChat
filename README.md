@@ -17,6 +17,10 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text grou
   progress/cancellation, encrypted storage, offline zoom viewing and backups.
   Both phones must be verified, unlocked and foregrounded; prepared images are
   limited to 2 MiB. Explicit retries reuse the original image ID.
+- Direct-chat files: pick and review local documents up to 8 MiB, encrypted
+  transfer with progress/cancellation, saved encrypted attachments and backups.
+  Save a copy to your phone explicitly, including while offline. Both apps must
+  be verified, unlocked and foregrounded during transfer.
 - Encrypted local message bodies in SQLite; identity/history keys held by secure storage.
 - Delivery status, connection state, saved conversations, disconnect and history deletion.
 - Encrypted offline outbox for saved chats; send after both phones verify again,
@@ -59,8 +63,9 @@ See [notification privacy and testing](docs/NOTIFICATIONS.md) for permissions an
 See [background connection testing](docs/BACKGROUND_CONNECTION.md) for controls and battery limits.
 See [hosted group chats](docs/GROUP_CHATS.md) for the trust model, joining and three-phone checks.
 See [image sharing](docs/IMAGE_SHARING.md) for limits, controls and two-phone checks.
+See [file sharing](docs/FILE_SHARING.md) for attaching documents, saving copies and testing.
 
-Bluetooth, other files/video, group attachments, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running direct-chat session; groups should keep the host open and images require both apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
+Bluetooth, video playback, group attachments, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running direct-chat session; groups should keep the host open and image/file transfers require both apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 

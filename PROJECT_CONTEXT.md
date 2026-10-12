@@ -8,7 +8,7 @@ docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes
 LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first, with direct
-text/images and hosted text groups. Other files/video, Bluetooth, multi-hop relaying, iOS and
+text/images/files and hosted text groups. Video playback, Bluetooth, multi-hop relaying, iOS and
 automatic reconnect are also future work. Local notifications and optional
 background protection of the current running verified session are implemented;
 Doze/vendor restrictions still apply and hardware reliability is unvalidated.
@@ -21,14 +21,51 @@ Chats list improvements were committed as `c233159`, and local search as
 `8f55377`; encrypted backups/phone migration were committed as `63eff9f`.
 Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
 Notifications were committed as `9bb6c60`, and background protection as `24d52b5`.
-Hosted group chats were committed as `819ac32`.
-The current milestone is image sharing in one-to-one chats.
+Hosted group chats were committed as `819ac32`, and images as `aea566b`.
+The current milestone is file sharing in one-to-one chats.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Direct-chat image milestone — 2026-10-12
+## Direct-chat file milestone — implemented and validated, 2026-10-12
 
-All image changes stay local, unstaged and uncommitted. The user handles Git.
+All source and tests are saved on disk, unstaged and uncommitted.
+Baseline is `aea566b` (image sharing); do not stage/commit/push for the user.
+
+Implemented: opaque nonempty files up to 8 MiB; sanitized bounded filenames;
+Android local-only pick/save bridge `ChatFiles.kt`; browser local selection and
+download; toolbar attach/review/discard; encrypted pending selection including
+filename; saved file bubbles with explicit export confirmation and retry;
+foreground/unlock gates, progress/cancel, no auto-resume. Save creates a copy
+outside app encryption and may finish during system-picker locking.
+
+`attachment_transfers.dart` shares the original image state machine. Thin
+ImageTransfers/FileTransfers wrappers retain image protocol compatibility and
+add negotiated encrypted `file-v1` frames. Schema 9 adds files with separate
+message/byte AAD, atomic writes/deletion/import; v4 backups retain v1/v2/v3 reads
+and the existing envelope/KDF/20 MiB cap. DemoStore/Transport support files.
+
+Final verification:
+- Full `flutter test --reporter expanded`: **228 passed**, exit 0 (203 existing
+  + 25 file checks). Output: `.dart_tool/file-milestone-tests.log` (ignored by Git).
+- Final `flutter analyze`: no issues, exit 0.
+- Review fixed long filenames truncated at a dot/space boundary. The full run
+  includes a new canonical shortened-name regression test with Unicode.
+- Final arm64 debug APK and browser builds pass, exit 0. APK:
+  `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`. Browser build retains
+  the existing optional Cupertino font warning. Diff whitespace check is clean.
+- Physical phone checks remain pending. See `docs/FILE_SHARING.md`.
+
+README/SECURITY/BACKUPS/DEVICE_TESTING/BACKGROUND_CONNECTION/IMAGE_SHARING and
+FILE_SHARING/VALIDATION/FEATURE_BACKLOG documentation reflect the completed work.
+Remaining: physical phone checks and the user's review/commit/push.
+Do not repeat passing tests unless code changes or a new concern requires it.
+Generation helpers under `.dart_tool/file_*.py` were already executed; do not
+rerun them (they duplicate edits). All resulting source/test files are real
+workspace files. No packages or permissions were added.
+
+## Direct-chat image milestone — committed, 2026-10-12
+
+Image changes were committed by the user as `aea566b`. Hardware checks remain pending.
 
 - Android `ImageFiles.kt` uses a local-only image document picker and bounded
   reads, without a new package or storage/gallery permission. Browser selection

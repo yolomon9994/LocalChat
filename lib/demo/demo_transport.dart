@@ -5,13 +5,14 @@ import 'package:cryptography/cryptography.dart';
 import '../core/secure_session.dart';
 import '../services/transport.dart';
 import '../core/chat_image.dart';
+import '../core/chat_file.dart';
 
 /// A peer entirely inside this process. No channels, sockets or network calls.
 /// Real protocol frames exercise the shared controller, but the peer's trust
 /// confirmation and all delivery acknowledgements are simulated.
 class DemoTransport implements Transport {
-  DemoTransport({this.supportsImages = true});
-  final bool supportsImages;
+  DemoTransport({this.supportsImages = true, this.supportsFiles = true});
+  final bool supportsImages, supportsFiles;
   static const devices = {'demo-ava': 'Ava (Demo)', 'demo-noah': 'Noah (Demo)'};
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   final _identities = <String, SimpleKeyPair>{};
@@ -24,6 +25,10 @@ class DemoTransport implements Transport {
   String? _imageId;
   BytesBuilder? _imageBytes;
   int _imageIndex = 0;
+  ChatFile? _file;
+  String? _fileId;
+  BytesBuilder? _fileBytes;
+  int _fileIndex = 0;
 
   @override
   Stream<Map<String, dynamic>> get events => _events.stream;
@@ -97,7 +102,10 @@ class DemoTransport implements Transport {
         _verified = true;
         await _emitPayload(peer, {
           'type': 'verified',
-          if (supportsImages) 'features': ['image-v1'],
+          'features': [
+            if (supportsImages) 'image-v1',
+            if (supportsFiles) 'file-v1',
+          ],
         });
         await _message(
           peer,
@@ -160,6 +168,46 @@ class DemoTransport implements Transport {
         _image = null;
         _imageId = null;
         _imageBytes = null;
+      case 'fileOffer':
+        if (!_verified) throw StateError('Confirm the demo code first.');
+        _file = ChatFile.parse(payload['file']);
+        _fileId = payload['id'] as String;
+        _fileBytes = BytesBuilder(copy: false);
+        _fileIndex = 0;
+        await _emitPayload(peer, {'type': 'fileReady', 'id': _fileId});
+      case 'fileChunk':
+        if (payload['id'] != _fileId ||
+            payload['index'] != _fileIndex ||
+            _fileBytes == null) {
+          throw const FormatException('Invalid demo file chunk.');
+        }
+        final bytes = base64Decode(payload['data'] as String);
+        if (_fileBytes!.length + bytes.length > _file!.length) {
+          throw const FormatException('Demo file limit exceeded.');
+        }
+        _fileBytes!.add(bytes);
+        await _emitPayload(peer, {
+          'type': 'fileChunkAck',
+          'id': _fileId,
+          'index': _fileIndex++,
+        });
+      case 'fileComplete':
+        if (payload['id'] != _fileId || _file == null || _fileBytes == null) {
+          throw const FormatException('No demo file transfer.');
+        }
+        await _file!.verify(_fileBytes!.takeBytes());
+        await _emitPayload(peer, {
+          'type': 'fileResult',
+          'id': _fileId,
+          'received': true,
+        });
+        _file = null;
+        _fileId = null;
+        _fileBytes = null;
+      case 'fileCancel':
+        _file = null;
+        _fileId = null;
+        _fileBytes = null;
       default:
         throw const FormatException('Unsupported demo payload');
     }
@@ -173,6 +221,9 @@ class DemoTransport implements Transport {
     _image = null;
     _imageId = null;
     _imageBytes = null;
+    _file = null;
+    _fileId = null;
+    _fileBytes = null;
     // ChatController resets state after an intentional disconnect. Emitting
     // another event here would leave a redundant reset queued during disposal.
   }

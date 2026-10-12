@@ -70,7 +70,7 @@ TCP framing is a 4-byte unsigned big-endian byte count followed by UTF-8 JSON, m
 
 Sealed frame fields: `v`, `kind=sealed`, `session`, `seq`, `nonce`, `body`, `tag`. XChaCha20-Poly1305 uses a random 24-byte nonce. The authenticated additional data is UTF-8 JSON of `["LocalChat/frame/1", sessionHashHex, sequence]`. Receive counters advance only after successful authentication and parsing. Sequences must be contiguous; duplicates, reordering, wrong sessions, invalid lengths and authentication failures close the connection. A serialized controller queue prevents concurrent counter/writer races.
 
-Payload types are `verified`, `text` and `ack`. Message IDs, timestamps and content are inside authenticated ciphertext. Text is limited to 4096 UTF-8 bytes. Acknowledgements are also encrypted and sent only after successful decryption and local persistence.
+Core payload types are `verified`, `text` and `ack`, with negotiated image/file operations described below. Message IDs, timestamps and content are inside authenticated ciphertext. Text is limited to 4096 UTF-8 bytes. Acknowledgements are also encrypted and sent only after successful decryption and local persistence.
 
 Direct-chat images negotiate `image-v1` in encrypted verification. Image offers,
 ready/chunk/receipt/completion/cancellation payloads use the same sealed frames
@@ -212,6 +212,35 @@ not a trusted identity. Reconnect always performs a new signed handshake and
 both-phone code comparison; queued delivery remains scoped to the learned
 cryptographic identity. Settings shortcuts use fixed system intents and add no
 permissions. See [connection recovery](CONNECTION_RECOVERY.md).
+
+## Direct-chat files
+
+Direct-chat files negotiate `file-v1` inside encrypted verification. Offers bind
+sanitized filename, length and SHA-256 digest; content is opaque, nonempty and
+bounded to 8 MiB. Shared image/file transfers use exact indexed 12 KiB chunks,
+per-stage timeouts and persistence before final receipts. Both apps must be
+unlocked and foregrounded. No automatic file outbox or resume operates. One
+outgoing attachment is allowed across kinds, with at most one incoming per kind.
+Older peers retain the capabilities they support. File names, contents and
+receipts are encrypted on the wire, without changing the handshake or counters.
+
+Schema 9 adds encrypted file bytes and metadata using the history key with AAD
+`LocalChat/file/1/<peer>/<id>/<direction>` and
+`LocalChat/file-message/1/<peer>/<id>/<direction>`. Message/bytes writes, deletion
+and imports are transactional. Existing text/image/group records remain compatible.
+Kind/peer/ID/direction/time/status metadata stays plaintext. Payload-v4 archives
+include validated files and retain v1/v2/v3 reads, the existing encrypted envelope
+and 20 MiB total limit. Imported pending attachments are unconfirmed, never sent.
+
+Picker selections seal filename and bytes in memory until unlocked review/send.
+Files are not opened or executed by LocalChat. A verified peer can send unwanted
+contents; filename/digest validation does not assess the contents of a document.
+Explicit **Save to phone** creates a copy outside LocalChat's app lock/encryption;
+the user confirms this before choosing its destination. Authorized export may
+finish while the system picker locks/backgrounds the app. Chat deletion cannot
+erase exported copies. No plaintext temporary file is created by LocalChat, but
+temporary managed/native buffers do not guarantee forensic erasure. See
+[file controls and hardware checks](FILE_SHARING.md).
 
 ## Before a production release
 

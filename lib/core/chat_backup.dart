@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'group_models.dart';
 import 'chat_image.dart';
+import 'chat_file.dart';
 
 /// Version one fixes the KDF cost; files cannot request arbitrary work.
 const backupMaxPlaintext = 20 * 1024 * 1024;
@@ -28,7 +29,9 @@ class BackupData {
   final List<Map<String, Object?>> peers, messages, drafts;
   final List<Map<String, Object?>> groups;
   Map<String, Object?> toJson() => {
-    'version': messages.any((m) => m['image'] != null)
+    'version': messages.any((m) => m['file'] != null)
+        ? 4
+        : messages.any((m) => m['image'] != null)
         ? 3
         : groups.isEmpty
         ? 1
@@ -46,7 +49,7 @@ class BackupData {
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3}.contains(raw['version'])) throw invalid;
+    if (raw is! Map || !{1, 2, 3, 4}.contains(raw['version'])) throw invalid;
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
@@ -104,8 +107,26 @@ class BackupData {
       final outgoing = boolean(m, 'outgoing');
       if (!ids.contains(peer) || !keys.add((peer, id, outgoing))) throw invalid;
       string(m, 'text', 4096);
+      if (m.containsKey('file')) {
+        if (raw['version'] != 4 ||
+            m.containsKey('image') ||
+            m['file'] is! Map ||
+            m['text'] != 'File') {
+          throw invalid;
+        }
+        final file = ChatFile.parse(m['file']);
+        final encoded = (m['file'] as Map)['data'];
+        if (encoded is! String ||
+            encoded.length > ((fileMaxBytes + 2) ~/ 3) * 4) {
+          throw invalid;
+        }
+        await file.verify(base64Decode(encoded));
+        m['file'] = {...file.toJson(), 'data': encoded};
+      }
       if (m.containsKey('image')) {
-        if (raw['version'] != 3 || m['image'] is! Map || m['text'] != 'Image') {
+        if ((raw['version'] as int) < 3 ||
+            m['image'] is! Map ||
+            m['text'] != 'Image') {
           throw invalid;
         }
         final image = ChatImage.parse(m['image']);
@@ -250,7 +271,8 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
       });
     } else if (old['text'] == m['text'] &&
         old['timestamp'] == m['timestamp'] &&
-        jsonEncode(old['image']) == jsonEncode(m['image'])) {
+        jsonEncode(old['image']) == jsonEncode(m['image']) &&
+        jsonEncode(old['file']) == jsonEncode(m['file'])) {
       duplicates++;
     } else {
       conflicts++;

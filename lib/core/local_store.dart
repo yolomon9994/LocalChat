@@ -8,6 +8,7 @@ import 'models.dart';
 import 'chat_backup.dart';
 import 'group_models.dart';
 import 'chat_image.dart';
+import 'chat_file.dart';
 
 class LocalStore {
   LocalStore({DateTime Function()? now, FlutterSecureStorage? vault})
@@ -42,7 +43,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -60,6 +61,7 @@ class LocalStore {
         await _createOutboxIndex(db);
         await _createGroups(db);
         await _createImages(db);
+        await _createFiles(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -79,6 +81,7 @@ class LocalStore {
         if (oldVersion < 6) await _createOutboxIndex(db);
         if (oldVersion < 7) await _createGroups(db);
         if (oldVersion < 8) await _createImages(db);
+        if (oldVersion < 9) await _createFiles(db);
       },
     );
     await _recoverIdentity();
@@ -137,6 +140,11 @@ class LocalStore {
         'outgoing': m.outgoing,
         'status': m.status,
         'read': row['is_read'] == 1,
+        if (m.file != null)
+          'file': {
+            ...m.file!.toJson(),
+            'data': base64Encode(await _fileBytes(db, m)),
+          },
         if (m.image != null)
           'image': {
             ...m.image!.toJson(),
@@ -232,7 +240,9 @@ class LocalStore {
           final direction = m['outgoing'] == true ? 1 : 0;
           final box = await _cipher.encrypt(
             utf8.encode(
-              m['image'] == null
+              m['file'] != null
+                  ? jsonEncode(ChatFile.parse(m['file']).toJson())
+                  : m['image'] == null
                   ? m['text'] as String
                   : jsonEncode(ChatImage.parse(m['image']).toJson()),
             ),
@@ -243,6 +253,7 @@ class LocalStore {
                 m['id'] as String,
                 direction,
                 image: m['image'] != null,
+                file: m['file'] != null,
               ),
             ),
           );
@@ -258,8 +269,28 @@ class LocalStore {
             'outgoing': direction,
             'status': m['status'],
             'is_read': direction == 1 || m['read'] == true ? 1 : 0,
-            'kind': m['image'] == null ? 'text' : 'image',
+            'kind': m['file'] != null
+                ? 'file'
+                : m['image'] == null
+                ? 'text'
+                : 'image',
           });
+          if (m['file'] != null) {
+            final message = ChatMessage(
+              id: m['id'] as String,
+              peerId: m['peer'] as String,
+              text: 'File',
+              timestamp: m['timestamp'] as int,
+              outgoing: direction == 1,
+              status: m['status'] as String,
+              file: ChatFile.parse(m['file']),
+            );
+            await _writeFile(
+              txn,
+              message,
+              base64Decode((m['file'] as Map)['data'] as String),
+            );
+          }
           if (m['image'] != null) {
             final message = ChatMessage(
               id: m['id'] as String,
@@ -336,6 +367,10 @@ class LocalStore {
     );
   }
 
+  static Future<void> _createFiles(Database db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS files (peer TEXT NOT NULL, id TEXT NOT NULL, outgoing INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(peer, id, outgoing))',
+  );
+
   String _imageAad(ChatMessage m) =>
       'LocalChat/image/1/${m.peerId}/${m.id}/${m.outgoing ? 1 : 0}';
   String _messageAad(
@@ -343,7 +378,13 @@ class LocalStore {
     String id,
     int direction, {
     bool image = false,
-  }) => '${image ? 'LocalChat/image-message/1/' : ''}$peer/$id/$direction';
+    bool file = false,
+  }) =>
+      '${file
+          ? 'LocalChat/file-message/1/'
+          : image
+          ? 'LocalChat/image-message/1/'
+          : ''}$peer/$id/$direction';
   Future<void> _writeImage(
     DatabaseExecutor db,
     ChatMessage m,
@@ -394,6 +435,59 @@ class LocalStore {
       _imageBytes(_database, message);
   Future<bool> saveImageMessage(ChatMessage message, Uint8List bytes) =>
       _saveMessage(message, imageBytes: bytes);
+
+  String _fileAad(ChatMessage m) =>
+      'LocalChat/file/1/${m.peerId}/${m.id}/${m.outgoing ? 1 : 0}';
+  Future<void> _writeFile(
+    DatabaseExecutor db,
+    ChatMessage m,
+    Uint8List bytes,
+  ) async {
+    await m.file!.verify(bytes);
+    final box = await _cipher.encrypt(
+      bytes,
+      secretKey: _historyKey,
+      aad: utf8.encode(_fileAad(m)),
+    );
+    await db.insert('files', {
+      'peer': m.peerId,
+      'id': m.id,
+      'outgoing': m.outgoing ? 1 : 0,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    });
+  }
+
+  Future<Uint8List> _fileBytes(DatabaseExecutor db, ChatMessage m) async {
+    if (m.file == null) {
+      throw const FormatException('This message has no file.');
+    }
+    final rows = await db.query(
+      'files',
+      where: 'peer = ? AND id = ? AND outgoing = ?',
+      whereArgs: [m.peerId, m.id, m.outgoing ? 1 : 0],
+      limit: 1,
+    );
+    if (rows.isEmpty) throw const FormatException('File is unavailable.');
+    final bytes = base64Decode(rows.single['body'] as String);
+    final clear = Uint8List.fromList(
+      await _cipher.decrypt(
+        SecretBox(
+          bytes.sublist(40),
+          nonce: bytes.sublist(0, 24),
+          mac: Mac(bytes.sublist(24, 40)),
+        ),
+        secretKey: _historyKey,
+        aad: utf8.encode(_fileAad(m)),
+      ),
+    );
+    await m.file!.verify(clear);
+    return clear;
+  }
+
+  Future<Uint8List> fileBytes(ChatMessage message) =>
+      _fileBytes(_database, message);
+  Future<bool> saveFileMessage(ChatMessage message, Uint8List bytes) =>
+      _saveMessage(message, fileBytes: bytes);
 
   Future<List<GroupHistory>> _groupHistories(DatabaseExecutor db) async {
     final result = <GroupHistory>[];
@@ -474,6 +568,7 @@ class LocalStore {
 
   Future<void> deleteConversation(String peer) =>
       _database.transaction((txn) async {
+        await txn.delete('files', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('images', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('messages', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
@@ -592,7 +687,14 @@ class LocalStore {
     ChatMessage message, {
     bool clearDraft = false,
     Uint8List? imageBytes,
+    Uint8List? fileBytes,
   }) async {
+    if (message.file != null) {
+      if (message.image != null || fileBytes == null) {
+        throw const FormatException('Missing or conflicting file contents.');
+      }
+      await message.file!.verify(fileBytes);
+    }
     if (message.image != null) {
       if (imageBytes == null) {
         throw const FormatException('Missing image contents.');
@@ -601,7 +703,9 @@ class LocalStore {
     }
     final box = await _cipher.encrypt(
       utf8.encode(
-        message.image == null
+        message.file != null
+            ? jsonEncode(message.file!.toJson())
+            : message.image == null
             ? message.text
             : jsonEncode(message.image!.toJson()),
       ),
@@ -612,6 +716,7 @@ class LocalStore {
           message.id,
           message.outgoing ? 1 : 0,
           image: message.image != null,
+          file: message.file != null,
         ),
       ),
     );
@@ -625,6 +730,8 @@ class LocalStore {
       if (existing.isNotEmpty) {
         final previous = await _decodeMessage(existing.single);
         if (previous.text != message.text ||
+            jsonEncode(previous.file?.toJson()) !=
+                jsonEncode(message.file?.toJson()) ||
             jsonEncode(previous.image?.toJson()) !=
                 jsonEncode(message.image?.toJson()) ||
             previous.timestamp != message.timestamp) {
@@ -644,8 +751,13 @@ class LocalStore {
         'outgoing': message.outgoing ? 1 : 0,
         'status': message.status,
         'is_read': message.outgoing ? 1 : 0,
-        'kind': message.image == null ? 'text' : 'image',
+        'kind': message.file != null
+            ? 'file'
+            : message.image == null
+            ? 'text'
+            : 'image',
       });
+      if (message.file != null) await _writeFile(txn, message, fileBytes!);
       if (message.image != null) await _writeImage(txn, message, imageBytes!);
       await txn.update(
         'peers',
@@ -752,13 +864,21 @@ class LocalStore {
           r['id'] as String,
           r['outgoing'] as int,
           image: r['kind'] == 'image',
+          file: r['kind'] == 'file',
         ),
       ),
     );
     return ChatMessage(
       id: r['id'] as String,
       peerId: peer,
-      text: r['kind'] == 'image' ? 'Image' : utf8.decode(clear),
+      text: r['kind'] == 'file'
+          ? 'File'
+          : r['kind'] == 'image'
+          ? 'Image'
+          : utf8.decode(clear),
+      file: r['kind'] == 'file'
+          ? ChatFile.parse(jsonDecode(utf8.decode(clear)))
+          : null,
       image: r['kind'] == 'image'
           ? ChatImage.parse(jsonDecode(utf8.decode(clear)))
           : null,
@@ -811,6 +931,7 @@ class LocalStore {
         if (isCancelled?.call() == true) return const LocalSearchResults();
         final message = await _decodeMessage(row);
         if (message.image != null ||
+            message.file != null ||
             !message.text.toLowerCase().contains(needle)) {
           continue;
         }
@@ -845,6 +966,7 @@ class LocalStore {
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
       await txn.delete('group_history');
+      await txn.delete('files');
       await txn.delete('images');
       await txn.delete('messages');
       await txn.delete('drafts');

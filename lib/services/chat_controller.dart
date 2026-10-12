@@ -16,6 +16,9 @@ import 'background_connection.dart';
 import 'group_controller.dart';
 import 'group_transport.dart';
 import 'image_files.dart';
+import 'chat_files.dart';
+import '../core/chat_file.dart';
+import 'file_transfers.dart';
 import 'image_content.dart';
 import 'image_transfers.dart';
 
@@ -31,6 +34,8 @@ class ChatController extends ChangeNotifier {
     BackgroundConnection? background,
     GroupTransport? groupTransport,
     ImageFiles? imageFiles,
+    ChatFiles? chatFiles,
+    this.fileTimeout = const Duration(seconds: 30),
     this.imageTimeout = const Duration(seconds: 30),
   }) : nearbyTools =
            nearbyTools ??
@@ -54,6 +59,7 @@ class ChatController extends ChangeNotifier {
              isDemo: isDemo,
            ),
        imageFiles = imageFiles ?? createImageFiles(),
+       chatFiles = chatFiles ?? createChatFiles(),
        _groupTransport =
            groupTransport ??
            (transport is WifiDirectTransport
@@ -74,7 +80,9 @@ class ChatController extends ChangeNotifier {
       _appAccessible &&
       _appForeground &&
       !images.sending &&
-      !pickingImage;
+      !files.sending &&
+      !pickingImage &&
+      !pickingFile;
   late final images = ImageTransfers(
     store: store,
     peer: () => connectedPeer,
@@ -106,7 +114,7 @@ class ChatController extends ChangeNotifier {
                   access != accessRevision))) {
         await _disconnect();
         throw const FormatException(
-          'Image transfer interrupted by app locking.',
+          'Attachment transfer interrupted by app locking.',
         );
       }
       await transport.send(jsonEncode(frame));
@@ -124,7 +132,7 @@ class ChatController extends ChangeNotifier {
         notifications.incoming(
           target,
           _session?.peerName ?? 'Nearby phone',
-          'Image',
+          message.file != null ? 'File' : 'Image',
           isReading: () => selectedPeer == target && _canReadSelected,
         ),
       );
@@ -132,7 +140,7 @@ class ChatController extends ChangeNotifier {
     try {
       await _refresh();
     } catch (_) {
-      error = 'Image saved. Reopen this chat to refresh history.';
+      error = 'Attachment saved. Reopen this chat to refresh history.';
     }
     notifyListeners();
   }
@@ -228,6 +236,160 @@ class ChatController extends ChangeNotifier {
   void _pauseImages() {
     images.requestCancel();
     if (images.progress.isNotEmpty) unawaited(_run(images.cancel));
+  }
+
+  final ChatFiles chatFiles;
+  final Duration fileTimeout;
+  bool remoteSupportsFiles = false;
+  bool pickingFile = false;
+  SecretBox? _pendingFile;
+  SecretKey? _pendingFileKey;
+  String? pendingFilePeer;
+  int _fileSelectionRevision = 0;
+  bool get canSendFile =>
+      canSend &&
+      remoteSupportsFiles &&
+      _appAccessible &&
+      _appForeground &&
+      !files.sending &&
+      !images.sending &&
+      !pickingFile &&
+      !pickingImage;
+  late final files = FileTransfers(
+    store: store,
+    peer: () => connectedPeer,
+    canAct: () =>
+        !_disposed && initialized && ready && _appAccessible && _appForeground,
+    send: _sendImagePayload,
+    enqueue: _run,
+    changed: notifyListeners,
+    persisted: _imagePersisted,
+    timeout: fileTimeout,
+  );
+
+  void discardPendingFile() {
+    _fileSelectionRevision++;
+    _pendingFile = null;
+    _pendingFileKey = null;
+    pendingFilePeer = null;
+    notifyListeners();
+  }
+
+  Future<void> pickFile() async {
+    if (!canSendFile || selectedPeer == null) return;
+    final target = selectedPeer!;
+    final selection = _fileSelectionRevision;
+    pickingFile = true;
+    error = null;
+    notifyListeners();
+    try {
+      final source = await chatFiles.pick();
+      if (source == null || _disposed) return;
+      final meta = await ChatFile.fromBytes(source.name, source.bytes);
+      final bytes = utf8.encode(
+        jsonEncode({'name': meta.name, 'data': base64Encode(source.bytes)}),
+      );
+      final cipher = Xchacha20.poly1305Aead();
+      final key = await cipher.newSecretKey();
+      final box = await cipher.encrypt(bytes, secretKey: key);
+      if (_disposed ||
+          selection != _fileSelectionRevision ||
+          !(await store.conversations()).any((p) => p.id == target)) {
+        return;
+      }
+      _pendingFileKey = key;
+      _pendingFile = box;
+      pendingFilePeer = target;
+    } catch (_) {
+      error =
+          'Could not prepare this file. Choose a nonempty file up to 8 MiB.';
+    } finally {
+      pickingFile = false;
+      notifyListeners();
+    }
+  }
+
+  Future<SelectedFile?> reviewPendingFile() async {
+    if (!_appAccessible ||
+        !_appForeground ||
+        selectedPeer != pendingFilePeer ||
+        _pendingFile == null ||
+        _pendingFileKey == null) {
+      return null;
+    }
+    final access = accessRevision;
+    final selection = _fileSelectionRevision;
+    final bytes = Uint8List.fromList(
+      await Xchacha20.poly1305Aead().decrypt(
+        _pendingFile!,
+        secretKey: _pendingFileKey!,
+      ),
+    );
+    if (_disposed ||
+        selection != _fileSelectionRevision ||
+        selectedPeer != pendingFilePeer ||
+        !_appAccessible ||
+        !_appForeground ||
+        access != accessRevision) {
+      return null;
+    }
+    final raw = jsonDecode(utf8.decode(bytes)) as Map;
+    return SelectedFile(
+      raw['name'] as String,
+      base64Decode(raw['data'] as String),
+    );
+  }
+
+  Future<bool> sendFile(SelectedFile selection, {ChatMessage? retry}) async {
+    final target = selectedPeer, access = accessRevision;
+    var accepted = false;
+    await _run(() async {
+      if (!canSendFile ||
+          selectedPeer != target ||
+          access != accessRevision ||
+          (retry != null && retry.peerId != target)) {
+        return;
+      }
+      error = null;
+      accepted = await files.start(
+        selection.bytes,
+        name: selection.name,
+        retry: retry,
+      );
+      if (accepted && pendingFilePeer == target) discardPendingFile();
+    });
+    return accepted;
+  }
+
+  Future<void> cancelFileTransfers() {
+    files.requestCancel();
+    return _run(files.cancel);
+  }
+
+  void _pauseFiles() {
+    files.requestCancel();
+    if (files.progress.isNotEmpty) unawaited(_run(files.cancel));
+  }
+
+  Future<bool> saveFileToPhone(ChatMessage message) async {
+    if (_disposed || !appAccessible || !appForeground) return false;
+    final access = accessRevision;
+    try {
+      final bytes = await store.fileBytes(message);
+      if (_disposed ||
+          !appAccessible ||
+          !appForeground ||
+          access != accessRevision) {
+        return false;
+      }
+      // Explicitly authorized export may finish while the system picker is open.
+      return await chatFiles.save(bytes, message.file!.name);
+    } catch (_) {
+      error =
+          'Could not save this file. Try again and choose a writable folder.';
+      notifyListeners();
+      return false;
+    }
   }
 
   late final groups = GroupController(
@@ -371,7 +533,10 @@ class ChatController extends ChangeNotifier {
   void setAppAccess(bool accessible) {
     if (_appAccessible == accessible) return;
     _appAccessible = accessible;
-    if (!accessible) _pauseImages();
+    if (!accessible) {
+      _pauseImages();
+      _pauseFiles();
+    }
     notifications.setAccessible(_appAccessible && _appForeground);
     accessRevision++;
     unawaited(groups.accessChanged());
@@ -452,7 +617,10 @@ class ChatController extends ChangeNotifier {
   void setAppForeground(bool foreground) {
     if (_appForeground == foreground) return;
     _appForeground = foreground;
-    if (!foreground) _pauseImages();
+    if (!foreground) {
+      _pauseImages();
+      _pauseFiles();
+    }
     unawaited(groups.accessChanged());
     notifications.setAccessible(_appAccessible && _appForeground);
     _readVisible();
@@ -814,6 +982,9 @@ class ChatController extends ChangeNotifier {
         remoteSupportsImages =
             payload['features'] is List &&
             (payload['features'] as List).contains('image-v1');
+        remoteSupportsFiles =
+            payload['features'] is List &&
+            (payload['features'] as List).contains('file-v1');
         await _updateReady();
       case 'text':
         if (!ready) throw const FormatException('Peer has not been verified');
@@ -880,6 +1051,17 @@ class ChatController extends ChangeNotifier {
                 'Could not save delivery confirmation. This message may be unconfirmed.';
           }
         }
+      case 'fileOffer':
+      case 'fileReady':
+      case 'fileChunk':
+      case 'fileChunkAck':
+      case 'fileComplete':
+      case 'fileResult':
+      case 'fileCancel':
+        if (!ready || !remoteSupportsFiles) {
+          throw const FormatException('Unsupported file transfer.');
+        }
+        await files.handle(payload);
       case 'imageOffer':
       case 'imageReady':
       case 'imageChunk':
@@ -904,7 +1086,7 @@ class ChatController extends ChangeNotifier {
     try {
       await _sendPayload({
         'type': 'verified',
-        'features': ['image-v1'],
+        'features': ['image-v1', 'file-v1'],
       });
       localVerified = true;
       await _updateReady();
@@ -1054,6 +1236,7 @@ class ChatController extends ChangeNotifier {
 
   bool _validOutgoing(ChatMessage m) =>
       m.image == null &&
+      m.file == null &&
       m.outgoing &&
       RegExp(r'^[A-Za-z0-9_-]{24}$').hasMatch(m.id) &&
       m.text.trim().isNotEmpty &&
@@ -1338,6 +1521,8 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _clearHistory() => _run(() async {
     if (images.progress.isNotEmpty) await images.cancel();
+    if (files.progress.isNotEmpty) await files.cancel();
+    discardPendingFile();
     discardPendingImage();
     await drafts.clearHistory();
     await groups.refreshHistory();
@@ -1388,6 +1573,7 @@ class ChatController extends ChangeNotifier {
       try {
         if (connectedPeer == peer) await _disconnect();
         if (pendingImagePeer == peer || pickingImage) discardPendingImage();
+        if (pendingFilePeer == peer || pickingFile) discardPendingFile();
         await drafts.deleteConversation(peer);
         unawaited(notifications.cancel(peer));
         historyRevision++;
@@ -1417,11 +1603,16 @@ class ChatController extends ChangeNotifier {
     _attemptedIds.clear();
     _session = null;
     remoteSupportsImages = false;
+    remoteSupportsFiles = false;
     try {
-      await images.stop();
+      try {
+        await files.stop();
+      } finally {
+        await images.stop();
+      }
     } catch (_) {
       error =
-          'Could not save interrupted image status. Reopen the app before retrying.';
+          'Could not save interrupted attachment status. Reopen the app before retrying.';
     }
     localVerified = false;
     remoteVerified = false;
@@ -1465,6 +1656,10 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    files.dispose();
+    _pendingFile = null;
+    _pendingFileKey = null;
+    pendingFilePeer = null;
     images.dispose();
     _pendingImage = null;
     _pendingImageKey = null;

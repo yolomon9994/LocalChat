@@ -6,6 +6,7 @@ import '../core/local_store.dart';
 import '../core/models.dart';
 import '../core/group_models.dart';
 import '../core/chat_image.dart';
+import '../core/chat_file.dart';
 
 /// Preview-only state. Never opens SQLite or platform secure storage.
 class DemoStore extends LocalStore {
@@ -33,6 +34,29 @@ class DemoStore extends LocalStore {
     final inserted = await saveMessage(m);
     if (inserted) {
       _images[(m.peerId, m.id, m.outgoing)] = Uint8List.fromList(bytes);
+    }
+    return inserted;
+  }
+
+  final _files = <(String, String, bool), Uint8List>{};
+  @override
+  Future<Uint8List> fileBytes(ChatMessage message) async {
+    final m = message;
+    final bytes = _files[(m.peerId, m.id, m.outgoing)];
+    if (bytes == null || m.file == null) {
+      throw const FormatException('File is unavailable.');
+    }
+    await m.file!.verify(bytes);
+    return Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<bool> saveFileMessage(ChatMessage message, Uint8List bytes) async {
+    final m = message;
+    await m.file!.verify(bytes);
+    final inserted = await saveMessage(m);
+    if (inserted) {
+      _files[(m.peerId, m.id, m.outgoing)] = Uint8List.fromList(bytes);
     }
     return inserted;
   }
@@ -80,6 +104,11 @@ class DemoStore extends LocalStore {
               'outgoing': e.value.outgoing,
               'status': e.value.status,
               'read': !_unread.contains(e.key),
+              if (e.value.file != null)
+                'file': {
+                  ...e.value.file!.toJson(),
+                  'data': base64Encode(_files[e.key]!),
+                },
               if (e.value.image != null)
                 'image': {
                   ...e.value.image!.toJson(),
@@ -143,7 +172,11 @@ class DemoStore extends LocalStore {
         outgoing: key.$3,
         status: m['status'] as String,
         image: m['image'] == null ? null : ChatImage.parse(m['image']),
+        file: m['file'] == null ? null : ChatFile.parse(m['file']),
       );
+      if (m['file'] != null) {
+        _files[key] = base64Decode((m['file'] as Map)['data'] as String);
+      }
       if (m['image'] != null) {
         _images[key] = base64Decode((m['image'] as Map)['data'] as String);
       }
@@ -240,6 +273,8 @@ class DemoStore extends LocalStore {
     final previous = _messages[key];
     if (previous != null) {
       if (previous.text != message.text ||
+          jsonEncode(previous.file?.toJson()) !=
+              jsonEncode(message.file?.toJson()) ||
           jsonEncode(previous.image?.toJson()) !=
               jsonEncode(message.image?.toJson()) ||
           previous.timestamp != message.timestamp) {
@@ -323,6 +358,7 @@ class DemoStore extends LocalStore {
       outgoing: true,
       status: status,
       image: message.image,
+      file: message.file,
     );
   }
 
@@ -348,6 +384,7 @@ class DemoStore extends LocalStore {
       final peer = _people[message.peerId];
       if (peer != null &&
           message.image == null &&
+          message.file == null &&
           message.text.toLowerCase().contains(needle)) {
         if (hits.length == limit) {
           return LocalSearchResults(
@@ -398,6 +435,7 @@ class DemoStore extends LocalStore {
     _people.remove(peer);
     _messages.removeWhere((key, _) => key.$1 == peer);
     _images.removeWhere((key, _) => key.$1 == peer);
+    _files.removeWhere((key, _) => key.$1 == peer);
     _unread.removeWhere((key) => key.$1 == peer);
     _drafts.remove(peer);
   }
@@ -406,6 +444,7 @@ class DemoStore extends LocalStore {
   Future<void> clearHistory() async {
     _groups.clear();
     _images.clear();
+    _files.clear();
     _people.clear();
     _messages.clear();
     _unread.clear();
