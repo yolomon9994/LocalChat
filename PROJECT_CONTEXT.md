@@ -8,7 +8,7 @@ docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes
 LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first, with direct
-text/images/files and hosted text groups. Video playback, Bluetooth, multi-hop relaying, iOS and
+text/images/files and hosted text/image groups. Video playback, Bluetooth, multi-hop relaying, iOS and
 automatic reconnect are also future work. Local notifications and optional
 background protection of the current running verified session are implemented;
 Doze/vendor restrictions still apply and hardware reliability is unvalidated.
@@ -22,14 +22,57 @@ Chats list improvements were committed as `c233159`, and local search as
 Outbox/retry was committed as `605962e`; connection recovery as `c7d4d6e`.
 Notifications were committed as `9bb6c60`, and background protection as `24d52b5`.
 Hosted group chats were committed as `819ac32`, and images as `aea566b`.
-The current milestone is file sharing in one-to-one chats.
+Direct files were committed by the user as `3ec26b5`.
+The current milestone is image sharing in hosted groups; group files are next.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Direct-chat file milestone — implemented and validated, 2026-10-12
+## Group-image milestone — implemented and validated, 2026-10-12
 
-All source and tests are saved on disk, unstaged and uncommitted.
-Baseline is `aea566b` (image sharing); do not stage/commit/push for the user.
+Baseline: `3ec26b5`. Source/tests/docs are saved locally, unstaged and uncommitted.
+Do not stage/commit/push for the user. No packages, permissions or native changes.
+
+- `group_images.dart` adapts the existing ImageTransfers/attachment engine per
+  verified host–guest link. Author-signed PNG offers use `LocalChat/group-image/1`
+  and exact group/epoch/roster/recipients; group text signature bytes are unchanged.
+- Encrypted `group-image-v1` capability on every admitted member gates image
+  controls. Sources use existing 8 MiB/40 MP preparation, 1600 px sides and 2 MiB
+  PNG bounds. The trusted host decrypts/saves uploads before relaying. Durable
+  recipient completion produces individual receipts; generic text receipts
+  cannot bypass the image engine. Notifications/list previews say Image.
+- Group screen provides attach/review/discard, member/direction progress, cancel,
+  individual receipt counts, offline zoom and lock cache eviction. Text is retained
+  during preview/discard. Picker returns while locked are encrypted in memory.
+- Transfers require foreground unlock. Cancel/lock/background/membership changes
+  discard partial bytes and stop relays, preserving received receipts. Author
+  backgrounding after upload sends host abort. No automatic group retry/resume;
+  manually selecting/sending again gets a fresh ID. One outgoing per author/link;
+  busy recipient links become unconfirmed instead of queuing another image.
+- Complete bytes inline in encrypted group_history records, capped to 16 MiB
+  image bytes/group plus 10,000 messages. SQLite stays schema 9. Backup payload
+  v5 supports mixed group images/direct files and retains v1–v4 imports; envelope,
+  KDF and 20 MiB plaintext archive cap stay unchanged, including base64 expansion.
+- `docs/GROUP_IMAGES.md` records controls/trust/wire/storage and the pending
+  three-phone checklist. Automated results belong in `docs/VALIDATION.md`.
+- New tests: 16 protocol/controller/picker checks, three backups, two widgets
+  and one SQLite encryption/reopen/backup/dedupe/deletion check. Initial protocol
+  run passed; widgets now pass after real async scheduling for dialog return and
+  image decoding. Final full suite/analysis/build logs are `.dart_tool/group-image-*`.
+
+Final validation: **250 tests passed**, exit 0 (228 existing + 22 group-image
+checks); clean analysis; final Android arm64 debug APK and browser builds passed,
+exit 0. Existing optional Cupertino web-font warning remains. Final code/docs
+review and diff whitespace check are clean. Logs remain local/ignored under
+`.dart_tool/group-image-*`. APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+Do not repeat passing checks unless changes or a new concern justify it.
+
+Remaining: physical three-phone tests and user's review/commit/push.
+Do not rerun old `.dart_tool/file_*.py` generation helpers.
+
+## Direct-chat file milestone — committed, 2026-10-12
+
+Committed by the user as `3ec26b5`, based on `aea566b` (image sharing).
+Hardware checks remain pending; do not stage/commit/push for the user.
 
 Implemented: opaque nonempty files up to 8 MiB; sanitized bounded filenames;
 Android local-only pick/save bridge `ChatFiles.kt`; browser local selection and
@@ -57,7 +100,7 @@ Final verification:
 
 README/SECURITY/BACKUPS/DEVICE_TESTING/BACKGROUND_CONNECTION/IMAGE_SHARING and
 FILE_SHARING/VALIDATION/FEATURE_BACKLOG documentation reflect the completed work.
-Remaining: physical phone checks and the user's review/commit/push.
+Remaining for direct files: physical phone checks.
 Do not repeat passing tests unless code changes or a new concern requires it.
 Generation helpers under `.dart_tool/file_*.py` were already executed; do not
 rerun them (they duplicate edits). All resulting source/test files are real

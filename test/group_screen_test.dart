@@ -11,6 +11,10 @@ import 'package:local_chat/services/appearance_controller.dart';
 import 'package:local_chat/services/group_controller.dart';
 import 'group_test_support.dart';
 import 'lock_test_support.dart';
+import 'image_test_support.dart';
+import 'image_screen_test.dart' show FixedPicker;
+import 'package:local_chat/features/group_image_bubble.dart';
+import 'package:local_chat/features/chat_image_view.dart';
 
 void main() {
   late GroupNetwork network;
@@ -85,6 +89,115 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byTooltip('Remove member'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'small screen group image review can discard without clearing text or sending',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.runAsync(() async {
+        network.controllers.remove(c.groups);
+        c.dispose();
+        c = ChatController(
+          DemoTransport(),
+          DemoStore(),
+          groupTransport: FakeGroupTransport(network),
+          imageFiles: FixedPicker(await testImage()),
+        );
+        await c.initialize();
+        network.controllers.add(c.groups);
+      });
+      await tester.runAsync(() async {
+        await c.groups.host('Pictures');
+        final guest = await network.phone('Guest');
+        await network.join(guest);
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(320, 568),
+              textScaler: TextScaler.linear(1.8),
+            ),
+            child: GroupChatScreen(controller: c, id: c.groups.active!.id),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'keep this draft');
+      await tester.runAsync(() async {
+        await tester.tap(find.byTooltip('Attach group image'));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Send group image?'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.runAsync(() async {
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Discard'),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(c.groups.active!.messages, isEmpty);
+      expect(c.groups.images.pendingGroup, isNull);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'keep this draft',
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'offline group image opens zoom and PIN lock removes both image routes',
+    (tester) async {
+      late String id;
+      await tester.runAsync(() async {
+        await c.groups.host('Private pictures');
+        final guest = await network.phone('Guest');
+        await network.join(guest);
+        await guest.images.send(await testImage());
+        await network.settle();
+        id = c.groups.active!.id;
+        await c.groups.stop();
+        await network.settle();
+      });
+      (c.notifications.platform as MemoryNotificationPlatform).launchPeer =
+          'group:$id';
+      final lock = testLock();
+      await lock.initialize();
+      await lock.enable('123456');
+      lock.lock();
+      final appearance = AppearanceController(MemoryAppearanceStorage());
+      addTearDown(lock.dispose);
+      addTearDown(appearance.dispose);
+      await tester.pumpWidget(
+        LocalChatApp(controller: c, appLock: lock, appearance: appearance),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() => lock.unlockPin('123456'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GroupImageBubble), findsOneWidget);
+      await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 150)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Image));
+      await tester.pumpAndSettle();
+      expect(find.byType(ChatImageViewer), findsOneWidget);
+      lock.lock();
+      await tester.pumpAndSettle();
+      expect(find.byType(AppLockScreen), findsOneWidget);
+      expect(find.byType(ChatImageViewer), findsNothing);
+      expect(find.byType(Image), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

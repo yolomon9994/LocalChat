@@ -6,12 +6,20 @@ import '../core/local_store.dart';
 import '../core/secure_session.dart';
 import 'group_transport.dart';
 import 'chat_notifications.dart';
+import 'image_files.dart';
+import 'image_transfers.dart';
+import 'image_content.dart';
+import '../core/models.dart';
+import 'package:cryptography/cryptography.dart';
+
+part 'group_images.dart';
 
 class GroupLink {
   GroupLink(this.id, this.session);
   final String id;
   final SecureSession session;
   bool localVerified = false, remoteVerified = false, admitted = false;
+  bool supportsImages = false;
   Timer? timer;
   bool get verified => localVerified && remoteVerified;
   String get name => session.peerName ?? 'Connecting member';
@@ -26,13 +34,20 @@ class GroupController extends ChangeNotifier {
     this.notifications,
     this.timeout = const Duration(seconds: 90),
     this.receiptTimeout = const Duration(seconds: 30),
-  });
+    ImageFiles? imageFiles,
+    this.imageTimeout = const Duration(seconds: 30),
+    this.supportsImages = true,
+  }) : imageFiles = imageFiles ?? createImageFiles();
   final GroupTransport transport;
   final LocalStore store;
   final ChatNotifications? notifications;
   final Future<bool> Function() prepare;
   final bool Function() canAct;
   final Duration timeout, receiptTimeout;
+  final Duration imageTimeout;
+  final bool supportsImages;
+  final ImageFiles imageFiles;
+  late final images = GroupImages(this);
   Future<void> _queue = Future.value();
   Future<void> get idle => _queue;
   StreamSubscription<Map<String, dynamic>>? _subscription;
@@ -138,7 +153,14 @@ class GroupController extends ChangeNotifier {
         view = 1;
         hosting = true;
         running = true;
-        members = [GroupMember(selfId!, store.name, selfPublic!)];
+        members = [
+          GroupMember(
+            selfId!,
+            store.name,
+            selfPublic!,
+            supportsImages: supportsImages,
+          ),
+        ];
         active =
             previous ??
             GroupHistory(id: randomId(), title: title, host: selfPublic!);
@@ -235,7 +257,11 @@ class GroupController extends ChangeNotifier {
       return;
     }
     try {
-      await _send(link, {'type': 'groupVerified', 'version': 1});
+      await _send(link, {
+        'type': 'groupVerified',
+        'version': 1,
+        'features': [if (supportsImages) 'group-image-v1'],
+      });
       link.localVerified = true;
       await _admit(link);
     } catch (_) {
@@ -279,6 +305,7 @@ class GroupController extends ChangeNotifier {
 
   Future<void> _roster() async {
     if (!hosting || active == null) return;
+    await images.membershipChanged();
     view++;
     await _broadcast({
       'type': 'groupRoster',
@@ -298,6 +325,7 @@ class GroupController extends ChangeNotifier {
       'id': link.session.peerId,
       'name': link.name,
       'public': linkRemotePublic(link),
+      'images': link.supportsImages,
     });
     if (members.length >= groupLimit || members.any((m) => m.id == member.id)) {
       await _drop(link.id);
@@ -312,15 +340,21 @@ class GroupController extends ChangeNotifier {
 
   final _publicByLink = <String, String>{};
   String linkRemotePublic(GroupLink link) => _publicByLink[link.id]!;
-  Future<void> accessChanged() => _run(() async {
-    if (canAct() && hosting) {
-      for (final link in links.values.toList()) {
-        await _admit(link);
+  Future<void> accessChanged() {
+    final pause = !canAct();
+    images.accessChanged(pause);
+    return _run(() async {
+      if (pause) await images.cancel();
+      if (canAct() && hosting) {
+        for (final link in links.values.toList()) {
+          await _admit(link);
+        }
       }
-    }
-    if (_visible != null && canAct()) await _readVisible();
-    _notify();
-  });
+      if (_visible != null && canAct()) await _readVisible();
+      _notify();
+    });
+  }
+
   Future<void> _event(Map<String, dynamic> event) async {
     switch (event['type']) {
       case 'peers':
@@ -398,10 +432,21 @@ class GroupController extends ChangeNotifier {
         throw const FormatException('Invalid group verification');
       }
       link.remoteVerified = true;
+      link.supportsImages =
+          p['features'] is List &&
+          (p['features'] as List).contains('group-image-v1');
       await _admit(link);
       return;
     }
     if (!link.verified) throw const FormatException('Unverified group member');
+    if ((p['type'] as Object?) is String &&
+        (p['type'] as String).startsWith('groupImage')) {
+      if (!link.admitted || !link.supportsImages || !supportsImages) {
+        throw const FormatException('Unsupported group image');
+      }
+      await images.handle(link, p);
+      return;
+    }
     switch (p['type']) {
       case 'groupRoster':
         if (hosting ||
@@ -444,6 +489,7 @@ class GroupController extends ChangeNotifier {
                 host: p['host'] as String,
               )
             : old.first;
+        await images.membershipChanged();
         members = roster;
         epoch = p['epoch'] as String;
         view = p['view'] as int;
@@ -462,6 +508,9 @@ class GroupController extends ChangeNotifier {
           'receipts': <String, String>{},
           'read': false,
         });
+        if (m.image != null) {
+          throw const FormatException('Use group image transfers');
+        }
         if (m.envelope['group'] != active!.id ||
             m.envelope['host'] != active!.host ||
             m.envelope['epoch'] != epoch ||
@@ -532,6 +581,11 @@ class GroupController extends ChangeNotifier {
         final message = active?.messages.where((m) => m.key == key);
         if (message == null || message.isEmpty) return;
         final m = message.first;
+        if (hosting && m.image != null) {
+          throw const FormatException(
+            'Image receipts must complete their transfer',
+          );
+        }
         if (!m.targets.contains(member) ||
             !members.any((m) => m.id == member)) {
           throw const FormatException('Wrong receipt member');
@@ -576,6 +630,18 @@ class GroupController extends ChangeNotifier {
       throw const FormatException(
         'Group history is full. Export and delete it before continuing.',
       );
+    }
+    if (message.image != null) {
+      if (message.imageBytes == null) {
+        throw const FormatException('Incomplete group image');
+      }
+      if (group.messages.fold<int>(0, (n, m) => n + (m.image?.length ?? 0)) +
+              message.image!.length >
+          groupImageHistoryMaxBytes) {
+        throw const FormatException(
+          'Group image history is full (16 MiB). Export and delete it before continuing.',
+        );
+      }
     }
     final next = group.copy(
       messages: [
@@ -682,6 +748,7 @@ class GroupController extends ChangeNotifier {
         .every((s) => s == 'received')) {
       _receiptTimers.remove(key)?.cancel();
     }
+    images.receiptsChanged();
   }
 
   Future<void> _uncertain(String key) async {
@@ -704,6 +771,7 @@ class GroupController extends ChangeNotifier {
     await store.saveGroupHistory(next);
     active = next;
     await _reload();
+    images.receiptsChanged();
   }
 
   Future<void> _drop(
@@ -715,6 +783,11 @@ class GroupController extends ChangeNotifier {
     _publicByLink.remove(id);
     if (link == null) return;
     link.timer?.cancel();
+    try {
+      await images.drop(id);
+    } catch (_) {
+      error = 'Image delivery is unconfirmed.';
+    }
     if (close) {
       try {
         await transport.closeLink(id);
@@ -735,6 +808,7 @@ class GroupController extends ChangeNotifier {
     _notify();
   });
   Future<void> _stop() async {
+    images.stop();
     _joinTimer?.cancel();
     _joinTimer = null;
     for (final l in links.values) {
@@ -818,6 +892,7 @@ class GroupController extends ChangeNotifier {
 
   @override
   void dispose() {
+    images.stop();
     _disposed = true;
     _subscription?.cancel();
     _joinTimer?.cancel();

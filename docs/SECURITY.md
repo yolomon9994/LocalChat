@@ -27,9 +27,24 @@ There is no Double Ratchet, post-compromise recovery, offline prekey messaging o
 Direct chats use one socket. Hosted groups use a trusted host and separate
 host–guest sockets, ephemeral keys, counters and both fresh confirmations. Guests
 verify the host and trust its admission of other members. The host decrypts,
-stores and forwards text; group encryption does not conceal text from the host.
+stores and forwards text and images; group encryption does not conceal them from the host.
 Names, titles and pairing prompts remain untrusted. See the detailed
 [hosted group trust model and wire design](GROUP_CHATS.md).
+
+Group images negotiate encrypted `group-image-v1` on every admitted link. Their
+author signs the existing group context with domain `LocalChat/group-image/1`,
+adding canonical PNG metadata (dimensions, length, SHA-256) before recipients.
+The text signature domain and old text records are unchanged. Signed offers and
+bounded chunks travel inside per-link encrypted frames; the shared attachment
+engine checks chunk order, length, digest and decoded pixels before saving.
+The host saves uploads before forwarding; recipients save before final receipts.
+Generic `groupReceipt` cannot replace a recipient's image completion at the host.
+Host trust still permits withholding and false receipt claims. All apps need
+foreground unlock; membership changes cancel active images. Source/prepared limits
+match direct images, with 16 MiB saved image bytes per group. Inline image bytes
+use existing encrypted group-record AAD, without a schema change. Payload-v5
+backups validate signatures/hashes and retain v1–v4 imports and the 20 MiB archive
+cap. See [group-image protocol and interruptions](GROUP_IMAGES.md).
 
 Group types `groupVerified`, `groupRoster`, `groupText`, `groupReceipt` and
 `groupRejected` travel inside existing sealed frames. Authors sign ordered UTF-8

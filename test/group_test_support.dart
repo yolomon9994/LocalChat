@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:local_chat/services/group_transport.dart';
 import 'package:local_chat/services/group_controller.dart';
 import 'package:local_chat/demo/demo_store.dart';
+import 'package:local_chat/services/image_files.dart';
 
 class GroupNetwork {
   FakeGroupTransport? host;
@@ -13,6 +14,9 @@ class GroupNetwork {
     bool Function()? canAct,
     Duration receiptTimeout = const Duration(seconds: 30),
     Duration timeout = const Duration(seconds: 90),
+    ImageFiles? imageFiles,
+    bool supportsImages = true,
+    Duration imageTimeout = const Duration(seconds: 30),
   }) async {
     store ??= DemoStore();
     await store.open();
@@ -25,6 +29,9 @@ class GroupNetwork {
       canAct: canAct ?? () => true,
       receiptTimeout: receiptTimeout,
       timeout: timeout,
+      imageFiles: imageFiles,
+      supportsImages: supportsImages,
+      imageTimeout: imageTimeout,
     );
     controllers.add(c);
     await c.initialize();

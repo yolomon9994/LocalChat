@@ -245,6 +245,66 @@ void main() {
     expect(await db.query('files'), isEmpty);
   });
   test(
+    'group image bytes stay encrypted across reopen, v5 backup, dedupe and deletion',
+    () async {
+      final public = base64Encode(
+            (await store.identity.extractPublicKey()).bytes,
+          ),
+          id = randomId();
+      final bytes = await testImage();
+      final m = await GroupText.create(
+        store.identity,
+        'Private image author',
+        group: id,
+        host: public,
+        epoch: randomId(),
+        view: 1,
+        text: 'Image',
+        targets: [await identityId(public)],
+        imageBytes: bytes,
+      );
+      await store.saveGroupHistory(
+        GroupHistory(
+          id: id,
+          title: 'Private image group',
+          host: public,
+          messages: [m],
+          updated: 1000,
+        ),
+      );
+      final db = await openDatabase(databasePath);
+      final ciphertext =
+          (await db.query('group_history')).single['body'] as String;
+      expect(ciphertext, isNot(contains(base64Encode(bytes))));
+      expect(
+        utf8.decode(base64Decode(ciphertext), allowMalformed: true),
+        isNot(contains(m.image!.digest)),
+      );
+      expect(await db.getVersion(), 9);
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      expect(
+        (await store.groupHistories()).single.messages.single.imageBytes,
+        bytes,
+      );
+      final backup = await store.exportBackup();
+      expect(backup.toJson()['version'], 5);
+      await store.clearHistory();
+      await store.importBackup(backup);
+      expect(
+        (await store.groupHistories()).single.messages.single.imageBytes,
+        bytes,
+      );
+      expect((await store.importBackup(backup)).duplicates, 1);
+      await store.deleteGroupHistory(id);
+      expect(
+        await (await openDatabase(databasePath)).query('group_history'),
+        isEmpty,
+      );
+    },
+  );
+  test(
     'group titles/authors/text/receipts are encrypted and preserved across reopen',
     () async {
       final public = base64Encode(

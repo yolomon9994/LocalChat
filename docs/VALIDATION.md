@@ -1,5 +1,35 @@
 # Validation for v0.1.0
 
+## Hosted group images — final checks 2026-10-12
+
+- Full `flutter test --reporter expanded`: **250 passed**, exit 0 (228 existing
+  + 22 new group-image checks). Output: `.dart_tool/group-image-milestone-tests.log`,
+  local and ignored by Git. Includes final cancellation and screen fixture fixes.
+- Final `flutter analyze`: no issues, exit 0.
+- New checks: 16 protocol/controller/picker tests, three backup tests, two
+  widgets and one SQLite encryption/reopen/backup/dedupe/deletion test.
+- Protocol checks exercise guest upload before host relay, host sends, individual
+  receipts and text interleaving over real encrypted frames. Cover locked
+  recipients, sender cancellation, author backgrounding after upload, membership
+  cancellation/no old history for newcomers, storage failures, missing receipts,
+  old-member capability gates, impersonation/tampered signatures, corrupt chunks,
+  incomplete recipient lists, old-epoch replay, byte bounds and late/locked pickers.
+- Backups round-trip v5 group PNGs alongside direct files, preserve destination
+  identity, deduplicate and reject tampered hashes/signatures, missing complete
+  bytes, type confusion and images in older payload versions. SQLite verifies
+  encrypted image contents, schema 9, reopen, import/dedupe and explicit deletion.
+- Widgets cover 320 × 568 at 1.8× text, preview/discard preserving composer text,
+  offline zoom and PIN removing image routes. Real async scheduling is needed for
+  dialog continuation and PNG decoding; corrected fixtures pass in the full suite.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0. APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Final `flutter build web --no-wasm-dry-run`: passed, exit 0. Existing optional
+  Cupertino font warning remains; the app uses Material icons.
+- Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
+- Physical three-phone provider/Wi-Fi Direct/throughput/lifecycle checks remain
+  pending; see [GROUP_IMAGES.md](GROUP_IMAGES.md). No hardware success is claimed.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Direct-chat files — final checks 2026-10-12
 
 - Full `flutter test --reporter expanded`: **228 passed**, exit 0 (203 existing
@@ -26,7 +56,7 @@
 - Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
 - Physical provider/Wi-Fi Direct/lifecycle/export checks remain pending;
   see [FILE_SHARING.md](FILE_SHARING.md).
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed direct file sharing as `3ec26b5`; hardware checks remain pending.
 
 ## Direct-chat image sharing — 2026-10-12
 

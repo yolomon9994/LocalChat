@@ -395,6 +395,7 @@ class ChatController extends ChangeNotifier {
   late final groups = GroupController(
     _groupTransport,
     store,
+    imageFiles: imageFiles,
     prepare: _prepareGroup,
     notifications: notifications,
     canAct: () => initialized && !_disposed && _appAccessible && _appForeground,

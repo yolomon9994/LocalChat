@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/group_models.dart';
 import '../services/chat_controller.dart';
 import '../services/group_controller.dart';
 import 'chats_tab.dart' show formatConversationTime;
+import 'group_image_bubble.dart';
 
 class GroupHubScreen extends StatefulWidget {
   const GroupHubScreen({
@@ -324,6 +326,72 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     setState(() => _sending = false);
   }
 
+  Future<void> _pickImage() async {
+    await g.images.pick();
+    if (mounted) await _reviewImage();
+  }
+
+  Future<void> _reviewImage() async {
+    final c = widget.controller,
+        access = widget.controller.accessRevision,
+        view = g.view,
+        epoch = g.epoch;
+    final bytes = await g.images.review(widget.id);
+    if (!mounted ||
+        bytes == null ||
+        !c.appAccessible ||
+        !c.appForeground ||
+        access != c.accessRevision) {
+      return;
+    }
+    try {
+      final send = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Send group image?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.memory(bytes, height: 180, fit: BoxFit.contain),
+              Text(
+                '${(bytes.length / 1024).ceil()} KiB · ${g.members.length - 1} recipients. The host receives and relays this image. Keep all apps unlocked and open.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Discard'),
+            ),
+            FilledButton(
+              onPressed: g.images.canSend
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: const Text('Send image'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted ||
+          !c.appAccessible ||
+          !c.appForeground ||
+          access != c.accessRevision ||
+          g.active?.id != widget.id ||
+          epoch != g.epoch ||
+          view != g.view) {
+        return;
+      }
+      if (send == true) {
+        await g.images.send(bytes);
+      } else if (send == false) {
+        g.images.discard();
+      }
+    } finally {
+      unawaited(MemoryImage(bytes).evict());
+    }
+  }
+
   Future<void> _delete() async {
     final token = widget.controller.accessRevision;
     final yes = await showDialog<bool>(
@@ -364,6 +432,18 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
         appBar: AppBar(
           title: Text(history?.title ?? 'Group unavailable'),
           actions: [
+            if (active && (g.connected || g.images.picking))
+              IconButton(
+                tooltip: 'Attach group image',
+                onPressed: g.images.canSend ? _pickImage : null,
+                icon: g.images.picking
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_photo_alternate_outlined),
+              ),
             IconButton(
               onPressed: _delete,
               icon: const Icon(Icons.delete_outline),
@@ -400,6 +480,49 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                         child: const Text('Host this group again'),
                       ),
                     if (active) ...[
+                      if (g.connected && !g.images.available)
+                        const Text(
+                          'Images require at least two verified members, with every member using an updated app.',
+                        ),
+                      for (final p in g.images.progress)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${p.transfer.outgoing ? 'Sending to' : 'Receiving from'} ${p.member} · ${(p.transfer.fraction * 100).round()}%',
+                              ),
+                              LinearProgressIndicator(
+                                value: p.transfer.fraction,
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (g.images.waiting && g.images.progress.isEmpty)
+                        const Text(
+                          'Image saved locally; waiting for recipient receipts.',
+                        ),
+                      if (g.images.progress.isNotEmpty || g.images.waiting)
+                        TextButton(
+                          onPressed: g.images.cancelByUser,
+                          child: const Text('Cancel image transfers'),
+                        ),
+                      if (g.images.notice != null) Text(g.images.notice!),
+                      if (g.images.pendingGroup == widget.id)
+                        Wrap(
+                          children: [
+                            TextButton.icon(
+                              onPressed: _reviewImage,
+                              icon: const Icon(Icons.image_outlined),
+                              label: const Text('Review group image'),
+                            ),
+                            TextButton(
+                              onPressed: g.images.discard,
+                              child: const Text('Discard'),
+                            ),
+                          ],
+                        ),
                       GroupVerification(controller: c),
                       Text(
                         'Members (${g.members.length})',
@@ -472,7 +595,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                                     : '${message.name} • ${message.author.substring(0, 8)}',
                                 style: Theme.of(context).textTheme.labelLarge,
                               ),
-                              SelectableText(message.text),
+                              if (message.image != null)
+                                GroupImageBubble(
+                                  key: ValueKey(message.key),
+                                  controller: c,
+                                  message: message,
+                                )
+                              else
+                                SelectableText(message.text),
                               Text(
                                 formatConversationTime(message.timestamp),
                                 style: Theme.of(context).textTheme.labelSmall,

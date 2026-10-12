@@ -3,10 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: File sharing in direct chats
+## Current milestone: Images in hosted groups
 
-Implemented and validated, 2026-10-12. Source and tests are saved locally,
-unstaged and uncommitted; see PROJECT_CONTEXT.md for context.
+Implemented: 2026-10-12. Source/tests/docs are saved locally, unstaged and
+uncommitted. The user handles Git. See [GROUP_IMAGES.md](GROUP_IMAGES.md).
+
+- [x] Group image pick/review/discard, signed upload and trusted host relay.
+- [x] Per-link progress/cancel and complete-store individual receipts.
+- [x] Foreground/unlock gates, sealed selections and membership cancellation.
+- [x] Encrypted saved PNGs, offline zoom, generic previews and PIN route removal.
+- [x] All-member capability negotiation; older members retain text.
+- [x] Payload-v5 backups retain v1–v4 imports; SQLite schema remains 9.
+- [x] All 250 tests pass, clean analysis, Android/browser builds and diff review;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical three-phone checks; see [GROUP_IMAGES.md](GROUP_IMAGES.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## File sharing in direct chats: implemented and committed
+
+Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 
 - [x] Pick a local nonempty file up to 8 MiB, review/discard and explicitly send.
 - [x] Shared encrypted chunk engine, safe names, digest/length checks, progress/cancel.
@@ -16,7 +31,7 @@ unstaged and uncommitted; see PROJECT_CONTEXT.md for context.
 - [x] All 228 tests pass and final analysis is clean; see [VALIDATION.md](VALIDATION.md).
 - [x] Final code/diff review, Android/browser builds and documentation.
 - [ ] Physical two-phone checks; see [FILE_SHARING.md](FILE_SHARING.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits direct file sharing (`3ec26b5`).
 
 ## Image sharing in direct chats: implemented and committed
 
@@ -258,7 +273,9 @@ unstaged and uncommitted; see PROJECT_CONTEXT.md for context.
       preview, offline viewer and encrypted backup support; hardware checks pending.
 - [x] Direct-chat files: implemented with bounds/progress/cancel, encrypted
       storage/backups and explicit offline export; hardware checks pending.
-- [ ] Group attachments: transfer progress, cancellation and size limits.
+- [x] Group images: signed encrypted upload/relay, progress/cancellation,
+      individual receipts, offline viewing and backups; hardware checks pending.
+- [ ] Group files: transfer progress, cancellation and size limits.
 - [ ] Private local contact nicknames independent of advertised display names.
 
 ## Later refinements discussed
@@ -280,7 +297,8 @@ unstaged and uncommitted; see PROJECT_CONTEXT.md for context.
 5. Offline outbox and retry (committed), connection troubleshooting/manual
    reconnection and notifications (committed), background connection support (committed).
 6. Hosted group text chat (committed).
-7. Direct-chat image sharing (committed), file sharing (current), then group attachments and refinements.
+7. Direct-chat image/file sharing (committed), group images (current), then
+   group files and refinements.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

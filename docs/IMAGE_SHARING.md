@@ -1,8 +1,9 @@
 # Image sharing in direct chats
 
 Implemented: 2026-10-12. Update both phones, connect in Nearby and compare/confirm
-the fresh code on both. This milestone covers one-to-one images; group attachments
-remain planned. Other direct-chat files are covered in [FILE_SHARING.md](FILE_SHARING.md).
+the fresh code on both. This guide covers one-to-one images; hosted group images
+are covered in [GROUP_IMAGES.md](GROUP_IMAGES.md). Other direct-chat files are
+covered in [FILE_SHARING.md](FILE_SHARING.md).
 
 ## Send and view
 
@@ -62,7 +63,7 @@ Chat/all-history deletion removes image rows transactionally; it does not erase
 the other phone or guarantee forensic deletion.
 
 Image archives use payload version 3 with validated inline bytes/metadata/digest.
-New builds import versions 1, 2, 3 and 4; older builds reject image archives. The
+New builds import versions 1 through 5; older builds reject image archives. The
 encrypted envelope/KDF and total 20 MiB archive bound are unchanged, so images
 reduce how much history fits in an export. Imports re-encrypt with destination
 keys and use existing duplicate/conflict rules. Imported sending attempts become

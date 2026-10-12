@@ -29,7 +29,14 @@ class BackupData {
   final List<Map<String, Object?>> peers, messages, drafts;
   final List<Map<String, Object?>> groups;
   Map<String, Object?> toJson() => {
-    'version': messages.any((m) => m['file'] != null)
+    'version':
+        groups.any(
+          (g) => (g['messages'] as List).any(
+            (m) => (m as Map)['imageData'] != null,
+          ),
+        )
+        ? 5
+        : messages.any((m) => m['file'] != null)
         ? 4
         : messages.any((m) => m['image'] != null)
         ? 3
@@ -49,7 +56,7 @@ class BackupData {
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3, 4}.contains(raw['version'])) throw invalid;
+    if (raw is! Map || !{1, 2, 3, 4, 5}.contains(raw['version'])) throw invalid;
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
@@ -108,7 +115,7 @@ class BackupData {
       if (!ids.contains(peer) || !keys.add((peer, id, outgoing))) throw invalid;
       string(m, 'text', 4096);
       if (m.containsKey('file')) {
-        if (raw['version'] != 4 ||
+        if ((raw['version'] as int) < 4 ||
             m.containsKey('image') ||
             m['file'] is! Map ||
             m['text'] != 'File') {
@@ -163,6 +170,9 @@ class BackupData {
     if (raw['version'] == 2 || raw.containsKey('groups')) {
       for (final row in rows('groups', 500)) {
         final group = await GroupHistory.parse(row);
+        if (group.messages.any((m) => m.image != null) && raw['version'] != 5) {
+          throw invalid;
+        }
         groupMessages += group.messages.length;
         if (!groupIds.add(group.id) || groupMessages > 100000) throw invalid;
         groups.add(group.toJson());

@@ -2,7 +2,8 @@
 
 Implemented: 2026-10-12. All 228 automated tests pass, analysis is clean, and
 final Android/browser builds pass. Physical phone checks remain pending.
-Changes remain local and uncommitted; the user handles Git.
+The user committed direct file sharing as `3ec26b5`. Group file sharing remains
+planned; group images are covered in [GROUP_IMAGES.md](GROUP_IMAGES.md).
 
 ## Controls and limits
 

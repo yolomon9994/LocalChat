@@ -1,12 +1,15 @@
 # LocalChat
 
-Android-first Flutter app for nearby encrypted direct chats and hosted text groups over **Wi-Fi Direct**. No server, account, router, mobile data, Firebase, or cloud database. Wi-Fi radio must be enabled.
+Android-first Flutter app for nearby encrypted direct chats and hosted text/image groups over **Wi-Fi Direct**. No server, account, router, mobile data, Firebase, or cloud database. Wi-Fi radio must be enabled.
 
 ## Version 0.1
 
-- Hosted nearby text groups: create/find/join, verify each host–guest connection,
+- Hosted nearby text/image groups: create/find/join, verify each host–guest connection,
   signed authors, member lists/removal, individual receipts and encrypted saved history.
   The host reads and relays messages; it must remain connected. No host migration.
+  Group images provide preview, per-link progress/cancellation and offline zoom.
+  All members need the updated app; active transfers require foreground unlock.
+  See [group-image controls and testing](docs/GROUP_IMAGES.md).
 
 - Advertise a display name and discover nearby LocalChat phones using Wi-Fi Direct DNS-SD.
 - Connect through Android's Wi-Fi Direct pairing flow and exchange framed TCP messages.
@@ -65,7 +68,7 @@ See [hosted group chats](docs/GROUP_CHATS.md) for the trust model, joining and t
 See [image sharing](docs/IMAGE_SHARING.md) for limits, controls and two-phone checks.
 See [file sharing](docs/FILE_SHARING.md) for attaching documents, saving copies and testing.
 
-Bluetooth, video playback, group attachments, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running direct-chat session; groups should keep the host open and image/file transfers require both apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
+Bluetooth, video playback, group files, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running direct-chat session; groups should keep the host open and image/file transfers require participating apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 
