@@ -28,15 +28,56 @@ Group files were committed by the user as `5a92e71`.
 Group drafts were committed by the user as `2a83b30`.
 Group pin/archive was committed by the user as `f07316d`.
 Group search was committed by the user as `6f342bb`.
-The current milestone is background protection for hosted groups.
+Group background protection was committed by the user as `734ea96`.
+The current milestone is browser group simulation.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Browser-group milestone - implemented, 2026-10-13
+
+Baseline: `734ea96`. Changes are saved locally, unstaged and uncommitted.
+The user handles Git. See docs/BROWSER_GROUPS.md and docs/VALIDATION.md.
+
+- main.createDemoController() explicitly injects DemoGroupTransport only for the
+  browser factory. Android retains WifiGroupTransport/LocalStore/native services.
+  ChatController exposes simulatedGroups/canUseGroups for UI capability gates;
+  fallback demo/test controllers do not accidentally start simulated peers.
+- DemoGroupTransport creates private GroupControllers and in-memory endpoints,
+  with stable per-tab simulated identities and ordinary encrypted handshakes,
+  signed group envelopes, rosters, receipts and image/file transfers. Hosting
+  offers Ava/Noah pending guests; discovery offers Ava's Weekend plans room with
+  Noah as another guest. Remote demo participants confirm automatically; the
+  visible local controller still needs explicit Codes match and foreground access.
+- Simulated members greet/reply through the real controller, without canned
+  receipt success or a protocol shortcut. Root history/drafts/unread/search/
+  pin/archive/delete and demo-only backups use the existing storage/controller.
+  Rehosting preserves local history/choices and starts a fresh epoch; rediscovery
+  retains the per-tab simulated host and room while requiring new confirmation.
+- Generations filter stale queued events; stopping/mode switching closes hidden
+  controllers and cancels reply/verification/receipt timers. Initialization checks
+  cancellation before attaching listeners. Root disposal closes demo streams and
+  private stores. Separate tabs/reloads have independent temporary data.
+- Group hub/create/verification/chat screens identify the demo; real Android
+  code-comparison and host-trust instructions remain. Browser rehosting works;
+  PIN locking hides routes/dialogs and preserves local admission/send gates.
+  Background controls are simulated, with no OS service/network/hardware claim.
+- Final full regression: **382 passed**, exit 0 (362 prior + 20 new), including
+  15 protocol/controller and five widgets. Analysis is clean; final Android arm64
+  APK and browser builds pass. No packages/native/schema/backup/wire changes.
+- Chrome checks initially stalled because Flutter 3.38.7's Windows test server
+  returned 404 for present CanvasKit files (fromUri creates backslashes but the
+  handler checks a forward-slash prefix). A workspace-only CDP helper serves
+  exact cached SDK assets to the isolated test browser; app/SDK are unchanged.
+  Chrome smoke test passes; final Chrome protocol and UI runs pass **15 + 5**
+  checks, exit 0. VM widget fixtures use real-time guest setup/confirmation and
+  PIN hashing, and explicitly dispose pending verification timers before checks.
+  Helpers/raw logs are ignored in .dart_tool. Manual browser/physical checks remain
+  pending. Never claim simulation validates Android networking/security/battery.
+
 ## Group-background milestone - implemented, 2026-10-13
 
-Baseline: `6f342bb`. Changes are saved locally, unstaged and uncommitted.
-The user handles Git; staging this milestone must include `android` as well as
-`lib`, `test` and docs. See docs/GROUP_BACKGROUND.md and docs/VALIDATION.md.
+Baseline: `6f342bb`. The user committed this milestone as `734ea96`.
+The user handles Git. See docs/GROUP_BACKGROUND.md and docs/VALIDATION.md.
 
 - Reuses BackgroundConnection/ConnectionService and the existing local opt-in.
   GroupController exposes current transportGeneration/backgroundReady (at least
@@ -104,8 +145,8 @@ The user handles Git. See docs/GROUP_SEARCH.md and docs/VALIDATION.md.
 - Final full regression: **340 passed**, exit 0 (324 prior + 16 new), using
   `--concurrency=2 --timeout=2m`. Analysis is clean; arm64 debug APK and browser
   builds pass. Logs are ignored in .dart_tool. Physical checks remain pending.
-  Group background protection is the current milestone; browser group simulation
-  remains future work.
+  Group background protection is committed; browser group simulation is the
+  current milestone.
 
 ## Group-management milestone - implemented, 2026-10-13
 
@@ -159,8 +200,9 @@ The user handles Git. See docs/GROUP_DRAFTS.md and docs/VALIDATION.md.
   the existing SQLite search stress check. All 10 group-screen checks pass,
   analysis is clean and arm64 Android/browser builds pass. No new packages,
   permissions or native changes. The user reviews/tests/commits next.
-- Browser demo remains memory only; no group outbox or automatic sends. Group
-  pin/archive is implemented separately; search is next. Physical checks remain pending.
+- Browser demo remains memory only; no group outbox. Group pin/archive, search,
+  background protection and in-tab simulation are implemented separately.
+  Simulated remote replies are labeled demo. Physical checks remain pending.
 
 ## Group-file milestone — implemented and validated, 2026-10-12
 
@@ -356,9 +398,9 @@ Implemented:
 - Limits: eight members including host (hardware may allow fewer), 4096-byte
   text, 10,000 saved messages/group, 90-second joins and 30-second receipts.
   Original host can explicitly rehost with a fresh epoch/codes. No group outbox,
-  automatic retry/reconnect, host migration or background service. Saved group
-  drafts and pin/archive are now implemented separately; group search and
-  browser simulation remain backlog refinements.
+  automatic retry/reconnect or host migration. Saved drafts, pin/archive,
+  search, background protection and browser simulation are implemented separately;
+  the original hosted-group milestone did not include these refinements.
 - Docs updated: README, SECURITY, BACKUPS, BACKGROUND_CONNECTION, DEVICE_TESTING,
   FEATURE_BACKLOG; full controls/trust/three-phone checklist in GROUP_CHATS.md.
 

@@ -4,6 +4,14 @@ This is a prototype, not an audited secure messenger. Selecting cryptographic pr
 
 ## Threat model
 
+The browser demo can host/join private in-tab simulated groups. Remote identities,
+confirmations, messages and receipts are simulated, although shared controllers
+exercise the normal encrypted/signed protocol. Only remote demo participants
+confirm automatically; the visible local user must still confirm. No sockets,
+external peers, OS background service, persistent secure storage or Android trust
+shortcut is introduced. Each tab/reload has independent temporary state; demo
+backups remain separate from phone backups. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
+
 The implementation aims to protect message content against passive radio/network interception and reject modified/replayed frames. Active impersonation is addressed only when users compare the complete security code over an independent trusted channel and both explicitly confirm. A display name or a Wi-Fi Direct pairing prompt is not identity verification.
 
 Encryption does not hide traffic existence, sizes, timing, Wi-Fi addresses, advertised names, handshake names or identity public keys. It cannot prevent jamming, discovery spoofing, denial of service, malware, rooted-device compromise, screenshots or a verified peer sharing the text. DNS-SD names are untrusted and public. This release does not automatically trust a previously seen identity.

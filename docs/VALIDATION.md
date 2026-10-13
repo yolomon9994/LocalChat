@@ -1,5 +1,60 @@
 # Validation for v0.1.0
 
+## Browser group simulation - final checks 2026-10-13
+
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **382 passed**, exit 0 (362 existing + 20 new), 6m09s.
+  Output: `.dart_tool/group-demo-milestone-tests.log` (local, ignored by Git).
+- Fifteen new protocol/controller checks cover browser-factory selection and
+  fallback isolation, two independent hosted handshakes without local-confirmation
+  bypass, signed greetings/replies and per-member receipts, discover/join with
+  host relay, rejecting/removing members, foreground/PIN admission/send gates,
+  draft/unread preservation, canceling replies on stop, offline saved history,
+  rehosting/rediscovery with fresh epochs and confirmations and stable per-tab
+  identities/room ID, pin/archive/search/deletion, validated demo backups with
+  drafts/flags/signatures, separate tabs/reloads, direct/group mode changes,
+  signed image/file transfers with complete-store receipts, simulated background
+  status, and disposal during initialization.
+- Five new widgets cover the visible create/confirm/send flow and demo labels,
+  discovery/join, saved drafts/archive/search plus demo rehosting, PIN removal of
+  dialogs/routes, and 320 x 568 at 1.8x text. Local confirmation is tapped through
+  the same controls a browser user sees. The separate VM run passed all five;
+  `.dart_tool/group-demo-widget-tests.log`.
+- Headless Chrome protocol run: **15 passed**, exit 0, 17s after startup;
+  `.dart_tool/group-demo-chrome-final.log`. This also checks actual browser
+  cryptography, signed text/attachment transfers, memory storage and isolation.
+  Chrome smoke test also passed one browser-factory check.
+- Final headless Chrome UI run: **5 passed**, exit 0, 19s after startup;
+  `.dart_tool/group-demo-chrome-widgets-final.log`. Together the browser runs
+  pass all 20 new checks with unchanged app/SDK code.
+- Chrome's initial test startup stalled before any tests because installed Flutter
+  3.38.7's Windows test server returned 404 for present CanvasKit JS/WASM files.
+  Source inspection showed fromUri produces backslashes while its handler checks
+  the prefix `canvaskit/`. Local CDP diagnostics captured those 404s and loader
+  exceptions (`group-demo-browser-diagnostics.log`). Workspace-only helper
+  `.dart_tool/group_demo_chrome_assets.mjs` serves the exact cached SDK bytes to
+  the isolated test browser and reloads its failed iframe. No SDK/app changes,
+  downloads or new dependencies were needed. Helper/asset logs are local/ignored.
+- Widget fixtures allow cryptographic work to progress before fake-clock settling
+  and dispose intentional pending-verification timers before invariant checks.
+  Chrome fixtures also perform guest setup/confirmation and PIN hashing in real
+  time. A cancellation guard prevents attaching listeners after world disposal.
+  Earlier lint/fixture/startup failures were corrected or obsolete runs stopped;
+  raw development logs remain ignored in .dart_tool.
+- Final `flutter analyze`: no issues, exit 0; `.dart_tool/group-demo-analyze.log`.
+- `flutter build web --no-wasm-dry-run`: passed, exit 0;
+  `.dart_tool/group-demo-web-build.log`; output `build/web`.
+  Existing optional Cupertino font warning remains; the app uses Material icons.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0; `.dart_tool/group-demo-apk-build.log`.
+  APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Code/docs review and `git -c core.safecrlf=false diff --check`: clean.
+  No native code/permissions, dependencies, schema, backup or wire changes.
+- Manual browser interaction/file-picker/download/visual checks remain pending;
+  see [BROWSER_GROUPS.md](BROWSER_GROUPS.md). Android hardware/network/background
+  checks remain pending separately; simulation does not validate those behaviors.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Hosted-group background protection - final checks 2026-10-13
 
 - Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
@@ -49,8 +104,8 @@
   screen-off relaying, battery/Doze/vendor behavior and upgrades remain pending;
   see [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md). Simulated encrypted transports
   and native compilation do not establish hardware reliability.
-- Changes are saved locally, unstaged and uncommitted. The user handles Git;
-  staging this milestone must include `android` as well as `lib`, `test` and docs.
+- The user committed this milestone as `734ea96`; local `origin/main` matches.
+  Physical group-background checks remain pending.
 
 ## Saved group search - final checks 2026-10-13
 

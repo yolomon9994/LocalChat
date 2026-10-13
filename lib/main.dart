@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'core/local_store.dart';
 import 'demo/demo_store.dart';
 import 'demo/demo_transport.dart';
+import 'demo/demo_group_transport.dart';
 import 'services/chat_controller.dart';
 import 'services/transport.dart';
 import 'features/home_screen.dart';
@@ -21,8 +22,15 @@ void main() {
 }
 
 ChatController createController() => kIsWeb
-    ? ChatController(DemoTransport(), DemoStore(), isDemo: true)
+    ? createDemoController()
     : ChatController(WifiDirectTransport(), LocalStore());
+
+ChatController createDemoController() => ChatController(
+  DemoTransport(),
+  DemoStore(),
+  isDemo: true,
+  groupTransport: DemoGroupTransport(),
+);
 
 class LocalChatApp extends StatefulWidget {
   const LocalChatApp({

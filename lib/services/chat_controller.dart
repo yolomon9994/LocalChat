@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import '../core/local_store.dart';
+import '../demo/demo_group_transport.dart';
 import '../core/models.dart';
 import '../core/chat_backup.dart';
 import 'backup_files.dart';
@@ -66,6 +67,8 @@ class ChatController extends ChangeNotifier {
                ? WifiGroupTransport()
                : UnavailableGroupTransport());
   final GroupTransport _groupTransport;
+  bool get simulatedGroups => isDemo && _groupTransport is DemoGroupTransport;
+  bool get canUseGroups => !isDemo || simulatedGroups;
   final ImageFiles imageFiles;
   final Duration imageTimeout;
   bool remoteSupportsImages = false;
@@ -1696,6 +1699,9 @@ class ChatController extends ChangeNotifier {
     pendingImagePeer = null;
     groups.removeListener(_groupChanged);
     groups.dispose();
+    if (_groupTransport is DemoGroupTransport) {
+      unawaited(_groupTransport.dispose());
+    }
     _disposed = true;
     drafts.dispose();
     notifications.dispose();

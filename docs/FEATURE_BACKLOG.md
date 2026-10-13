@@ -3,10 +3,26 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Background protection for hosted groups
+## Current milestone: Browser group simulation
 
 Implemented: 2026-10-13. Saved locally, unstaged and uncommitted; the user handles
-Git. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
+Git. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
+
+- [x] Browser factory selects in-tab simulated host/guests; Android keeps native transport.
+- [x] Create/find/join with clear demo labels and explicit local code confirmation.
+- [x] Signed/encrypted simulated messages, member receipts and image/file transfers.
+- [x] Saved drafts, unread, pin/archive, search, deletion and demo backups work.
+- [x] Rehosting/rediscovery require fresh confirmation; mode changes cancel old replies.
+- [x] PIN/access gates, isolated tabs and stop/disposal/initialization cancellation.
+- [x] All 382 tests pass, clean analysis, Android/browser builds and review.
+- [x] All 20 new checks pass in headless Chrome; see [VALIDATION.md](VALIDATION.md).
+- [ ] Manual browser checklist; see [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Background protection for hosted groups: implemented and committed
+
+Implemented: 2026-10-13. Committed by the user as `734ea96`; the local
+`origin/main` reference matches. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
 
 - [x] Reuse Keep connection active for admitted, freshly verified group links.
 - [x] Foreground-unlock startup, native live-link/access checks and generic Stop.
@@ -20,7 +36,7 @@ Git. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
 - [x] All 362 tests pass, clean analysis, final Android/browser builds and review;
       see [VALIDATION.md](VALIDATION.md).
 - [ ] Physical three-phone/lifecycle/battery checks; see [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits group background protection (`734ea96`); local `origin/main` matches.
 
 ## Saved group message search: implemented and committed
 
@@ -369,7 +385,7 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Group pin/archive; persisted choices and backup support. Hardware checks pending.
 - [x] Saved group message search; 340 tests pass. Physical checks pending.
 - [x] Group background protection; 362 tests pass. Physical checks pending.
-- [ ] Browser group simulation.
+- [x] Browser group simulation; 382 tests and 20 Chrome checks pass. Manual checks pending.
 
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
 - [ ] Group delivery behavior when members leave or the host disconnects.
@@ -387,7 +403,7 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 6. Hosted group text chat (committed).
 7. Direct-chat image/file sharing and group images/files (committed).
 8. Saved group drafts, group pin/archive and group search (committed).
-9. Group background protection (current); browser group simulation remains future work.
+9. Group background protection (committed), browser group simulation (current).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

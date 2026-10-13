@@ -41,7 +41,9 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Create nearby group'),
+        title: Text(
+          c.simulatedGroups ? 'Create demo group' : 'Create nearby group',
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -52,8 +54,10 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
                 decoration: const InputDecoration(labelText: 'Group name'),
                 autofocus: true,
               ),
-              const Text(
-                'You host and relay messages. Verify every joining member. Keep this phone connected; leaving pauses the group.',
+              Text(
+                c.simulatedGroups
+                    ? 'Simulated members join inside this tab. Their confirmations and receipts are simulated; tap Codes match to confirm each demo member. Reloading clears demo data.'
+                    : 'You host and relay messages. Verify every joining member. Keep this phone connected; leaving pauses the group.',
               ),
             ],
           ),
@@ -92,7 +96,9 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: c,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('Group chats')),
+      appBar: AppBar(
+        title: Text(c.simulatedGroups ? 'Group chats (Demo)' : 'Group chats'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -101,7 +107,9 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            c.isDemo
+            c.simulatedGroups
+                ? 'Browser group demo: members, verification and receipts are simulated inside this tab. No other phones or browser tabs are connected. Reloading clears all demo history and drafts.'
+                : c.isDemo
                 ? 'Android phones are needed to discover or host groups. Saved demo group backups can be viewed here.'
                 : 'One nearby connection mode at a time. Starting a group closes the direct chat connection. Up to 8 members including the host; phones may support fewer.',
           ),
@@ -112,7 +120,7 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
             children: [
               FilledButton.icon(
                 onPressed:
-                    !c.isDemo &&
+                    c.canUseGroups &&
                         c.appAccessible &&
                         c.appForeground &&
                         !g.busy &&
@@ -120,11 +128,13 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
                     ? _create
                     : null,
                 icon: const Icon(Icons.group_add_outlined),
-                label: const Text('Create group'),
+                label: Text(
+                  c.simulatedGroups ? 'Create demo group' : 'Create group',
+                ),
               ),
               OutlinedButton.icon(
                 onPressed:
-                    !c.isDemo &&
+                    c.canUseGroups &&
                         c.appAccessible &&
                         c.appForeground &&
                         !g.busy &&
@@ -132,7 +142,9 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
                     ? g.discover
                     : null,
                 icon: const Icon(Icons.radar),
-                label: const Text('Find groups'),
+                label: Text(
+                  c.simulatedGroups ? 'Find demo groups' : 'Find groups',
+                ),
               ),
               if (g.running)
                 TextButton(
@@ -217,8 +229,10 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
               ),
             ),
           const SizedBox(height: 20),
-          const Text(
-            'Keep the host connected. Enable Keep connection active in Settings to help receive and relay group text in the background. Images and files require foreground unlock. No host migration, automatic reconnect or offline group outbox. New members receive new messages only. Group history is included in encrypted backups.',
+          Text(
+            c.simulatedGroups
+                ? 'Demo connections stay inside this tab. Background controls are simulated; no Android service, real device discovery or screen-off delivery is tested here. Demo backups can only import into the browser demo.'
+                : 'Keep the host connected. Enable Keep connection active in Settings to help receive and relay group text in the background. Images and files require foreground unlock. No host migration, automatic reconnect or offline group outbox. New members receive new messages only. Group history is included in encrypted backups.',
           ),
         ],
       ),
@@ -246,8 +260,10 @@ class GroupVerification extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   if (link.session.verificationCode != null) ...[
-                    const Text(
-                      'Compare this entire code on both phones in person. Display names alone do not verify identity.',
+                    Text(
+                      controller.simulatedGroups
+                          ? 'Demo verification: the member and its confirmation are simulated. Tap Codes match to try this flow. On Android, compare the entire code on both phones in person.'
+                          : 'Compare this entire code on both phones in person. Display names alone do not verify identity.',
                     ),
                     const SizedBox(height: 8),
                     SelectableText(
@@ -725,7 +741,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
       final c = widget.controller;
       return Scaffold(
         appBar: AppBar(
-          title: Text(history?.title ?? 'Group unavailable'),
+          title: Text(
+            '${c.simulatedGroups ? 'Demo • ' : ''}${history?.title ?? 'Group unavailable'}',
+          ),
           actions: [
             if (history != null &&
                 !(_showTarget && widget.focusMessageKey != null))
@@ -787,6 +805,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
             children: [
               Expanded(
                 child: _historyView(history, [
+                  if (c.simulatedGroups)
+                    const Text(
+                      'Demo group • simulated members, verification and receipts. Data resets on reload.',
+                    ),
                   Text(
                     active
                         ? g.state
@@ -803,7 +825,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                       history != null &&
                       history.host == g.selfPublic)
                     TextButton(
-                      onPressed: !c.isDemo && !g.busy && !g.running
+                      onPressed:
+                          c.canUseGroups &&
+                              !g.busy &&
+                              !g.running &&
+                              c.appAccessible &&
+                              c.appForeground
                           ? () => g.host(history.title, previous: history)
                           : null,
                       child: const Text('Host this group again'),

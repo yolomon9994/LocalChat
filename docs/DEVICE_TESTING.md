@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Browser group UI/protocol simulation has a separate [checklist](BROWSER_GROUPS.md);
+it does not replace physical phone testing.
+
 Group background protection uses the [three-phone checklist](GROUP_BACKGROUND.md),
 including locked host relaying, member departure, Stop and screen-off battery limits.
 

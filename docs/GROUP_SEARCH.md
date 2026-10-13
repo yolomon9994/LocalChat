@@ -36,8 +36,9 @@ GroupController. It yields regularly, cancels obsolete work, and retains only
 result IDs/display text, without attachment bytes. There is no plaintext index,
 query log, extra persisted message copy or new network operation. SQLite remains
 schema **11**; backups retain their existing v1-v8 compatibility and limits.
-Browser searches cover saved/imported in-memory groups; real nearby group hosting
-and receiving still require Android.
+Browser searches cover simulated and saved/imported in-memory groups; see
+[BROWSER_GROUPS.md](BROWSER_GROUPS.md). Real nearby group hosting/receiving still
+require Android.
 
 ## Phone checklist
 

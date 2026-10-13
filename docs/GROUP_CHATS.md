@@ -8,6 +8,10 @@ Image controls, foreground requirements, limits and three-phone checks are in
 [GROUP_IMAGES.md](GROUP_IMAGES.md). File controls and tests are in
 [GROUP_FILES.md](GROUP_FILES.md).
 
+The browser preview now supports labeled hosting/joining with simulated members,
+verification, text/attachments and receipts inside one tab. See
+[BROWSER_GROUPS.md](BROWSER_GROUPS.md). Real Wi-Fi Direct still requires Android.
+
 ## Create and join
 
 1. On the host, choose **Create group**, enter a name, and allow Nearby access.
@@ -93,8 +97,9 @@ guest to join and compare new codes. There is no automatic reconnect, host
 migration or restoration after Activity/process closure. History-only import
 does not make the destination the original host; explicit identity transfer can.
 
-Browser preview explains the Android requirement and can display imported demo
-group history; it does not simulate discovery, hosting or real group links.
+Browser preview supports in-tab group simulation and can display imported demo
+group history. Discovery, hosting and links are simulated inside one tab; real
+nearby Wi-Fi Direct links still require Android.
 
 ## Group organization
 

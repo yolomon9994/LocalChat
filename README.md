@@ -21,6 +21,8 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   Search saved group names/messages from Chats or search within one group,
   including archived history; open highlighted older messages without losing
   drafts. See [group search testing](docs/GROUP_SEARCH.md).
+  The browser preview can host/join groups with simulated members and receipts;
+  see [browser group demo](docs/BROWSER_GROUPS.md).
 
 - Advertise a display name and discover nearby LocalChat phones using Wi-Fi Direct DNS-SD.
 - Connect through Android's Wi-Fi Direct pairing flow and exchange framed TCP messages.
@@ -122,6 +124,11 @@ The simulated friend sends a welcome message, acknowledges your messages and
 replies automatically. You can disconnect, reopen history, switch demo friends,
 rename your profile and delete history in Settings.
 You can also try every theme in Settings → Appearance; browser choices reset on reload.
+
+Open **Group chats** to **Create demo group** with Ava/Noah or **Find demo groups**
+and join Ava's **Weekend plans (Demo)**. Confirm the local demo codes, send text/
+attachments, and try saved drafts, pin/archive and group search. See
+[BROWSER_GROUPS.md](docs/BROWSER_GROUPS.md) for steps and limitations.
 
 The persistent demo notice appears on every screen. Devices, peer confirmation,
 messages and delivery status are simulated inside the browser tab: **no real

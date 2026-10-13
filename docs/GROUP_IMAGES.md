@@ -23,8 +23,9 @@ The user handles staging, committing and pushing.
 Image controls are disabled if any admitted member lacks `group-image-v1`
 support. Text remains available. Update that member's app and verify a fresh
 connection to enable group images. New members receive no previous history.
-Browser builds can display imported demo group images, but do not simulate a
-real host or group transfer.
+Browser builds support in-tab simulated hosts/guests and group image transfers,
+plus viewing saved/imported demo images. These receipts do not prove delivery to
+another device. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
 
 ## Limits and interruptions
 
