@@ -1,5 +1,49 @@
 # Validation for v0.1.0
 
+## Saved group search - final checks 2026-10-13
+
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **340 passed**, exit 0 (324 existing + 16 new), 3m41s.
+  Output: `.dart_tool/group-search-milestone-tests.log` (local, ignored by Git).
+- Nine new scan/controller checks cover literal/case-insensitive Urdu/emoji,
+  archived names/messages, unchanged read/organization state, author/message-key
+  collisions, global newest-100 bounds and deterministic ties, scoped isolation,
+  cancellation with cooperative yields, attachment labels/filenames without
+  contents, drafts excluded, receiving/deletion/metadata refresh, background
+  pause/resume, lock clearing, stale completion/errors and disposal.
+  A verified encrypted host/guest transport check confirms signed incoming text
+  refreshes archived search without clearing unread or ending the connection;
+  another confirms real backup imports refresh results and exclude drafts.
+- Six new widgets verify literal rich-text highlights and selectable target text,
+  exact older/newer anchors across 181 variable-height messages with colliding
+  IDs, scrolling both ways, Jump to latest, query restoration, archived choices,
+  saved drafts, scoped toolbar entry, hidden-chat receiving/unread preservation,
+  clear/no-result states, deletion notices, PIN removal/stale taps, background
+  clearing/foreground refresh, and 320 x 568 at 1.8x text with a keyboard inset.
+- One SQLite check verifies search after reopening encrypted stored groups,
+  Unicode/literal matches, unchanged ciphertext/flags/unread/drafts, schema 11,
+  and absence of a search table/index. Existing migrations, encrypted mixed
+  backups, lock, notifications, outbox and attachment regressions also pass.
+- An earlier isolated widget run passed all five navigation/privacy scenarios;
+  `.dart_tool/group-search-widget-tests.log`. The final full suite also includes
+  the subsequently added highlighting widget and verified receiving/import checks.
+- Initial development runs caught a misplaced toolbar action, lint warnings,
+  duplicate test disposal and an asynchronous widget-fixture wait. These were
+  corrected; the obsolete hung run was stopped. The final suite above is clean.
+- Final `flutter analyze`: no issues, exit 0;
+  `.dart_tool/group-search-analyze.log`.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0; `.dart_tool/group-search-apk-build.log`.
+  APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: passed, exit 0;
+  `.dart_tool/group-search-web-build.log`. Output: `build/web`.
+  Existing optional Cupertino font warning remains; the app uses Material icons.
+- Code/docs review and `git -c core.safecrlf=false diff --check`: clean.
+  No package, native permission, schema, backup-payload or wire changes.
+- Physical phone checks remain pending; see [GROUP_SEARCH.md](GROUP_SEARCH.md).
+  Automated transport simulation does not establish hardware reliability.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Group pin/archive - final checks 2026-10-13
 
 - Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
@@ -39,7 +83,8 @@
 - Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
 - Physical upgrade/restart/archive/receiving/PIN/backup checks remain pending;
   see [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md). No hardware success is claimed.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed this milestone as `f07316d`; local `origin/main` matches.
+  Physical checks remain pending.
 
 ## Saved group drafts - final checks 2026-10-13
 

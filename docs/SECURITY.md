@@ -159,6 +159,15 @@ It does not store a plaintext index, search query log or additional message copy
 Opening search results uses the existing app-lock and visible-conversation read
 gates. Locking removes search routes and cancels pending result updates.
 
+Group search scans the authenticated histories already decrypted for saved
+groups, with cooperative cancellation and a newest-100 message-result cap.
+Result snapshots contain IDs/display text, without attachment contents. Group
+names, message text, image labels and file labels/filenames can match; draft and
+attachment contents are excluded. No index, persisted query or protocol change
+is added. Backgrounding clears results and cancels work; returning unlocked
+refreshes the query. Locking clears the query and rejects stale navigation.
+Opening archived matches preserves local choices and visible-group read gates.
+
 Drafts use the same history key with fresh random nonces and a separate AAD
 domain: UTF-8 JSON `["LocalChat/draft/1", peerId]`. Group drafts use a separate
 `group_drafts` table in schema 10 and domain `["LocalChat/group-draft/1", groupId]`.

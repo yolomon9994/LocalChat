@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Group search uses the [search checklist](GROUP_SEARCH.md), including archived
+history, exact older-message navigation, unread/draft preservation and PIN gates.
+
 Group pin/archive uses the [organization checklist](GROUP_MANAGEMENT.md), including
 upgrade/restart, archive counts, receiving while archived, PIN and v8 backups.
 

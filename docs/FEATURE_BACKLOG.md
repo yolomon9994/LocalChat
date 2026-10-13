@@ -3,10 +3,27 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Pinning and archiving group chats
+## Current milestone: Saved group message search
 
-Implemented: 2026-10-13. Changes are saved locally, unstaged and uncommitted;
-the user handles Git. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
+Implemented: 2026-10-13. Saved locally, unstaged and uncommitted; the user handles
+Git. See [GROUP_SEARCH.md](GROUP_SEARCH.md).
+
+- [x] Search saved group names/messages from Chats, including archived groups.
+- [x] Scoped group search, literal Unicode matching, author/time and highlights.
+- [x] Exact author/message anchors, lazy surrounding history and Jump to latest.
+- [x] Preserve drafts/organization/unread; refresh receiving/imports/deletion.
+- [x] Cancel stale work, clear locked/background results and gate navigation.
+- [x] Search existing decrypted histories without a plaintext index; schema 11
+      and v1-v8 backups stay compatible.
+- [x] All 340 tests pass, clean analysis, Android/browser builds and review;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical phone checklist; see [GROUP_SEARCH.md](GROUP_SEARCH.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Pinning and archiving group chats: implemented and committed
+
+Implemented: 2026-10-13. Committed by the user as `f07316d`; the local
+`origin/main` reference matches this commit. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 - [x] Pin/unpin groups with stable ordering and unchanged activity/read state.
 - [x] Archive/unarchive from saved lists and chat screens; combined archive counts.
@@ -17,7 +34,7 @@ the user handles Git. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 - [x] All 324 tests pass, clean analysis, final Android/browser builds and review;
       see [VALIDATION.md](VALIDATION.md).
 - [ ] Physical checks; see [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits group pin/archive (`f07316d`); local `origin/main` matches.
 
 ## Saved group drafts: implemented and committed
 
@@ -331,7 +348,7 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 
 - [x] Saved group drafts; encrypted storage and backup support. Hardware checks pending.
 - [x] Group pin/archive; persisted choices and backup support. Hardware checks pending.
-- [ ] Group message search.
+- [x] Saved group message search; 340 tests pass. Physical checks pending.
 - [ ] Group background protection and browser simulation.
 
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.

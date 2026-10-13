@@ -76,6 +76,7 @@ class GroupController extends ChangeNotifier {
   final _receiptTimers = <String, Timer>{};
   final _attempted = <String>{};
   List<GroupHistory> histories = [];
+  int historyRevision = 0;
   List<GroupMember> members = [];
   List<Map<String, dynamic>> nearby = [];
   GroupHistory? active;
@@ -141,6 +142,7 @@ class GroupController extends ChangeNotifier {
   });
   Future<void> _reload() async {
     histories = await store.groupHistories();
+    historyRevision++;
     if (active != null) {
       final matches = histories.where((g) => g.id == active!.id);
       if (matches.isNotEmpty) active = matches.first;

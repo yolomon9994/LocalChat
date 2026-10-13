@@ -2,19 +2,28 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
+import '../core/group_search.dart';
 import 'chat_controller.dart';
 
 class ChatSearchController extends ChangeNotifier {
   ChatSearchController(
     this.chat, {
+    this.groupId,
     this.debounce = const Duration(milliseconds: 300),
   }) {
     _revision = chat.historyRevision;
+    _groupRevision = chat.groups.historyRevision;
+    _access = chat.accessRevision;
+    _available = chat.appAccessible && chat.appForeground;
     chat.addListener(_historyChanged);
+    chat.groups.addListener(_historyChanged);
   }
   final ChatController chat;
+  final String? groupId;
   final Duration debounce;
   late int _revision;
+  late int _groupRevision, _access;
+  late bool _available;
   int _generation = 0;
   bool _disposed = false;
   Timer? _timer;
@@ -22,6 +31,7 @@ class ChatSearchController extends ChangeNotifier {
   bool loading = false;
   String? error;
   LocalSearchResults results = const LocalSearchResults();
+  GroupSearchResults groupResults = const GroupSearchResults();
 
   void setQuery(String value) {
     final trimmed = value.trim();
@@ -33,8 +43,18 @@ class ChatSearchController extends ChangeNotifier {
   void retry() => _schedule(immediate: true);
 
   void _historyChanged() {
-    if (_revision == chat.historyRevision) return;
+    final available = chat.appAccessible && chat.appForeground;
+    if (_revision == chat.historyRevision &&
+        _groupRevision == chat.groups.historyRevision &&
+        _access == chat.accessRevision &&
+        _available == available) {
+      return;
+    }
     _revision = chat.historyRevision;
+    _groupRevision = chat.groups.historyRevision;
+    _access = chat.accessRevision;
+    _available = available;
+    if (!chat.appAccessible) query = '';
     _schedule(immediate: true);
   }
 
@@ -43,8 +63,9 @@ class ChatSearchController extends ChangeNotifier {
     _timer?.cancel();
     final generation = ++_generation;
     results = const LocalSearchResults();
+    groupResults = const GroupSearchResults();
     error = null;
-    loading = query.isNotEmpty;
+    loading = query.isNotEmpty && chat.appAccessible && chat.appForeground;
     notifyListeners();
     if (!loading) return;
     final needle = query;
@@ -55,11 +76,28 @@ class ChatSearchController extends ChangeNotifier {
   }
 
   Future<void> _search(int generation, String needle) async {
-    bool cancelled() => _disposed || generation != _generation;
+    final access = chat.accessRevision;
+    bool cancelled() =>
+        _disposed ||
+        generation != _generation ||
+        access != chat.accessRevision ||
+        !chat.appAccessible ||
+        !chat.appForeground;
     try {
-      final found = await chat.store.search(needle, isCancelled: cancelled);
+      if (cancelled()) return;
+      final found = groupId == null
+          ? await chat.store.search(needle, isCancelled: cancelled)
+          : const LocalSearchResults();
+      if (cancelled()) return;
+      final groupFound = await searchGroupHistories(
+        chat.groups.histories,
+        needle,
+        groupId: groupId,
+        isCancelled: cancelled,
+      );
       if (cancelled()) return;
       results = found;
+      groupResults = groupFound;
     } catch (_) {
       if (cancelled()) return;
       error = 'Could not search saved chats. Please try again.';
@@ -74,7 +112,9 @@ class ChatSearchController extends ChangeNotifier {
     _generation++;
     _timer?.cancel();
     chat.removeListener(_historyChanged);
+    chat.groups.removeListener(_historyChanged);
     results = const LocalSearchResults();
+    groupResults = const GroupSearchResults();
     super.dispose();
   }
 }

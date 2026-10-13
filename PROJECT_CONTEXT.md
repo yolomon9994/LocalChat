@@ -26,13 +26,46 @@ Direct files were committed by the user as `3ec26b5`.
 Group images were committed by the user as `318b304`.
 Group files were committed by the user as `5a92e71`.
 Group drafts were committed by the user as `2a83b30`.
-The current milestone is pinning and archiving group chats.
+Group pin/archive was committed by the user as `f07316d`.
+The current milestone is saved group message search.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Group-search milestone - implemented, 2026-10-13
+
+Baseline: `f07316d`. Source/tests/docs are saved locally, unstaged and uncommitted.
+The user handles Git. See docs/GROUP_SEARCH.md and docs/VALIDATION.md.
+
+- Shared ChatSearchController/ChatSearchScreen search direct chats plus saved
+  group names/messages, or scope to one group from its toolbar. Archived groups
+  are included; viewing/opening does not unarchive them or alter drafts.
+- core/group_search.dart scans already authenticated/decrypted group histories,
+  yields every 128 messages and between groups, and keeps the newest 100 hits
+  by timestamp/group ID/author-message key. Snapshots retain display text and IDs,
+  never attachment bytes. Text, image labels and file labels/filenames match;
+  literal case-insensitive Unicode queries exclude drafts and file contents.
+- GroupController.historyRevision advances on successful reloads. Search reacts
+  to receiving, imports, metadata updates and deletion, cancelling old generations.
+  Synchronous root access/foreground notifications clear/cancel search work;
+  background return refreshes queries, while PIN locks clear them permanently.
+- GroupChatScreen accepts exact focusMessageKey/searchQuery, anchors the result
+  between lazy older/newer slivers, highlights selectable text and offers Jump to
+  latest. Ordinary saved views also build messages lazily. Missing targets show
+  a notice. Existing route visibility gates keep search from reading hidden groups.
+- Global/scoped search uses existing history storage without a new plaintext index,
+  schema migration, backup payload or network operation. SQLite stays schema 11
+  and backups retain v1-v8 compatibility. Browser covers saved/imported demo groups.
+- Added scan/controller, widget and SQLite checks for Unicode/literal matching,
+  bounds/order, cancellation, actual signed receiving, import refresh, PIN/background,
+  exact anchors with colliding IDs, drafts/unread, small-screen text and reopen.
+- Final full regression: **340 passed**, exit 0 (324 prior + 16 new), using
+  `--concurrency=2 --timeout=2m`. Analysis is clean; arm64 debug APK and browser
+  builds pass. Logs are ignored in .dart_tool. Physical checks remain pending.
+  Group background protection and browser simulation remain future refinements.
+
 ## Group-management milestone - implemented, 2026-10-13
 
-Baseline: `2a83b30`. Source/tests/docs are saved locally, unstaged and uncommitted.
+Baseline: `2a83b30`. The user committed this milestone as `f07316d`.
 Do not stage/commit/push for the user. See docs/GROUP_MANAGEMENT.md and VALIDATION.md.
 
 - GroupHistory includes local pinned/archived choices; stable ordering puts pins
@@ -57,7 +90,7 @@ Do not stage/commit/push for the user. See docs/GROUP_MANAGEMENT.md and VALIDATI
   `--concurrency=2 --timeout=2m`; analysis is clean. Final arm64 debug APK and
   browser builds pass and include stable row keys. Logs are in .dart_tool and
   ignored; results are recorded in docs/VALIDATION.md. Physical checks remain pending.
-  Group message search is next; the user will review/test/commit this milestone.
+  Physical group-management checks remain pending; see GROUP_MANAGEMENT.md.
 
 ## Group-draft milestone - implemented, 2026-10-12
 

@@ -545,6 +545,7 @@ class ChatController extends ChangeNotifier {
     accessRevision++;
     unawaited(groups.accessChanged());
     _readVisible();
+    notifyListeners();
     if (accessible) {
       _requestBackground();
       unawaited(refreshNearbyAccess());
@@ -628,8 +629,8 @@ class ChatController extends ChangeNotifier {
     unawaited(groups.accessChanged());
     notifications.setAccessible(_appAccessible && _appForeground);
     _readVisible();
-    // Refresh relative activity labels after time spent outside the app.
-    if (foreground) notifyListeners();
+    // Cancel search immediately on background; refresh activity on return.
+    notifyListeners();
     if (foreground) {
       unawaited(notifications.refreshPermission());
       unawaited(background.refresh());

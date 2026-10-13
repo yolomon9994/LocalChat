@@ -1,5 +1,9 @@
 # Local search testing
 
+Search now includes saved groups and archived groups. Group names and messages
+have separate result sections; each group also has **Search group messages** for
+a scoped search. See [GROUP_SEARCH.md](GROUP_SEARCH.md) for behavior and checks.
+
 Open **Chats** and tap the toolbar **Search chats** icon. Type part of a saved
 conversation name or message. Results appear under **Conversations** and
 **Messages**. Matching ignores case and surrounding query whitespace; characters
@@ -18,7 +22,7 @@ search screen and cancels its pending work. After unlocking, a new search starts
 ## Phone checklist
 
 Install `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk` over the existing
-installation. This feature keeps schema version 2 and your saved history.
+installation. Current builds keep schema version 11 and your saved history.
 
 - [ ] Find a conversation by part of its name, including different letter case.
       Tap it, check its saved history and return to the same search query.

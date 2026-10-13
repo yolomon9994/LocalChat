@@ -18,6 +18,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   Pin important groups and archive quiet ones into Archived chats, preserving
   drafts, attachments and active connections. Choices survive Android restarts
   and encrypted backups; see [group organization](docs/GROUP_MANAGEMENT.md).
+  Search saved group names/messages from Chats or search within one group,
+  including archived history; open highlighted older messages without losing
+  drafts. See [group search testing](docs/GROUP_SEARCH.md).
 
 - Advertise a display name and discover nearby LocalChat phones using Wi-Fi Direct DNS-SD.
 - Connect through Android's Wi-Fi Direct pairing flow and exchange framed TCP messages.

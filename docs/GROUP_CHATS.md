@@ -98,6 +98,10 @@ group history; it does not simulate discovery, hosting or real group links.
 
 ## Group organization
 
+Saved group names and messages are searchable offline from Chats, including
+archived groups. Each group also offers a scoped search, with highlights and
+navigation to older messages. See [GROUP_SEARCH.md](GROUP_SEARCH.md).
+
 Pin important groups and archive quiet ones from saved lists or the chat toolbar.
 Archived chats includes direct chats and groups; incoming messages keep archived
 groups there while receiving, alerts and drafts remain intact. Choices persist

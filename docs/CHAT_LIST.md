@@ -1,5 +1,9 @@
 # Chats list testing
 
+Search chats includes saved group names/messages and archived groups. Open a
+message at its highlighted bubble, with drafts and archive choices preserved;
+see [GROUP_SEARCH.md](GROUP_SEARCH.md).
+
 Saved groups support pin/unpin and archive/unarchive in their options menus.
 Archived chats includes both direct chats and groups, with combined unread totals.
 Groups sort pins first, then saved activity; direct chats retain their existing

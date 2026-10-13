@@ -9,6 +9,7 @@ import 'group_file_bubble.dart';
 import 'group_chat_tile.dart';
 import 'group_menu.dart';
 import 'archived_chats_screen.dart';
+import 'chat_search_screen.dart';
 
 class GroupHubScreen extends StatefulWidget {
   const GroupHubScreen({
@@ -297,9 +298,13 @@ class GroupChatScreen extends StatefulWidget {
     required this.controller,
     required this.id,
     this.routeObserver,
+    this.focusMessageKey,
+    this.searchQuery = '',
   });
   final ChatController controller;
   final String id;
+  final String? focusMessageKey;
+  final String searchQuery;
   final RouteObserver<ModalRoute<dynamic>>? routeObserver;
   @override
   State<GroupChatScreen> createState() => _GroupChatScreenState();
@@ -310,6 +315,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
   final _routeToken = Object();
   ModalRoute<dynamic>? _route;
   bool _sending = false;
+  bool _showTarget = true;
+  bool _atLatest = false;
+  final _scroll = ScrollController();
+  final _focusScroll = ScrollController();
   GroupController get g => widget.controller.groups;
   @override
   void initState() {
@@ -381,6 +390,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     g.setVisible(_routeToken, widget.id, false);
     g.drafts.removeListener(_draftChanged);
     _text.dispose();
+    _scroll.dispose();
+    _focusScroll.dispose();
     super.dispose();
   }
 
@@ -554,6 +565,156 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     if (mounted) Navigator.pop(context);
   }
 
+  Widget _messageBubble(GroupText message) {
+    final c = widget.controller;
+    final highlighted = _showTarget && message.key == widget.focusMessageKey;
+    return Align(
+      key: ValueKey(('group-message', widget.id, message.key)),
+      alignment: message.author == g.selfId
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.all(12),
+        constraints: const BoxConstraints(maxWidth: 520),
+        decoration: BoxDecoration(
+          color: message.author == g.selfId
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: highlighted
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                )
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (highlighted) const Text('Search result'),
+            Text(
+              message.author == g.selfId
+                  ? 'You'
+                  : '${message.name} • ${message.author.substring(0, 8)}',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            if (message.file != null)
+              GroupFileBubble(
+                key: ValueKey(message.key),
+                controller: c,
+                groupId: widget.id,
+                message: message,
+              )
+            else if (message.image != null)
+              GroupImageBubble(
+                key: ValueKey(message.key),
+                controller: c,
+                message: message,
+              )
+            else if (highlighted)
+              HighlightedSearchText(
+                message.text,
+                widget.searchQuery,
+                selectable: true,
+              )
+            else
+              SelectableText(message.text),
+            Text(
+              formatConversationTime(message.timestamp),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            if (message.author == g.selfId) ...[
+              Text(
+                'Saved locally • ${message.receipts.entries.where((e) => e.key != g.selfId && e.value == 'received').length}/${message.targets.length - 1} received',
+              ),
+              for (final id in message.targets.where((id) => id != g.selfId))
+                Text(
+                  '${g.members.where((m) => m.id == id).isNotEmpty ? g.members.firstWhere((m) => m.id == id).name : id.substring(0, 8)}: ${message.receipts[id] ?? 'unconfirmed'}',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _jumpToLatest() {
+    setState(() {
+      _showTarget = false;
+      _atLatest = true;
+    });
+  }
+
+  Widget _historyView(GroupHistory? history, List<Widget> header) {
+    final messages = history?.messages ?? <GroupText>[];
+    final pivot = _showTarget && widget.focusMessageKey != null
+        ? messages.indexWhere((m) => m.key == widget.focusMessageKey)
+        : -1;
+    if (pivot < 0) {
+      return ListView.builder(
+        key: ValueKey(
+          _atLatest ? 'group-message-latest' : 'group-message-history',
+        ),
+        controller: _scroll,
+        reverse: _atLatest,
+        padding: const EdgeInsets.all(16),
+        itemCount: messages.length + 1,
+        itemBuilder: (_, index) =>
+            (_atLatest ? index == messages.length : index == 0)
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...header,
+                  if (_showTarget && widget.focusMessageKey != null)
+                    const Text(
+                      'The matching message is no longer in this group.',
+                    ),
+                ],
+              )
+            : _messageBubble(
+                messages[_atLatest ? messages.length - 1 - index : index - 1],
+              ),
+      );
+    }
+    // Center the exact author/message key. Both sides are lazy even for long
+    // histories and variable-height attachments; the target starts on screen.
+    return CustomScrollView(
+      key: const ValueKey('group-search-message-history'),
+      controller: _focusScroll,
+      anchor: .2,
+      center: const ValueKey('group-search-anchor'),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, index) => index < pivot
+                  ? _messageBubble(messages[pivot - 1 - index])
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: header,
+                    ),
+              childCount: pivot + 1,
+            ),
+          ),
+        ),
+        SliverPadding(
+          key: const ValueKey('group-search-anchor'),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, index) => _messageBubble(messages[pivot + index]),
+              childCount: messages.length - pivot,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
@@ -566,6 +727,29 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
         appBar: AppBar(
           title: Text(history?.title ?? 'Group unavailable'),
           actions: [
+            if (history != null &&
+                !(_showTarget && widget.focusMessageKey != null))
+              IconButton(
+                tooltip: 'Search group messages',
+                icon: const Icon(Icons.search),
+                onPressed: c.appAccessible && c.appForeground
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ChatSearchScreen(
+                            controller: c,
+                            groupId: widget.id,
+                            routeObserver: widget.routeObserver,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            if (_showTarget && widget.focusMessageKey != null)
+              IconButton(
+                tooltip: 'Jump to latest',
+                onPressed: _jumpToLatest,
+                icon: const Icon(Icons.vertical_align_bottom),
+              ),
             if (active && (g.connected || g.images.picking))
               IconButton(
                 tooltip: 'Attach group image',
@@ -602,154 +786,84 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
           child: Column(
             children: [
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
+                child: _historyView(history, [
+                  Text(
+                    active
+                        ? g.state
+                        : 'Saved history • join the original host to continue',
+                  ),
+                  if (g.error != null)
                     Text(
-                      active
-                          ? g.state
-                          : 'Saved history • join the original host to continue',
+                      g.error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
-                    if (g.error != null)
-                      Text(
-                        g.error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+                  if (!active &&
+                      history != null &&
+                      history.host == g.selfPublic)
+                    TextButton(
+                      onPressed: !c.isDemo && !g.busy && !g.running
+                          ? () => g.host(history.title, previous: history)
+                          : null,
+                      child: const Text('Host this group again'),
+                    ),
+                  if (active) ...[
+                    _GroupAttachmentControls(
+                      hub: g.images,
+                      connected: g.connected,
+                      groupId: widget.id,
+                      review: _reviewImage,
+                    ),
+                    _GroupAttachmentControls(
+                      hub: g.files,
+                      connected: g.connected,
+                      groupId: widget.id,
+                      review: _reviewFile,
+                    ),
+                    GroupVerification(controller: c),
+                    Text(
+                      'Members (${g.members.length})',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Text(
+                      'Each member verifies the host. Trust the host’s admission of other members.',
+                    ),
+                    for (final member in g.members)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          '${member.name}${member.id == g.selfId ? ' (you)' : ''}${member.public == history?.host ? ' • host' : ''}',
                         ),
-                      ),
-                    if (!active &&
-                        history != null &&
-                        history.host == g.selfPublic)
-                      TextButton(
-                        onPressed: !c.isDemo && !g.busy && !g.running
-                            ? () => g.host(history.title, previous: history)
-                            : null,
-                        child: const Text('Host this group again'),
-                      ),
-                    if (active) ...[
-                      _GroupAttachmentControls(
-                        hub: g.images,
-                        connected: g.connected,
-                        groupId: widget.id,
-                        review: _reviewImage,
-                      ),
-                      _GroupAttachmentControls(
-                        hub: g.files,
-                        connected: g.connected,
-                        groupId: widget.id,
-                        review: _reviewFile,
-                      ),
-                      GroupVerification(controller: c),
-                      Text(
-                        'Members (${g.members.length})',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const Text(
-                        'Each member verifies the host. Trust the host’s admission of other members.',
-                      ),
-                      for (final member in g.members)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            '${member.name}${member.id == g.selfId ? ' (you)' : ''}${member.public == history?.host ? ' • host' : ''}',
-                          ),
-                          subtitle: Text(member.id.substring(0, 12)),
-                          trailing: g.hosting && member.id != g.selfId
-                              ? IconButton(
-                                  tooltip: 'Remove member',
-                                  icon: const Icon(
-                                    Icons.person_remove_outlined,
-                                  ),
-                                  onPressed: c.appAccessible && c.appForeground
-                                      ? () {
-                                          final matches = g.links.values.where(
-                                            (l) =>
-                                                l.session.peerId == member.id,
-                                          );
-                                          if (matches.isNotEmpty) {
-                                            g.reject(matches.first.id);
-                                          }
+                        subtitle: Text(member.id.substring(0, 12)),
+                        trailing: g.hosting && member.id != g.selfId
+                            ? IconButton(
+                                tooltip: 'Remove member',
+                                icon: const Icon(Icons.person_remove_outlined),
+                                onPressed: c.appAccessible && c.appForeground
+                                    ? () {
+                                        final matches = g.links.values.where(
+                                          (l) => l.session.peerId == member.id,
+                                        );
+                                        if (matches.isNotEmpty) {
+                                          g.reject(matches.first.id);
                                         }
-                                      : null,
-                                )
-                              : null,
-                        ),
-                      TextButton(
-                        onPressed: !g.busy ? g.stop : null,
-                        child: Text(g.hosting ? 'End hosting' : 'Leave group'),
+                                      }
+                                    : null,
+                              )
+                            : null,
                       ),
-                    ],
-                    if (history?.messages.isEmpty ?? true)
-                      const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text('No group messages yet.'),
-                      ),
-                    for (final message in history?.messages ?? <GroupText>[])
-                      Align(
-                        alignment: message.author == g.selfId
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 5),
-                          padding: const EdgeInsets.all(12),
-                          constraints: const BoxConstraints(maxWidth: 520),
-                          decoration: BoxDecoration(
-                            color: message.author == g.selfId
-                                ? Theme.of(context).colorScheme.primaryContainer
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                message.author == g.selfId
-                                    ? 'You'
-                                    : '${message.name} • ${message.author.substring(0, 8)}',
-                                style: Theme.of(context).textTheme.labelLarge,
-                              ),
-                              if (message.file != null)
-                                GroupFileBubble(
-                                  key: ValueKey(message.key),
-                                  controller: c,
-                                  groupId: widget.id,
-                                  message: message,
-                                )
-                              else if (message.image != null)
-                                GroupImageBubble(
-                                  key: ValueKey(message.key),
-                                  controller: c,
-                                  message: message,
-                                )
-                              else
-                                SelectableText(message.text),
-                              Text(
-                                formatConversationTime(message.timestamp),
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                              if (message.author == g.selfId) ...[
-                                Text(
-                                  'Saved locally • ${message.receipts.entries.where((e) => e.key != g.selfId && e.value == 'received').length}/${message.targets.length - 1} received',
-                                ),
-                                for (final id in message.targets.where(
-                                  (id) => id != g.selfId,
-                                ))
-                                  Text(
-                                    '${g.members.where((m) => m.id == id).isNotEmpty ? g.members.firstWhere((m) => m.id == id).name : id.substring(0, 8)}: ${message.receipts[id] ?? 'unconfirmed'}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelSmall,
-                                  ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
+                    TextButton(
+                      onPressed: !g.busy ? g.stop : null,
+                      child: Text(g.hosting ? 'End hosting' : 'Leave group'),
+                    ),
                   ],
-                ),
+                  if (history?.messages.isEmpty ?? true)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text('No group messages yet.'),
+                    ),
+                ]),
               ),
               if (g.drafts.errorFor(widget.id, group: true)
                   case final String error)

@@ -8,6 +8,7 @@ import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
 import 'package:local_chat/core/chat_backup.dart';
 import 'package:local_chat/core/group_models.dart';
+import 'package:local_chat/core/group_search.dart';
 import 'package:local_chat/core/chat_image.dart';
 import 'package:local_chat/core/chat_file.dart';
 import 'dart:typed_data';
@@ -59,6 +60,58 @@ void main() {
     host: base64Encode((await store.identity.extractPublicKey()).bytes),
     messages: [],
     updated: 1,
+  );
+
+  test(
+    'group search after reopening uses encrypted histories and preserves metadata and drafts',
+    () async {
+      final group = (await draftGroup()).copy(pinned: true, archived: true);
+      final m = await GroupText.create(
+        store.identity,
+        store.name,
+        group: group.id,
+        host: group.host,
+        epoch: randomId(),
+        view: 1,
+        text: 'Offline NEEDLE سلام 👋 %_',
+        targets: [await identityId(group.host)],
+      );
+      await store.saveGroupHistory(group.copy(messages: [m.copy(read: false)]));
+      await store.saveGroupDraft(group.id, 'Secret unsearched draft');
+      final db = await openDatabase(databasePath);
+      final before = (await db.query('group_history')).single;
+      expect(before['body'], isNot(contains('NEEDLE')));
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      final histories = await store.groupHistories();
+      final result = await searchGroupHistories(histories, ' needle ');
+      expect(result.messages.single.key, m.key);
+      expect(result.messages.single.group.archived, isTrue);
+      expect(
+        (await searchGroupHistories(histories, 'سلام 👋')).messages.length,
+        1,
+      );
+      expect((await searchGroupHistories(histories, '%_')).messages.length, 1);
+      expect(
+        (await searchGroupHistories(histories, 'unsearched')).messages,
+        isEmpty,
+      );
+      expect(histories.single.unread, 1);
+      expect(histories.single.pinned, isTrue);
+      expect(await store.groupDraft(group.id), 'Secret unsearched draft');
+      final afterDb = await openDatabase(databasePath);
+      expect((await afterDb.query('group_history')).single, before);
+      expect(await afterDb.getVersion(), 11);
+      expect(
+        await afterDb.query(
+          'sqlite_master',
+          where: 'name LIKE ?',
+          whereArgs: ['%search%'],
+        ),
+        isEmpty,
+      );
+    },
   );
 
   test(
