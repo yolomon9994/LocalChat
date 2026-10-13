@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
 import 'conversation_menu.dart';
-import 'group_screen.dart';
+import 'group_chat_tile.dart';
 
 String formatConversationTime(int timestamp, {DateTime? now}) {
   final time = DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal();
@@ -60,11 +60,15 @@ class ChatsTab extends StatelessWidget {
     final displayed = c.conversations
         .where((p) => p.archived == archived)
         .toList();
+    final displayedGroups = c.groups.histories
+        .where((g) => g.archived == archived)
+        .toList();
+    final archivedGroups = c.groups.histories.where((g) => g.archived).toList();
     final archivedChats = c.conversations.where((p) => p.archived).toList();
-    final archivedUnread = archivedChats.fold<int>(
-      0,
-      (sum, p) => sum + p.unreadCount,
-    );
+    final archivedCount = archivedChats.length + archivedGroups.length;
+    final archivedUnread =
+        archivedChats.fold<int>(0, (sum, p) => sum + p.unreadCount) +
+        archivedGroups.fold<int>(0, (sum, g) => sum + g.unread);
     return ListView(
       key: PageStorageKey(archived ? 'archived-chats-list' : 'chats-list'),
       primary: false,
@@ -74,26 +78,14 @@ class ChatsTab extends StatelessWidget {
           archived ? 'Saved for later' : 'Your chats',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
-        if (!archived && c.groups.histories.isNotEmpty) ...[
+        if (displayedGroups.isNotEmpty) ...[
           const SizedBox(height: 12),
-          for (final group in c.groups.histories)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text(group.title),
-                subtitle: Text(
-                  'Group • ${group.unread} unread${c.groups.active?.id == group.id ? ' • active' : ''}',
-                ),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => GroupChatScreen(
-                      controller: c,
-                      id: group.id,
-                      routeObserver: routeObserver,
-                    ),
-                  ),
-                ),
-              ),
+          for (final group in displayedGroups)
+            GroupChatTile(
+              key: ValueKey('saved-group-${group.id}'),
+              controller: c,
+              group: group,
+              routeObserver: routeObserver,
             ),
         ],
         const SizedBox(height: 8),
@@ -126,21 +118,21 @@ class ChatsTab extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 24),
-        if (!archived && archivedChats.isNotEmpty)
+        if (!archived && archivedCount > 0)
           Card(
             child: ListTile(
               key: const ValueKey('open-archived-chats'),
               leading: const Icon(Icons.archive_outlined),
               title: const Text('Archived chats'),
               subtitle: Text(
-                '${archivedChats.length} ${archivedChats.length == 1 ? 'chat' : 'chats'}'
+                '$archivedCount ${archivedCount == 1 ? 'chat' : 'chats'}'
                 '${archivedUnread > 0 ? ' · $archivedUnread unread ${archivedUnread == 1 ? 'message' : 'messages'}' : ''}',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: onOpenArchived,
             ),
           ),
-        if (displayed.isEmpty)
+        if (displayed.isEmpty && displayedGroups.isEmpty)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -151,7 +143,7 @@ class ChatsTab extends StatelessWidget {
                   Text(
                     archived
                         ? 'No archived chats'
-                        : archivedChats.isNotEmpty
+                        : archivedCount > 0
                         ? 'All your chats are archived'
                         : 'No chats yet',
                     style: Theme.of(context).textTheme.titleLarge,

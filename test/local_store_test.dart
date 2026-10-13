@@ -62,6 +62,178 @@ void main() {
   );
 
   test(
+    'schema 10 upgrades preserve ciphertext, messages and drafts with default group choices',
+    () async {
+      final group = await draftGroup();
+      await store.saveGroupHistory(group);
+      await store.saveGroupDraft(group.id, 'Group draft');
+      await store.saveDraft('alice', 'Direct draft');
+      await store.saveMessage(message());
+      final db = await openDatabase(databasePath);
+      final body = (await db.query('group_history')).single['body'];
+      await store.close();
+      final old = await openDatabase(databasePath);
+      await old.transaction((txn) async {
+        await txn.execute('ALTER TABLE group_history RENAME TO group_new');
+        await txn.execute(
+          'CREATE TABLE group_history (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
+        );
+        await txn.execute(
+          'INSERT INTO group_history(id, body) SELECT id, body FROM group_new',
+        );
+        await txn.execute('DROP TABLE group_new');
+        await txn.execute('PRAGMA user_version = 10');
+      });
+      await old.close();
+      store = LocalStore();
+      await store.open();
+      final upgraded = await openDatabase(databasePath);
+      expect(await upgraded.getVersion(), 11);
+      expect((await upgraded.query('group_history')).single['body'], body);
+      final restored = (await store.groupHistories()).single;
+      expect(restored.pinned || restored.archived, isFalse);
+      expect(await store.groupDraft(group.id), 'Group draft');
+      expect(await store.draft('alice'), 'Direct draft');
+      expect((await store.messages('alice')).single.text, message().text);
+    },
+  );
+
+  test(
+    'group choices persist, avoid rewriting ciphertext, and survive stale and atomic history writes',
+    () async {
+      final group = await draftGroup(), newer = await draftGroup();
+      await store.saveGroupHistory(group);
+      await store.saveGroupHistory(newer.copy(updated: 10));
+      await store.saveGroupDraft(group.id, 'Keep');
+      final db = await openDatabase(databasePath);
+      final body = (await db.query(
+        'group_history',
+        where: 'id = ?',
+        whereArgs: [group.id],
+      )).single['body'];
+      expect(await store.setGroupPinned(group.id, true), isTrue);
+      expect(await store.setGroupArchived(group.id, true), isTrue);
+      final metadata = (await db.query(
+        'group_history',
+        where: 'id = ?',
+        whereArgs: [group.id],
+      )).single;
+      expect(metadata['body'], body);
+      expect(metadata['pinned'], 1);
+      expect(metadata['archived'], 1);
+      await store.saveGroupHistory(group.copy(updated: 2));
+      await store.saveOutgoingGroupHistory(group.copy(updated: 3));
+      await store.close();
+      store = LocalStore();
+      await store.open();
+      final all = await store.groupHistories();
+      expect(all.first.id, group.id);
+      expect(all.first.pinned && all.first.archived, isTrue);
+      expect(all.first.updated, 3);
+      expect(await store.groupDraft(group.id), 'Keep');
+      expect(await store.setGroupPinned(group.id, false), isTrue);
+      expect((await store.groupHistories()).first.id, newer.id);
+      await store.deleteGroupHistory(group.id);
+      expect(await store.setGroupPinned(group.id, true), isFalse);
+      expect(await store.setGroupArchived(group.id, true), isFalse);
+      expect(await store.groupDraft(group.id), '');
+    },
+  );
+
+  test(
+    'failed group metadata writes preserve choices, content and drafts',
+    () async {
+      final group = await draftGroup();
+      await store.saveGroupHistory(group.copy(pinned: true));
+      await store.saveGroupDraft(group.id, 'Keep');
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_group_flags BEFORE UPDATE ON group_history BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+      );
+      await expectLater(
+        store.setGroupPinned(group.id, false),
+        throwsA(isA<DatabaseException>()),
+      );
+      await expectLater(
+        store.setGroupArchived(group.id, true),
+        throwsA(isA<DatabaseException>()),
+      );
+      final saved = (await store.groupHistories()).single;
+      expect(saved.pinned, isTrue);
+      expect(saved.archived, isFalse);
+      expect(saved.updated, group.updated);
+      expect(await store.groupDraft(group.id), 'Keep');
+      await db.execute('DROP TRIGGER fail_group_flags');
+    },
+  );
+
+  test(
+    'v8 SQLite import inherits new group choices and keeps existing choices while merging messages',
+    () async {
+      final group = await draftGroup();
+      await store.saveGroupHistory(group);
+      final source = DemoStore();
+      await source.open();
+      final m = await GroupText.create(
+        store.identity,
+        store.name,
+        group: group.id,
+        host: group.host,
+        epoch: randomId(),
+        view: 1,
+        text: 'New record',
+        targets: [await identityId(group.host)],
+      );
+      await source.saveGroupHistory(
+        group.copy(messages: [m], pinned: true, archived: true),
+      );
+      final fresh = await draftGroup();
+      await source.saveGroupHistory(fresh.copy(archived: true));
+      await source.saveGroupDraft(fresh.id, 'Imported draft');
+      final data = await source.exportBackup();
+      final phone = BackupData(
+        seed: data.seed,
+        owner: data.owner,
+        name: data.name,
+        created: data.created,
+        demo: false,
+        peers: data.peers,
+        messages: data.messages,
+        drafts: data.drafts,
+        groups: data.groups,
+        groupDrafts: data.groupDrafts,
+      );
+      expect(phone.toJson()['version'], 8);
+      final result = await store.importBackup(phone);
+      expect(result.newMessages, 1);
+      expect(result.newChats, 1);
+      final groups = await store.groupHistories();
+      final kept = groups.firstWhere((g) => g.id == group.id);
+      expect(kept.pinned || kept.archived, isFalse);
+      expect(kept.messages.single.text, 'New record');
+      expect(groups.firstWhere((g) => g.id == fresh.id).archived, isTrue);
+      expect(await store.groupDraft(fresh.id), 'Imported draft');
+      expect((await store.importBackup(phone)).newChats, 0);
+    },
+  );
+
+  test(
+    'concurrent group history and metadata writes keep the newest choices',
+    () async {
+      final group = await draftGroup();
+      await store.saveGroupHistory(group);
+      await Future.wait([
+        store.saveGroupHistory(group.copy(updated: 10)),
+        store.setGroupPinned(group.id, true),
+        store.setGroupArchived(group.id, true),
+      ]);
+      final saved = (await store.groupHistories()).single;
+      expect(saved.updated, 10);
+      expect(saved.pinned && saved.archived, isTrue);
+    },
+  );
+
+  test(
     'schema 9 upgrades without changing existing text, direct drafts or group history',
     () async {
       final group = await draftGroup();
@@ -75,7 +247,7 @@ void main() {
       await old.close();
       store = LocalStore();
       await store.open();
-      expect(await (await openDatabase(databasePath)).getVersion(), 10);
+      expect(await (await openDatabase(databasePath)).getVersion(), 11);
       expect((await store.messages('alice')).single.text, message().text);
       expect(await store.draft('alice'), 'Direct draft');
       expect((await store.groupHistories()).single.id, group.id);
@@ -264,7 +436,7 @@ void main() {
       await store.open();
       expect((await store.messages('alice')).single.text, message().text);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 10);
+      expect(await upgraded.getVersion(), 11);
       expect(await upgraded.query('images'), isEmpty);
     },
   );
@@ -348,7 +520,7 @@ void main() {
       );
       expect((await store.exportBackup()).seed, seed);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 10);
+      expect(await upgraded.getVersion(), 11);
       expect(await upgraded.query('files'), isEmpty);
     },
   );
@@ -437,7 +609,7 @@ void main() {
         utf8.decode(base64Decode(ciphertext), allowMalformed: true),
         isNot(contains(m.image!.digest)),
       );
-      expect(await db.getVersion(), 10);
+      expect(await db.getVersion(), 11);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -497,7 +669,7 @@ void main() {
       final raw = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
       expect(raw, isNot(contains(m.file!.name)));
       expect(raw, isNot(contains(m.file!.digest)));
-      expect(await db.getVersion(), 10);
+      expect(await db.getVersion(), 11);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -927,7 +1099,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 10);
+      expect(await upgraded.getVersion(), 11);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -1338,7 +1510,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 10);
+      expect(await (await openDatabase(databasePath)).getVersion(), 11);
     },
   );
   test(
@@ -1417,7 +1589,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 10);
+      expect(await (await openDatabase(databasePath)).getVersion(), 11);
     },
   );
 

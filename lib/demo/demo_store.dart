@@ -64,10 +64,31 @@ class DemoStore extends LocalStore {
 
   @override
   Future<List<GroupHistory>> groupHistories() async =>
-      _groups.values.toList()..sort((a, b) => b.updated.compareTo(a.updated));
+      _groups.values.toList()..sort(compareGroupHistories);
   @override
   Future<void> saveGroupHistory(GroupHistory group) async =>
-      _groups[group.id] = group;
+      _groups[group.id] = _withGroupChoices(group);
+  GroupHistory _withGroupChoices(GroupHistory group) => group.copy(
+    pinned: _groups[group.id]?.pinned ?? group.pinned,
+    archived: _groups[group.id]?.archived ?? group.archived,
+  );
+
+  @override
+  Future<bool> setGroupPinned(String id, bool pinned) async {
+    final old = _groups[id];
+    if (old == null) return false;
+    _groups[id] = old.copy(pinned: pinned);
+    return true;
+  }
+
+  @override
+  Future<bool> setGroupArchived(String id, bool archived) async {
+    final old = _groups[id];
+    if (old == null) return false;
+    _groups[id] = old.copy(archived: archived);
+    return true;
+  }
+
   @override
   Future<void> deleteGroupHistory(String id) async {
     _groups.remove(id);
@@ -232,7 +253,7 @@ class DemoStore extends LocalStore {
     }
     identity = pair;
     for (final g in groupPlan) {
-      _groups[g.id] = g;
+      _groups[g.id] = _withGroupChoices(g);
     }
     for (final d in plan.data.groupDrafts) {
       _groupDrafts[d['group'] as String] = d['text'] as String;

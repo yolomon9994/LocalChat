@@ -1,5 +1,10 @@
 # Chats list testing
 
+Saved groups support pin/unpin and archive/unarchive in their options menus.
+Archived chats includes both direct chats and groups, with combined unread totals.
+Groups sort pins first, then saved activity; direct chats retain their existing
+ordering. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md) for behavior and testing.
+
 Chats shows the latest locally saved message, with **You:** for outgoing text,
 an activity timestamp and an unread badge. Long previews wrap to two lines and
 truncate; line breaks collapse into spaces. Badges show up to **99+**, while

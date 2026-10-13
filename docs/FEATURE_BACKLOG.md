@@ -3,10 +3,26 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Saved group drafts
+## Current milestone: Pinning and archiving group chats
 
-Implemented: 2026-10-12. Source/tests/docs are saved locally; the user handles
-Git. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+Implemented: 2026-10-13. Changes are saved locally, unstaged and uncommitted;
+the user handles Git. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
+
+- [x] Pin/unpin groups with stable ordering and unchanged activity/read state.
+- [x] Archive/unarchive from saved lists and chat screens; combined archive counts.
+- [x] Keep messages, attachments, drafts, notifications and active connections.
+- [x] PIN/foreground gates, stale-menu rejection and generic error handling.
+- [x] Schema 11 preserves existing ciphertext; history writes retain local choices.
+- [x] V8 mixed backups retain v1-v7 imports and destination-choice precedence.
+- [x] All 324 tests pass, clean analysis, final Android/browser builds and review;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical checks; see [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Saved group drafts: implemented and committed
+
+Implemented: 2026-10-12. Committed by the user as `2a83b30`.
+See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
 
 - [x] Independent encrypted group drafts; offline editing and exact restoration.
 - [x] Restore on navigation, PIN unlock, rehosting and Android restart.
@@ -17,7 +33,7 @@ Git. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
 - [x] All 303 tests pass, clean analysis, Android/browser builds and review;
       see [VALIDATION.md](VALIDATION.md).
 - [ ] Physical phone checks; see [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits group drafts (`2a83b30`).
 
 ## Files in hosted groups: implemented and committed
 
@@ -314,7 +330,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 ## Later refinements discussed
 
 - [x] Saved group drafts; encrypted storage and backup support. Hardware checks pending.
-- [ ] Group pin/archive, then group search.
+- [x] Group pin/archive; persisted choices and backup support. Hardware checks pending.
+- [ ] Group message search.
 - [ ] Group background protection and browser simulation.
 
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
@@ -332,7 +349,7 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
    reconnection and notifications (committed), background connection support (committed).
 6. Hosted group text chat (committed).
 7. Direct-chat image/file sharing and group images/files (committed).
-8. Saved group drafts (current), then group pin/archive and search.
+8. Saved group drafts (committed), group pin/archive (current), then group search.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

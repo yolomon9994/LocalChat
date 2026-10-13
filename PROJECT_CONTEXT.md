@@ -25,13 +25,43 @@ Hosted group chats were committed as `819ac32`, and images as `aea566b`.
 Direct files were committed by the user as `3ec26b5`.
 Group images were committed by the user as `318b304`.
 Group files were committed by the user as `5a92e71`.
-The current milestone is saved group drafts.
+Group drafts were committed by the user as `2a83b30`.
+The current milestone is pinning and archiving group chats.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Group-management milestone - implemented, 2026-10-13
+
+Baseline: `2a83b30`. Source/tests/docs are saved locally, unstaged and uncommitted.
+Do not stage/commit/push for the user. See docs/GROUP_MANAGEMENT.md and VALIDATION.md.
+
+- GroupHistory includes local pinned/archived choices; stable ordering puts pins
+  first, then saved activity and ID. Model parsing defaults older records to false.
+- Schema 11 adds plaintext group_history metadata columns, matching direct-chat
+  organization flags. Migration and flag changes preserve existing ciphertext.
+  Transactional history writes preserve current metadata even for stale snapshots.
+- GroupController serializes metadata changes, checks captured access revisions
+  and refreshes saved/active histories. Rehosting loads the latest saved record,
+  retaining messages/choices and rejecting deleted or wrong-host snapshots.
+- Shared GroupChatTile/GroupMenu appear in Chats, the group hub, Archived chats and
+  chat toolbars. Menus reject disposed/stale/locked actions; failures show errors.
+  Stable row keys preserve open menus when incoming activity reorders groups.
+  Combined archive shortcuts include direct/group unread counts. New messages do
+  not unarchive groups. The hub keeps an active-room card for connection controls.
+- Payload v8 records nondefault group choices while retaining v1-v7 imports. Existing
+  destination choices win; new groups inherit incoming choices. Mixed attachments,
+  drafts and empty-phone identity migration retain existing validation and limits.
+- Archiving preserves drafts, messages, attachments, read state, receiving/alerts
+  and active sessions. No native/package/permission or network-protocol changes.
+- Final full regression: **324 passed**, exit 0 (303 prior + 21 new), using
+  `--concurrency=2 --timeout=2m`; analysis is clean. Final arm64 debug APK and
+  browser builds pass and include stable row keys. Logs are in .dart_tool and
+  ignored; results are recorded in docs/VALIDATION.md. Physical checks remain pending.
+  Group message search is next; the user will review/test/commit this milestone.
+
 ## Group-draft milestone - implemented, 2026-10-12
 
-Baseline: `5a92e71`. Changes are saved locally, unstaged and uncommitted.
+Baseline: `5a92e71`. The user committed this milestone as `2a83b30`.
 The user handles Git. See docs/GROUP_DRAFTS.md and docs/VALIDATION.md.
 
 - The existing DraftController now distinguishes direct/group targets and shares
@@ -53,7 +83,7 @@ The user handles Git. See docs/GROUP_DRAFTS.md and docs/VALIDATION.md.
   analysis is clean and arm64 Android/browser builds pass. No new packages,
   permissions or native changes. The user reviews/tests/commits next.
 - Browser demo remains memory only; no group outbox or automatic sends. Group
-  pin/archive and search are next; physical checks remain pending.
+  pin/archive is implemented separately; search is next. Physical checks remain pending.
 
 ## Group-file milestone — implemented and validated, 2026-10-12
 
@@ -250,8 +280,8 @@ Implemented:
   text, 10,000 saved messages/group, 90-second joins and 30-second receipts.
   Original host can explicitly rehost with a fresh epoch/codes. No group outbox,
   automatic retry/reconnect, host migration or background service. Saved group
-  drafts are now implemented separately; pin/archive/search and browser
-  simulation remain backlog refinements.
+  drafts and pin/archive are now implemented separately; group search and
+  browser simulation remain backlog refinements.
 - Docs updated: README, SECURITY, BACKUPS, BACKGROUND_CONNECTION, DEVICE_TESTING,
   FEATURE_BACKLOG; full controls/trust/three-phone checklist in GROUP_CHATS.md.
 

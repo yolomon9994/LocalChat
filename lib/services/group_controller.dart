@@ -37,6 +37,7 @@ class GroupController extends ChangeNotifier {
     this.store, {
     required this.prepare,
     required this.canAct,
+    this.accessRevision,
     this.notifications,
     this.timeout = const Duration(seconds: 90),
     this.receiptTimeout = const Duration(seconds: 30),
@@ -60,6 +61,7 @@ class GroupController extends ChangeNotifier {
   final ChatNotifications? notifications;
   final Future<bool> Function() prepare;
   final bool Function() canAct;
+  final int Function()? accessRevision;
   final Duration timeout, receiptTimeout;
   final Duration imageTimeout, fileTimeout;
   final bool supportsImages, supportsFiles;
@@ -157,7 +159,7 @@ class GroupController extends ChangeNotifier {
       if (title.isEmpty || title.length > 64) {
         throw const FormatException('Use a group name with 1–64 characters.');
       }
-      if (previous != null && previous.host != selfPublic) {
+      if (previous != null && previous!.host != selfPublic) {
         throw const FormatException(
           'Only the original host can reopen this group.',
         );
@@ -168,6 +170,19 @@ class GroupController extends ChangeNotifier {
       try {
         await _stop();
         if (!await prepare() || !canAct()) return;
+        if (previous != null) {
+          final current = histories.where((g) => g.id == previous!.id);
+          if (current.isEmpty) {
+            throw const FormatException('This group has been deleted.');
+          }
+          previous = current.first;
+          if (previous!.host != selfPublic) {
+            throw const FormatException(
+              'Only the original host can reopen this group.',
+            );
+          }
+          title = previous!.title;
+        }
         epoch = randomId();
         view = 1;
         hosting = true;
@@ -948,6 +963,30 @@ class GroupController extends ChangeNotifier {
     unawaited(notifications?.cancel('group:${found.first.id}'));
     await _reload();
     _notify();
+  }
+
+  Future<bool> setPinned(String id, bool pinned) =>
+      _manageGroup(() => store.setGroupPinned(id, pinned));
+
+  Future<bool> setArchived(String id, bool archived) =>
+      _manageGroup(() => store.setGroupArchived(id, archived));
+
+  Future<bool> _manageGroup(Future<bool> Function() action) async {
+    final access = accessRevision?.call();
+    var success = false;
+    await _run(() async {
+      if (!canAct() || access != accessRevision?.call()) return;
+      error = null;
+      try {
+        if (!await action()) throw StateError('Group no longer exists');
+        await _reload();
+        success = true;
+      } catch (_) {
+        error = 'Could not update this group. Please try again.';
+      }
+      _notify();
+    });
+    return success;
   }
 
   Future<void> delete(String id) => _run(() async {

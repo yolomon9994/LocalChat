@@ -43,7 +43,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 10,
+      version: 11,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -60,6 +60,7 @@ class LocalStore {
         await db.execute('CREATE TABLE backup_receipt (id TEXT PRIMARY KEY)');
         await _createOutboxIndex(db);
         await _createGroups(db);
+        await _addGroupManagement(db);
         await _createGroupDrafts(db);
         await _createImages(db);
         await _createFiles(db);
@@ -84,6 +85,7 @@ class LocalStore {
         if (oldVersion < 8) await _createImages(db);
         if (oldVersion < 9) await _createFiles(db);
         if (oldVersion < 10) await _createGroupDrafts(db);
+        if (oldVersion < 11) await _addGroupManagement(db);
       },
     );
     await _recoverIdentity();
@@ -369,6 +371,19 @@ class LocalStore {
     );
   }
 
+  static Future<void> _addGroupManagement(Database db) async {
+    final columns = (await db.rawQuery(
+      'PRAGMA table_info(group_history)',
+    )).map((c) => c['name']).toSet();
+    for (final column in ['pinned', 'archived']) {
+      if (!columns.contains(column)) {
+        await db.execute(
+          'ALTER TABLE group_history ADD COLUMN $column INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+    }
+  }
+
   static Future<void> _createGroupDrafts(Database db) => db.execute(
     'CREATE TABLE IF NOT EXISTS group_drafts (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
   );
@@ -526,31 +541,68 @@ class LocalStore {
         aad: utf8.encode('LocalChat/group-history/1/${row['id']}'),
       );
       // Received/imported authors were checked before this authenticated local write.
+      final group = await GroupHistory.parse(
+        jsonDecode(utf8.decode(clear)) as Map,
+        verifySignatures: false,
+      );
       result.add(
-        await GroupHistory.parse(
-          jsonDecode(utf8.decode(clear)) as Map,
-          verifySignatures: false,
-        ),
+        group.copy(pinned: row['pinned'] == 1, archived: row['archived'] == 1),
       );
     }
-    return result..sort((a, b) => b.updated.compareTo(a.updated));
+    return result..sort(compareGroupHistories);
   }
 
   Future<List<GroupHistory>> groupHistories() => _groupHistories(_database);
   Future<void> _writeGroup(DatabaseExecutor db, GroupHistory group) async {
+    // Metadata updates must survive stale history snapshots, receipts and rehosting.
+    // All callers use a transaction, so this read and write cannot race a flag update.
+    final existing = await db.query(
+      'group_history',
+      columns: ['pinned', 'archived'],
+      where: 'id = ?',
+      whereArgs: [group.id],
+      limit: 1,
+    );
+    final json = group.toJson()
+      ..remove('pinned')
+      ..remove('archived');
     final box = await _cipher.encrypt(
-      utf8.encode(jsonEncode(group.toJson())),
+      utf8.encode(jsonEncode(json)),
       secretKey: _historyKey,
       aad: utf8.encode('LocalChat/group-history/1/${group.id}'),
     );
     await db.insert('group_history', {
       'id': group.id,
+      'pinned': existing.isEmpty
+          ? (group.pinned ? 1 : 0)
+          : existing.single['pinned'],
+      'archived': existing.isEmpty
+          ? (group.archived ? 1 : 0)
+          : existing.single['archived'],
       'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> saveGroupHistory(GroupHistory group) =>
-      _writeGroup(_database, group);
+      _database.transaction((txn) => _writeGroup(txn, group));
+  Future<bool> setGroupPinned(String id, bool pinned) async =>
+      await _database.update(
+        'group_history',
+        {'pinned': pinned ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      ) ==
+      1;
+
+  Future<bool> setGroupArchived(String id, bool archived) async =>
+      await _database.update(
+        'group_history',
+        {'archived': archived ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      ) ==
+      1;
+
   Future<void> deleteGroupHistory(String id) =>
       _database.transaction((txn) async {
         await txn.delete('group_drafts', where: 'id = ?', whereArgs: [id]);

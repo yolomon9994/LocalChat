@@ -396,6 +396,7 @@ class ChatController extends ChangeNotifier {
     _groupTransport,
     store,
     drafts: drafts,
+    accessRevision: () => accessRevision,
     imageFiles: imageFiles,
     chatFiles: chatFiles,
     prepare: _prepareGroup,

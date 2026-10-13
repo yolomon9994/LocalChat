@@ -1,5 +1,46 @@
 # Validation for v0.1.0
 
+## Group pin/archive - final checks 2026-10-13
+
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **324 passed**, exit 0 (303 existing + 21 new). Output:
+  `.dart_tool/group-management-milestone-tests.log`, local and ignored by Git.
+- Ten new model/controller/backup checks cover legacy/default choices, strict
+  flags, stable pin/activity/ID ordering, unchanged timestamps, stale writes,
+  same-ID direct isolation, failed updates and generic errors, missing/deleted
+  groups, queued lock/unlock revision rejection, archived active receiving and
+  unread/draft preservation, independent remote choices, latest-history rehosting,
+  v8 merge/legacy imports, existing-choice precedence and conflicting hosts.
+- Five SQLite checks verify schema-10 upgrade to schema 11 without rewriting
+  ciphertext or losing direct/group drafts/messages, metadata-only flag writes,
+  reopen, stale and atomic outgoing history writes, deletion, failed updates,
+  v8 import/dedupe choices and concurrent history/flag updates.
+- Five new widgets cover list/chat pin/archive/unarchive, combined direct/group
+  archive counts, preserved files/composers, the group-hub archive shortcut,
+  PIN removal of menus/routes, late disposed actions, archived notification taps,
+  and 320 x 568 at 1.8x text with long titles and failed-update snackbars.
+  Open menus also survive incoming-activity reordering and keep their target.
+  Their separate final run passed all five (`group-management-widget-tests.log`).
+  Fixtures explicitly mark unread records, unlock after app initialization,
+  scroll the visible list and allow queued controller updates to settle.
+- The additional v8 mixed encrypted archive variant retains direct/group images,
+  files, signatures, hashes, drafts, identity, read/receipt state and group choices.
+  All earlier backup/protocol/attachment/draft tests pass in the full suite.
+- Existing group/controller/direct-widget regression run: 30 passed, exit 0,
+  `.dart_tool/group-management-initial-tests.log`.
+- Final `flutter analyze`: no issues, exit 0; `.dart_tool/group-management-analyze.log`.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0; `.dart_tool/group-management-apk-build.log`.
+  Final artifact includes stable menu-row keys.
+  APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Final `flutter build web --no-wasm-dry-run`: passed, exit 0;
+  `.dart_tool/group-management-web-build.log`. Includes stable menu-row keys.
+  Existing optional Cupertino font warning remains; the app uses Material icons.
+- Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
+- Physical upgrade/restart/archive/receiving/PIN/backup checks remain pending;
+  see [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md). No hardware success is claimed.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Saved group drafts - final checks 2026-10-13
 
 - Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
@@ -40,7 +81,7 @@
 - Final code/documentation review and `git -c core.safecrlf=false diff --check`: clean.
 - Physical upgrade/navigation/restart/PIN/network/migration checks remain pending;
   see [GROUP_DRAFTS.md](GROUP_DRAFTS.md). No hardware success is claimed.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed group drafts as `2a83b30`; hardware checks remain pending.
 
 ## Hosted group files — final checks 2026-10-12
 

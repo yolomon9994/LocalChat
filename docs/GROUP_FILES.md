@@ -92,7 +92,8 @@ Older builds reject v6. The encrypted envelope/KDF and 20 MiB archive limit rema
 unchanged. A failed group write rolls back the whole import. See [BACKUPS.md](BACKUPS.md).
 
 Group drafts are saved independently; backups containing them select payload v7.
-Current builds import v1-v7. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+Pinned/archived groups select v8. Current builds import v1-v8. See
+[GROUP_DRAFTS.md](GROUP_DRAFTS.md) and [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 ## Three-phone checks — pending
 

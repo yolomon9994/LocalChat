@@ -40,7 +40,7 @@ in progress. Storage failures roll back message acceptance, deletion and mixed
 imports. Direct drafts retain their existing table and authentication domain.
 
 Archives with nonempty group drafts use payload **v7**, with `groupDrafts` rows
-containing `group` and exact `text`. Current builds import v1-v7; older builds
+containing `group` and exact `text`. Current builds import v1-v8; older builds
 reject v7. Every imported draft must reference a validated group, with no duplicate
 IDs, empty text or oversized body. Existing nonempty destination drafts win.
 An absent draft can import even when no new group messages are added. A group ID
@@ -50,6 +50,10 @@ Both history-only imports and identity transfer to an empty destination include
 group drafts. Imported drafts never send or restore sessions. The encrypted file
 envelope, password derivation and 20 MiB archive limit remain unchanged. See
 [BACKUPS.md](BACKUPS.md) and automated results in [VALIDATION.md](VALIDATION.md).
+
+Pinning/archiving groups preserves their drafts. Group organization adds schema
+11 metadata columns; archives with group choices select v8. Current builds import
+v1-v8. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 ## Phone checklist
 

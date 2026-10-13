@@ -47,7 +47,7 @@ void main() {
     );
     await source.saveGroupHistory(history);
   });
-  for (final version in [6, 7]) {
+  for (final version in [6, 7, 8]) {
     test(
       'v$version mixed encrypted archive retains files, images, signatures, identity and duplicate read state',
       () async {
@@ -89,8 +89,12 @@ void main() {
           ),
           bytes,
         );
-        if (version == 7) {
+        if (version >= 7) {
           await source.saveGroupDraft(history.id, 'Attachment draft');
+        }
+        if (version == 8) {
+          await source.setGroupPinned(history.id, true);
+          await source.setGroupArchived(history.id, true);
         }
         final data = await source.exportBackup();
         expect(data.toJson()['version'], version);
@@ -112,9 +116,11 @@ void main() {
         expect((await destination.importBackup(decoded)).newMessages, 4);
         expect(
           await destination.groupDraft(history.id),
-          version == 7 ? 'Attachment draft' : '',
+          version >= 7 ? 'Attachment draft' : '',
         );
         var restored = (await destination.groupHistories()).single;
+        expect(restored.pinned, version == 8);
+        expect(restored.archived, version == 8);
         expect(restored.messages.first.fileBytes, bytes);
         expect(restored.messages.last.imageBytes, png);
         expect(

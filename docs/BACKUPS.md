@@ -22,7 +22,7 @@ version 1, while older builds reject group archives. Group sessions/keys are nev
 restored, and imported pending receipts become unconfirmed. Import ends the current
 group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
 Archives containing direct-chat images use payload version 3, including bounded
-image bytes, dimensions and SHA-256 digest. New builds import v1-v7; older
+image bytes, dimensions and SHA-256 digest. New builds import v1-v8; older
 builds reject image archives. Images are re-encrypted with destination history
 keys and restored pending attempts remain unconfirmed. The 20 MiB total archive
 limit still applies; image-heavy exports can exceed it without changing history.
@@ -51,9 +51,16 @@ See [GROUP_FILES.md](GROUP_FILES.md).
 Archives with nonempty group drafts use payload **v7**, including validated
 `groupDrafts` rows (`group`, `text`). Existing destination drafts win, missing
 drafts import even without new messages, and conflicting group hosts cannot
-receive each other's drafts. Current builds import v1-v7; older builds reject v7.
+receive each other's drafts. Current builds import v1-v8; older builds reject v7.
 Both history-only and empty-phone identity imports support group drafts. The
 same encrypted envelope/KDF and 20 MiB total limit apply. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+
+Archives with pinned or archived groups select payload **v8**. Group choices
+are validated booleans; older archives default missing choices to false. Existing
+destination choices always win, while new groups inherit the archive choices.
+Current builds import v1-v8. Mixed direct/group attachments and drafts are
+supported, with the same envelope/KDF and total limits. Older builds reject v8.
+See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 Export does not delete or change source history. Failed draft saves/loads must
 be resolved before export so the backup does not silently omit unsaved edits.

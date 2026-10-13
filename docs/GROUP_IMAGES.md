@@ -79,13 +79,14 @@ after restarting. No packages, Android permissions or native transport changes
 were needed. Cache eviction on locking is not guaranteed forensic memory erasure.
 
 Archives with group images use payload **v5**, or **v6** when group files are
-also present, or **v7** when group drafts are included. Current builds import v1-v7.
+also present, or **v7** when group drafts are included. Current builds import v1-v8.
 They can include direct text/images/files and groups together. Import validates
 author signatures and PNG bytes, safely merges by group/author/ID, re-encrypts
 locally and never starts transfers. Older builds reject v5. The encrypted file
 envelope and password derivation remain unchanged. See [BACKUPS.md](BACKUPS.md).
 
 Group drafts are saved independently; see [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
+Pinned/archived groups select payload v8; see [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 ## Three-phone checks — pending
 

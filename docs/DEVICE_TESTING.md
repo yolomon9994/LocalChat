@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Group pin/archive uses the [organization checklist](GROUP_MANAGEMENT.md), including
+upgrade/restart, archive counts, receiving while archived, PIN and v8 backups.
+
 Saved group drafts require the [draft checklist](GROUP_DRAFTS.md), including
 navigation/PIN/restart restoration, offline editing, sends and migration.
 

@@ -13,6 +13,7 @@ class GroupNetwork {
     String name, {
     DemoStore? store,
     bool Function()? canAct,
+    int Function()? accessRevision,
     Duration receiptTimeout = const Duration(seconds: 30),
     Duration timeout = const Duration(seconds: 90),
     ImageFiles? imageFiles,
@@ -31,6 +32,7 @@ class GroupNetwork {
       store,
       prepare: () async => true,
       canAct: canAct ?? () => true,
+      accessRevision: accessRevision,
       receiptTimeout: receiptTimeout,
       timeout: timeout,
       imageFiles: imageFiles,

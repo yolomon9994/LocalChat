@@ -74,13 +74,13 @@ authenticated encrypted SQLite records. Schema 7 adds `group_history` without
 altering direct history. Only each random group ID is a plaintext record key.
 There is a limit of 10,000 saved messages per group. Export and delete a full group
 before continuing. Confirmed deletion affects this phone and ends its active group;
-**Delete all chat history** also removes groups. Pin/archive and local search
-currently apply to direct chats; group refinements remain in the backlog.
+**Delete all chat history** also removes groups. Pin/archive now supports both
+direct chats and groups; local message search currently applies to direct chats.
 
 Encrypted backups include groups. Text-only group archives use payload version 2;
 group images use v5 and group files v6, while direct images/files select v3/v4.
-Nonempty group drafts select v7. Current builds import v1-v7. The encrypted file envelope/KDF remains version
-1, but older builds reject the new payload rather than silently dropping groups.
+Nonempty group drafts select v7, and group pin/archive choices select v8.
+Current builds import v1-v8. The encrypted file envelope/KDF remains version 1, but older builds reject the new payload rather than silently dropping groups.
 Import validates signatures and group/host references, merges by group + author +
 message ID, keeps existing conflicting records/read state, re-encrypts with local
 storage keys, and changes imported pending receipts to unconfirmed. Import ends
@@ -95,6 +95,13 @@ does not make the destination the original host; explicit identity transfer can.
 
 Browser preview explains the Android requirement and can display imported demo
 group history; it does not simulate discovery, hosting or real group links.
+
+## Group organization
+
+Pin important groups and archive quiet ones from saved lists or the chat toolbar.
+Archived chats includes direct chats and groups; incoming messages keep archived
+groups there while receiving, alerts and drafts remain intact. Choices persist
+across Android restarts and backups. See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 ## Saved group drafts
 

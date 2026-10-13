@@ -6,6 +6,9 @@ import '../services/group_controller.dart';
 import 'chats_tab.dart' show formatConversationTime;
 import 'group_image_bubble.dart';
 import 'group_file_bubble.dart';
+import 'group_chat_tile.dart';
+import 'group_menu.dart';
+import 'archived_chats_screen.dart';
 
 class GroupHubScreen extends StatefulWidget {
   const GroupHubScreen({
@@ -175,22 +178,41 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
             ),
           const SizedBox(height: 24),
           Text('Saved groups', style: Theme.of(context).textTheme.titleLarge),
-          if (g.histories.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
+          if (g.histories.where((h) => !h.archived).isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
-                'Group history will appear here after creating or joining a verified group.',
+                g.histories.isEmpty
+                    ? 'Group history will appear here after creating or joining a verified group.'
+                    : 'Your saved groups are archived. Open Archived chats to view them.',
               ),
             ),
-          for (final group in g.histories)
+          for (final group in g.histories.where((h) => !h.archived))
+            GroupChatTile(
+              key: ValueKey('saved-group-${group.id}'),
+              controller: c,
+              group: group,
+              routeObserver: widget.routeObserver,
+              showMessageCount: true,
+            ),
+          if (g.histories.any((h) => h.archived))
             Card(
               child: ListTile(
-                leading: const Icon(Icons.groups_outlined),
-                title: Text(group.title),
-                subtitle: Text(
-                  '${group.messages.length} messages${group.unread > 0 ? ' • ${group.unread} unread' : ''}',
+                key: const ValueKey('open-archived-groups'),
+                leading: const Icon(Icons.archive_outlined),
+                title: const Text('Archived chats'),
+                subtitle: const Text(
+                  'Find your archived groups and direct chats',
                 ),
-                onTap: () => _open(group.id),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ArchivedChatsScreen(
+                      controller: c,
+                      routeObserver: widget.routeObserver,
+                    ),
+                  ),
+                ),
               ),
             ),
           const SizedBox(height: 20),
@@ -568,6 +590,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                       )
                     : const Icon(Icons.attach_file),
               ),
+            if (history != null) GroupMenu(controller: c, group: history),
             IconButton(
               onPressed: _delete,
               icon: const Icon(Icons.delete_outline),

@@ -55,7 +55,7 @@ attachment relay and existing per-link encrypted counters. Completion receipts
 follow local persistence; the trusted host saves before relay and can read files.
 Lock/background/membership changes stop partial transfers, with no auto-resume.
 Complete bytes stay inline in encrypted group records; files use schema 9
-and group drafts add schema 10. Export
+and group drafts add schema 10, followed by group metadata in schema 11. Export
 requires confirmation and produces an unprotected copy outside the app. Payload-v6
 backups validate names/digests/signatures and combined group limits, retain v1–v5
 imports and the 20 MiB archive cap, and never send restored files. See
@@ -172,6 +172,15 @@ preview copies. A serialized draft queue orders saves, send cleanup and history
 deletion. Clearing history deletes drafts too, subject to the same forensic-wipe
 limits as messages. Draft plaintext can remain in process memory while locked;
 the existing UI access-control boundary applies. Browser drafts are memory only.
+
+Group pin/archive flags are unencrypted local metadata columns in schema 11.
+They follow the same list-organization rules as direct chats. Group messages and
+drafts remain encrypted, and metadata changes preserve their ciphertext. Flags
+never enter the radio protocol or author signatures. Serialized management actions
+check access revisions, while transactional history writes retain current choices.
+Payload-v8 backups authenticate choices in the encrypted archive, validate their
+boolean types, preserve existing destination choices and retain v1-v7 imports.
+See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 Pin and archive flags are unencrypted peer metadata. Archiving changes list
 placement rather than privacy or delivery rules: archived text remains stored

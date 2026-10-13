@@ -283,10 +283,13 @@ class GroupHistory {
     required this.host,
     this.messages = const [],
     this.updated = 0,
+    this.pinned = false,
+    this.archived = false,
   });
   final String id, title, host;
   final List<GroupText> messages;
   final int updated;
+  final bool pinned, archived;
   int get unread => messages.where((m) => !m.read).length;
   Map<String, Object?> toJson() => {
     'id': id,
@@ -294,19 +297,29 @@ class GroupHistory {
     'host': host,
     'updated': updated,
     'messages': messages.map((m) => m.toJson()).toList(),
+    if (pinned || archived) ...{'pinned': pinned, 'archived': archived},
   };
-  GroupHistory copy({List<GroupText>? messages, int? updated}) => GroupHistory(
+  GroupHistory copy({
+    List<GroupText>? messages,
+    int? updated,
+    bool? pinned,
+    bool? archived,
+  }) => GroupHistory(
     id: id,
     title: title,
     host: host,
     messages: messages ?? this.messages,
     updated: updated ?? this.updated,
+    pinned: pinned ?? this.pinned,
+    archived: archived ?? this.archived,
   );
   static Future<GroupHistory> parse(
     Map raw, {
     bool verifySignatures = true,
   }) async {
-    if (!groupIdValid(raw['id']) ||
+    if (raw.containsKey('pinned') && raw['pinned'] is! bool ||
+        raw.containsKey('archived') && raw['archived'] is! bool ||
+        !groupIdValid(raw['id']) ||
         raw['title'] is! String ||
         (raw['title'] as String).trim().isEmpty ||
         (raw['title'] as String).length > 64 ||
@@ -345,7 +358,16 @@ class GroupHistory {
       title: raw['title'] as String,
       host: raw['host'] as String,
       updated: raw['updated'] as int,
+      pinned: raw['pinned'] as bool? ?? false,
+      archived: raw['archived'] as bool? ?? false,
       messages: messages,
     );
   }
+}
+
+/// Pins are local organization; activity and ID provide stable order within it.
+int compareGroupHistories(GroupHistory a, GroupHistory b) {
+  if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+  final activity = b.updated.compareTo(a.updated);
+  return activity != 0 ? activity : a.id.compareTo(b.id);
 }

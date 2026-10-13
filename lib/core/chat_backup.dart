@@ -30,7 +30,10 @@ class BackupData {
   final List<Map<String, Object?>> peers, messages, drafts;
   final List<Map<String, Object?>> groups, groupDrafts;
   Map<String, Object?> toJson() => {
-    'version': groupDrafts.isNotEmpty
+    'version':
+        groups.any((g) => g.containsKey('pinned') || g.containsKey('archived'))
+        ? 8
+        : groupDrafts.isNotEmpty
         ? 7
         : groups.any(
             (g) => (g['messages'] as List).any(
@@ -65,11 +68,13 @@ class BackupData {
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3, 4, 5, 6, 7}.contains(raw['version'])) {
+    if (raw is! Map || !{1, 2, 3, 4, 5, 6, 7, 8}.contains(raw['version'])) {
       throw invalid;
     }
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
-    if (raw.containsKey('groupDrafts') && raw['version'] != 7) throw invalid;
+    if (raw.containsKey('groupDrafts') && (raw['version'] as int) < 7) {
+      throw invalid;
+    }
     String string(Map row, String key, int max, {bool empty = false}) {
       final value = row[key];
       if (value is! String ||
@@ -181,6 +186,10 @@ class BackupData {
     var groupMessages = 0;
     if (raw['version'] == 2 || raw.containsKey('groups')) {
       for (final row in rows('groups', 500)) {
+        if ((row.containsKey('pinned') || row.containsKey('archived')) &&
+            (raw['version'] as int) < 8) {
+          throw invalid;
+        }
         final group = await GroupHistory.parse(row);
         if (group.messages.any((m) => m.image != null) &&
                 (raw['version'] as int) < 5 ||

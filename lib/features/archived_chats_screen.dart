@@ -32,6 +32,7 @@ class ArchivedChatsScreen extends StatelessWidget {
       body: ChatsTab(
         controller: controller,
         archived: true,
+        routeObserver: routeObserver,
         onFindDevices: () {},
         onOpenConnected: () {},
         onOpenHistory: (peer) => _open(context, peer),
