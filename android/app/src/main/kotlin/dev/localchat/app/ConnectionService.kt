@@ -58,12 +58,12 @@ class ConnectionService : Service() {
         fun showLoss(context: Context) {
             context.getSystemService(NotificationManager::class.java).notify(LOSS_NOTIFICATION,
                 builder(context).setSmallIcon(R.drawable.ic_stat_message).setContentTitle("LocalChat connection ended")
-                    .setContentText("Open Nearby to reconnect and verify both phones.")
+                    .setContentText("Open Nearby or Group chats to reconnect and verify again.")
                     .setContentIntent(openApp(context)).setAutoCancel(true).setOnlyAlertOnce(true)
                     .setVisibility(Notification.VISIBILITY_PUBLIC).build())
         }
 
-        fun holdFrame(token: Int) { instance?.get()?.hold(token) }
+        fun holdFrame(token: Int): Boolean = instance?.get()?.hold(token) ?: false
         fun finishFrame(token: Int) { instance?.get()?.finish(token) }
         fun releaseFrames() { instance?.get()?.release() }
     }
@@ -127,11 +127,12 @@ class ConnectionService : Service() {
         return START_NOT_STICKY
     }
 
-    @Synchronized private fun hold(token: Int) {
-        if (token != generation || activeEpoch != epoch || desiredEpoch != epoch || epoch == 0) return
+    @Synchronized private fun hold(token: Int): Boolean {
+        if (token != generation || activeEpoch != epoch || desiredEpoch != epoch || epoch == 0) return false
         frames++
         // Wake only for actual decrypt/persist/ACK work, never throughout idle chat.
         wake?.acquire(15000)
+        return true
     }
     @Synchronized private fun finish(token: Int) {
         if (token != generation || frames == 0) return

@@ -22,11 +22,11 @@ Image controls, foreground requirements, limits and three-phone checks are in
    can reject a pending guest or remove an admitted member. Guests can leave;
    the host can end hosting. No old history is sent to newly admitted members.
 
-Keep the host open and connected for reliable delivery. The existing background
-connection setting protects direct chats only; groups have no foreground service
-or wake locks in this version. Receiving and forwarding on already verified links
-may continue while the process runs, but screen-off/background reliability is not
-claimed. New text and membership approval require an unlocked, foreground app.
+Keep the host connected. Optional **Keep connection active** protects the running
+group after fresh admission, allowing background text receiving/host relaying.
+New text, membership approval and attachments require foreground unlock. Activity
+closure and Android battery restrictions can still end or interrupt delivery;
+physical reliability remains unvalidated. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
 
 ## Trust and delivery
 
@@ -75,7 +75,7 @@ altering direct history. Only each random group ID is a plaintext record key.
 There is a limit of 10,000 saved messages per group. Export and delete a full group
 before continuing. Confirmed deletion affects this phone and ends its active group;
 **Delete all chat history** also removes groups. Pin/archive now supports both
-direct chats and groups; local message search currently applies to direct chats.
+direct chats and groups; saved group names/messages are also searchable offline.
 
 Encrypted backups include groups. Text-only group archives use payload version 2;
 group images use v5 and group files v6, while direct images/files select v3/v4.

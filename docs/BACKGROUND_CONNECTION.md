@@ -1,7 +1,9 @@
 # Background connection protection
 
-This setting currently protects direct chats. Hosted groups should keep the host
-open; group background protection is a later refinement.
+This setting protects the current verified direct chat or hosted group. Groups
+can receive and relay text on admitted links; empty hosting and pending joins do
+not start protection. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md) for activation,
+privacy, member departure, mode changes and the three-phone checklist.
 Images and files require both phones unlocked and foregrounded; backgrounding
 cancels partial transfers. This setting does not resume them. See
 [IMAGE_SHARING.md](IMAGE_SHARING.md) and [FILE_SHARING.md](FILE_SHARING.md).
@@ -112,7 +114,8 @@ battery use on Android 7–12, Android 13 and Android 14+ if available.
 
 Implementation: native `ConnectionService` uses `remoteMessaging`, with
 `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_REMOTE_MESSAGING` and `WAKE_LOCK`.
-Activation is tied to the native socket generation and a service epoch. No new
+Activation is tied to the native direct/group transport generation, admitted group
+links and a service epoch. No new
 dependencies, database schema, backup format or encrypted wire payloads are added.
 See Android's [service types](https://developer.android.com/develop/background-work/services/fgs/service-types),
 [foreground-service launch rules](https://developer.android.com/develop/background-work/services/fgs/launch),

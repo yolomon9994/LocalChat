@@ -79,8 +79,16 @@ the trusted host can withhold text, lie about receipts/rosters or admit a lookal
 identity despite author signatures. Pending attempts become unconfirmed after
 30 seconds or disconnect/restart. No automatic group retry/outbox operates.
 Originating sends/admission require foreground unlock; receiving/relay on already
-admitted links may continue while the process runs. Groups have no background
-service in this version. Removing a member closes its socket and updates the
+admitted links may continue while the process runs. Optional background protection
+now shares the existing service with direct chats. It starts from foreground
+unlock after fresh group admission, with native checks of the current room and
+Dart-authorized live link IDs. Pending/unverified sockets do not authorize or
+retain protection. Per-frame wake work is bounded and released after processing,
+including invalid/ignored frames. Direct/group generations and service epochs
+isolate cleanup and stale Stop actions; no new wire payload, membership trust,
+permissions or background originating-send/attachment capability is added.
+See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md) for behavior and hardware checks.
+Removing a member closes its socket and updates the
 roster; it cannot erase old copies or prevent other members sharing them.
 
 Native limits: seven guest sockets, eight roster members, 65,536-byte frames,

@@ -60,7 +60,8 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 - Opt-in local message notifications with hidden previews by default, lock-aware
   chat opening and suppression while reading the conversation. Configure in Settings.
 - Optional protection of the current verified connection while backgrounded,
-  with an ongoing Stop notification, battery guidance and foreground-only queued sending.
+  including hosted group text receiving/relaying on admitted links, with an ongoing
+  Stop notification, battery guidance and foreground-only originating sends/attachments.
 
 See [app lock setup and testing](docs/APP_LOCK.md) and the
 [feature backlog](docs/FEATURE_BACKLOG.md) for planned additions.
@@ -75,11 +76,12 @@ See [offline outbox and retry](docs/OUTBOX.md) for queued delivery and phone che
 See [connection recovery](docs/CONNECTION_RECOVERY.md) for settings, scans and reconnect.
 See [notification privacy and testing](docs/NOTIFICATIONS.md) for permissions and taps.
 See [background connection testing](docs/BACKGROUND_CONNECTION.md) for controls and battery limits.
+See [group background testing](docs/GROUP_BACKGROUND.md) for text relay, privacy and three-phone checks.
 See [hosted group chats](docs/GROUP_CHATS.md) for the trust model, joining and three-phone checks.
 See [image sharing](docs/IMAGE_SHARING.md) for limits, controls and two-phone checks.
 See [file sharing](docs/FILE_SHARING.md) for attaching documents, saving copies and testing.
 
-Bluetooth, video playback, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running direct-chat session; groups should keep the host open and image/file transfers require participating apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
+Bluetooth, video playback, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running verified direct/group session; hosts must stay connected, and image/file transfers require participating apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 

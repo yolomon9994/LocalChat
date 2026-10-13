@@ -3,10 +3,29 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Saved group message search
+## Current milestone: Background protection for hosted groups
 
 Implemented: 2026-10-13. Saved locally, unstaged and uncommitted; the user handles
-Git. See [GROUP_SEARCH.md](GROUP_SEARCH.md).
+Git. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
+
+- [x] Reuse Keep connection active for admitted, freshly verified group links.
+- [x] Foreground-unlock startup, native live-link/access checks and generic Stop.
+- [x] Locked/background text receive/save/ACK and trusted-host relay/receipts.
+- [x] Preserve privacy, unread, drafts and pin/archive; keep new sends/admission/
+      attachments foreground-only.
+- [x] Bound received-frame wake work; release on processing/error/cancellation.
+- [x] Handle member departure, last verified-link loss, mode changes and stale Stop.
+- [x] Group Retry/settings guidance, no failed-start retry loop and no auto-reconnect.
+- [x] All 22 new controller/channel/widget checks pass.
+- [x] All 362 tests pass, clean analysis, final Android/browser builds and review;
+      see [VALIDATION.md](VALIDATION.md).
+- [ ] Physical three-phone/lifecycle/battery checks; see [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Saved group message search: implemented and committed
+
+Implemented: 2026-10-13. Committed by the user as `6f342bb`; the local
+`origin/main` reference matches. See [GROUP_SEARCH.md](GROUP_SEARCH.md).
 
 - [x] Search saved group names/messages from Chats, including archived groups.
 - [x] Scoped group search, literal Unicode matching, author/time and highlights.
@@ -18,7 +37,7 @@ Git. See [GROUP_SEARCH.md](GROUP_SEARCH.md).
 - [x] All 340 tests pass, clean analysis, Android/browser builds and review;
       see [VALIDATION.md](VALIDATION.md).
 - [ ] Physical phone checklist; see [GROUP_SEARCH.md](GROUP_SEARCH.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits group search (`6f342bb`); local `origin/main` matches.
 
 ## Pinning and archiving group chats: implemented and committed
 
@@ -330,7 +349,7 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
       and manual Reconnect to a device still listed.
 - [x] Local notifications with hidden message previews by default and lock-aware taps.
 - [x] Optional background connection mode with battery/connection controls;
-      protects the current running verified session, subject to Doze/vendor limits.
+      protects a current running verified direct/group session, subject to Doze/vendor limits.
 - [ ] Reply to messages, copy actions, and starred messages.
 - [ ] QR scanning for session verification (bind to the verified session).
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
@@ -349,7 +368,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Saved group drafts; encrypted storage and backup support. Hardware checks pending.
 - [x] Group pin/archive; persisted choices and backup support. Hardware checks pending.
 - [x] Saved group message search; 340 tests pass. Physical checks pending.
-- [ ] Group background protection and browser simulation.
+- [x] Group background protection; 362 tests pass. Physical checks pending.
+- [ ] Browser group simulation.
 
 - [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
 - [ ] Group delivery behavior when members leave or the host disconnects.
@@ -366,7 +386,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
    reconnection and notifications (committed), background connection support (committed).
 6. Hosted group text chat (committed).
 7. Direct-chat image/file sharing and group images/files (committed).
-8. Saved group drafts (committed), group pin/archive (current), then group search.
+8. Saved group drafts, group pin/archive and group search (committed).
+9. Group background protection (current); browser group simulation remains future work.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

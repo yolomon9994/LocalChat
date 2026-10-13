@@ -89,12 +89,15 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         notifications = MessageNotifications(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/notifications"))
         background = BackgroundConnection(this,
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/background"),
-            eligible = { token -> token == generation.get() && socket != null && output != null &&
-                checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED },
-            stopConnection = { reason ->
-                stop()
-                emit("backgroundStopped", "reason" to reason)
-                emit("disconnected")
+            eligible = { token, admitted ->
+                if (token < 0) groups?.backgroundEligible(token, admitted) == true
+                else token == generation.get() && socket != null && output != null &&
+                    checkSelfPermission(permission()) == PackageManager.PERMISSION_GRANTED
+            },
+            stopConnection = { token, reason ->
+                if (token < 0) groups?.stop() else stop()
+                emit("backgroundStopped", "reason" to reason, "generation" to token)
+                if (token >= 0) emit("disconnected")
             },
             changed = { values -> sink?.success(values + ("type" to "backgroundStatus")) })
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/backup").setMethodCallHandler { call, result ->
@@ -134,7 +137,10 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         }
         manager = getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
         initializeP2p()
-        groups = GroupTransport(this, flutterEngine.dartExecutor.binaryMessenger) { ensureAccess() }
+        groups = GroupTransport(this, flutterEngine.dartExecutor.binaryMessenger,
+            access = { ensureAccess() },
+            closed = { token, reason -> background?.connectionClosed(reason, token) },
+            holdFrame = { token, link -> background?.holdGroupFrame(token, link) == true })
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/events").setStreamHandler(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.localchat/transport").setMethodCallHandler { call, result ->
             try {
@@ -546,7 +552,7 @@ class MainActivity : FlutterFragmentActivity(), EventChannel.StreamHandler {
         }
     }
     private fun closeSockets(backgroundReason: String = "lost") {
-        background?.connectionClosed(backgroundReason)
+        background?.connectionClosed(backgroundReason, generation.get())
         generation.incrementAndGet()
         // Close without the writer lock: a blocked write must be interruptible.
         socket?.runCatching { close() }

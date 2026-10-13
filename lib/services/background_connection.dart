@@ -8,6 +8,7 @@ abstract class BackgroundPlatform {
   Future<void> configure(bool enabled);
   Future<void> requestPermission();
   Future<Map<String, dynamic>> start(int? generation);
+  Future<void> setGroupLinks(int generation, List<String> links);
   Future<void> stop();
   Future<void> frameProcessed(int generation);
   Future<void> openSettings(String target);
@@ -39,6 +40,9 @@ class AndroidBackgroundPlatform implements BackgroundPlatform {
   @override
   Future<void> stop() => _channel.invokeMethod('stop');
   @override
+  Future<void> setGroupLinks(int generation, List<String> links) => _channel
+      .invokeMethod('groupLinks', {'generation': generation, 'links': links});
+  @override
   Future<void> frameProcessed(int generation) =>
       _channel.invokeMethod('frameProcessed', {'generation': generation});
   @override
@@ -52,12 +56,15 @@ class MemoryBackgroundPlatform implements BackgroundPlatform {
   bool allowed = true;
   bool batteryExempt = false;
   int starts = 0;
+  int? generation;
+  List<String> groupLinks = [];
   @override
   Future<Map<String, dynamic>> status() async => {
     'enabled': enabled,
     'active': active,
     'allowed': allowed,
     'batteryExempt': batteryExempt,
+    if (generation != null) 'generation': generation,
   };
   @override
   Future<void> configure(bool enabled) async {
@@ -73,12 +80,18 @@ class MemoryBackgroundPlatform implements BackgroundPlatform {
       throw PlatformException(code: 'NOTIFICATIONS_BLOCKED');
     }
     starts++;
+    this.generation = generation;
     active = true;
     return status();
   }
 
   @override
   Future<void> stop() async => active = false;
+  @override
+  Future<void> setGroupLinks(int generation, List<String> links) async {
+    groupLinks = List.of(links);
+  }
+
   @override
   Future<void> frameProcessed(int generation) async {}
   @override
@@ -99,6 +112,10 @@ class BackgroundConnection extends ChangeNotifier {
   String? notice;
   bool _disposed = false;
   int _revision = 0;
+  int? _generation;
+  int? _groupLinksGeneration;
+  List<String> _groupLinks = [];
+  bool get protectsGroup => _generation != null && _generation! < 0;
   Future<void> _queue = Future.value();
 
   void _notify() {
@@ -132,15 +149,17 @@ class BackgroundConnection extends ChangeNotifier {
       notice = switch (reason) {
         'user' => 'Background connection stopped from the notification.',
         'lost' =>
-          'Connection ended. Reconnect in Nearby and verify both phones.',
-        'closed' =>
-          'The app closed. Reconnect and verify both phones to resume.',
+          'Connection ended. Reconnect in Nearby or Group chats and verify again.',
+        'closed' => 'The app closed. Reconnect and verify again to resume.',
         'system' =>
-          'Android stopped the connection. Reopen Nearby and reconnect.',
+          'Android stopped the connection. Reopen Nearby or Group chats and reconnect.',
         _ => null,
       };
     }
     if (active) {
+      if (values['generation'] is int) {
+        _generation = values['generation'] as int;
+      }
       notice = null;
       error = null;
     }
@@ -185,11 +204,26 @@ class BackgroundConnection extends ChangeNotifier {
 
   Future<void> protect(
     int? generation, {
+    List<String>? groupLinks,
     required bool Function() canStart,
     required bool Function() sameConnection,
   }) => _run(() async {
-    if (!initialized || !enabled || active || busy || !canStart()) return;
+    if (!initialized || !enabled || busy) return;
     final revision = _revision;
+    if (groupLinks != null) {
+      if (generation == null || generation >= 0 || !sameConnection()) return;
+      if (!active && canStart()) _generation = generation;
+      final sorted = List<String>.of(groupLinks)..sort();
+      if (_groupLinksGeneration != generation ||
+          !listEquals(sorted, _groupLinks)) {
+        await platform.setGroupLinks(generation, sorted);
+        _groupLinksGeneration = generation;
+        _groupLinks = sorted;
+      }
+      if (revision != _revision || !sameConnection()) return;
+    }
+    if (active || !canStart()) return;
+    _generation = generation;
     busy = true;
     _notify();
     try {
@@ -210,17 +244,24 @@ class BackgroundConnection extends ChangeNotifier {
 
   void nativeStatus(Map<String, dynamic> values) {
     if (_disposed) return;
+    final token = values['generation'];
+    if (_generation != null && token is int && token != _generation) return;
     if (values['active'] != true) ++_revision;
     _read(values);
     _notify();
   }
 
-  void connectionEnded({bool unexpected = false}) {
+  void connectionEnded({bool unexpected = false, bool group = false}) {
+    if (group != protectsGroup) return;
     ++_revision;
     final wasActive = active;
     active = false;
+    _generation = null;
+    _groupLinksGeneration = null;
+    _groupLinks = [];
     if (unexpected && wasActive) {
-      notice = 'Connection ended. Reconnect in Nearby and verify both phones.';
+      notice =
+          'Connection ended. Reconnect in Nearby or Group chats and verify again.';
     }
     unawaited(_run(platform.stop));
     _notify();

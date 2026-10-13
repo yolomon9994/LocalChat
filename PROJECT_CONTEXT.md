@@ -27,13 +27,56 @@ Group images were committed by the user as `318b304`.
 Group files were committed by the user as `5a92e71`.
 Group drafts were committed by the user as `2a83b30`.
 Group pin/archive was committed by the user as `f07316d`.
-The current milestone is saved group message search.
+Group search was committed by the user as `6f342bb`.
+The current milestone is background protection for hosted groups.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Group-background milestone - implemented, 2026-10-13
+
+Baseline: `6f342bb`. Changes are saved locally, unstaged and uncommitted.
+The user handles Git; staging this milestone must include `android` as well as
+`lib`, `test` and docs. See docs/GROUP_BACKGROUND.md and docs/VALIDATION.md.
+
+- Reuses BackgroundConnection/ConnectionService and the existing local opt-in.
+  GroupController exposes current transportGeneration/backgroundReady (at least
+  one admitted/verified link) and receives the shared BackgroundConnection.
+  Empty hosting, discovery and pending/unverified links cannot start protection.
+- Native direct generations are nonnegative; group generations are negative
+  `-(transportEpoch + 1)`. Group connected/frame events carry this token. Dart
+  synchronizes admitted IDs via background groupLinks; native checks current
+  room/live admitted sockets and local access. Group status/Stop includes the
+  generation; direct cleanup and stale Stop/status cannot affect another lease.
+- Root requests group protection on verified topology changes, explicit opt-in/
+  Retry and foreground/unlock, rather than on every received message/draft update.
+  Failures leave foreground group messaging usable, with group-capable Settings Retry.
+  Starting requires foreground unlock; an already authorized start may complete
+  while locked. There is no background new-send/admission/attachment capability.
+- Locked/background hosts save signed text before relaying and return receipts;
+  guests persist/ACK. Existing visible-read gates and generic alerts preserve
+  unread/privacy, drafts, organization and attachments. One verified member
+  leaving keeps the host protected; losing the last releases protection despite
+  pending guests. Notification Stop ends/leaves the room and disables preference.
+- Authorized native group frames acquire bounded existing wake work; held flags
+  reach Dart and complete in finally, including malformed/ignored/stale frames.
+  Native cancellation before delivery and service/connection teardown release it.
+  Unverified links do not acquire this group wake work. No idle CPU/Wi-Fi lock.
+- Settings/group hub explain group text support and foreground attachment limits.
+  No packages, native permissions, schema, backup payload or encrypted wire change.
+  SQLite remains schema 11 and backups retain v1-v8 compatibility. Browser has
+  simulated controls; hardware group hosting/background protection is Android-only.
+- 22 new checks pass (19 controller/channel and three Settings/PIN widgets),
+  including signed three-phone relay, approvals, privacy/unread/drafts/flags,
+  Stop/loss, member departure, mode switching, stale events, queued start/sync
+  cancellation, held-frame cleanup, permission/service failure and explicit Retry.
+  Final full regression: **362 passed**, exit 0 (340 prior + 22 new), with
+  `--concurrency=2 --timeout=2m`; clean analysis and final Android/browser builds.
+  Ignored logs are in .dart_tool. Physical screen-off/Doze/vendor/lifecycle checks
+  remain pending and must not be represented as validated hardware delivery.
+
 ## Group-search milestone - implemented, 2026-10-13
 
-Baseline: `f07316d`. Source/tests/docs are saved locally, unstaged and uncommitted.
+Baseline: `f07316d`. The user committed this milestone as `6f342bb`.
 The user handles Git. See docs/GROUP_SEARCH.md and docs/VALIDATION.md.
 
 - Shared ChatSearchController/ChatSearchScreen search direct chats plus saved
@@ -61,7 +104,8 @@ The user handles Git. See docs/GROUP_SEARCH.md and docs/VALIDATION.md.
 - Final full regression: **340 passed**, exit 0 (324 prior + 16 new), using
   `--concurrency=2 --timeout=2m`. Analysis is clean; arm64 debug APK and browser
   builds pass. Logs are ignored in .dart_tool. Physical checks remain pending.
-  Group background protection and browser simulation remain future refinements.
+  Group background protection is the current milestone; browser group simulation
+  remains future work.
 
 ## Group-management milestone - implemented, 2026-10-13
 

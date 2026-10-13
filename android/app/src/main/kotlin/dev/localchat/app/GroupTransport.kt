@@ -31,7 +31,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** Dedicated hosted-group transport. Crypto and membership stay in Dart. */
 class GroupTransport(private val context: Context, messenger: BinaryMessenger,
-    private val access: () -> Unit) : EventChannel.StreamHandler {
+    private val access: () -> Unit,
+    private val closed: (Int, String) -> Unit,
+    private val holdFrame: (Int, String) -> Boolean) : EventChannel.StreamHandler {
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newCachedThreadPool()
     private val watchdog = Executors.newSingleThreadScheduledExecutor()
@@ -54,6 +56,13 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
         val writer = Any()
     }
     private val links = ConcurrentHashMap<String, Link>()
+    // Direct socket generations are nonnegative; negative room generations
+    // isolate the shared foreground-service lease across both transports.
+    private fun backgroundGeneration() = -(epoch.get() + 1)
+    fun backgroundEligible(token: Int, admitted: List<String>): Boolean =
+        running && token == backgroundGeneration() && admitted.any {
+            links[it]?.let { link -> link.epoch == epoch.get() && !link.socket.isClosed } == true
+        } && runCatching { access() }.isSuccess
     init {
         EventChannel(messenger, "dev.localchat/group_events").setStreamHandler(this)
         MethodChannel(messenger, "dev.localchat/groups").setMethodCallHandler { call, result ->
@@ -115,7 +124,7 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
         check(p2p != null) { "Wi-Fi Direct unavailable" }
         val token = epoch.get()
         channel = p2p.initialize(context, main.looper) {
-            if (token == epoch.get() && running) { stop(); emit("stopped") }
+            if (token == epoch.get() && running) { stop("lost"); emit("stopped") }
         }
         check(channel != null) { "Wi-Fi Direct channel unavailable" }
         running = true; host = asHost
@@ -180,7 +189,7 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
             if (!running) return
             if (intent.action == WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION &&
                 intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1) != WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
-                stop(); emit("stopped")
+                stop("lost"); emit("stopped")
             } else if (intent.action == WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION) checkInfo(epoch.get())
         }
     }
@@ -190,18 +199,18 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
             p2p?.requestConnectionInfo(channel) { info ->
                 if (token != epoch.get() || !running) return@requestConnectionInfo
                 if (!info.groupFormed) {
-                    if (formed) { stop(); emit("stopped") }
+                    if (formed) { stop("lost"); emit("stopped") }
                     return@requestConnectionInfo
                 }
                 formed = true
-                if (info.isGroupOwner != host) { stop(); emit("error"); return@requestConnectionInfo }
+                if (info.isGroupOwner != host) { stop("lost"); emit("error"); return@requestConnectionInfo }
                 if (!starting && listener == null && (host || links.isEmpty())) {
                     starting = true
                     val address = info.groupOwnerAddress?.hostAddress
                     io.execute { if (host) accept(token) else connect(token, address) }
                 }
             }
-        } catch (_: Exception) { stop(); emit("stopped") }
+        } catch (_: Exception) { stop("lost"); emit("stopped") }
     }
     private fun accept(token: Int) {
         try {
@@ -212,7 +221,7 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
                 if (links.size >= 7 || token != epoch.get()) { socket.close(); continue }
                 attach(token, socket)
             }
-        } catch (_: Exception) { main.post { if (token == epoch.get()) { stop(); emit("error") } } }
+        } catch (_: Exception) { main.post { if (token == epoch.get()) { stop("lost"); emit("error") } } }
     }
     private fun connect(token: Int, address: String?) {
         var candidate: Socket? = null
@@ -226,14 +235,14 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
                 finally { if (connecting === socket) connecting = null }
             }
             attach(token, candidate ?: error("Host unavailable"))
-        } catch (_: Exception) { candidate?.runCatching { close() }; main.post { if (token == epoch.get()) { stop(); emit("error") } } }
+        } catch (_: Exception) { candidate?.runCatching { close() }; main.post { if (token == epoch.get()) { stop("lost"); emit("error") } } }
     }
     private fun attach(token: Int, socket: Socket) {
         socket.tcpNoDelay = true; socket.keepAlive = true
         val id = "$token-${ids.incrementAndGet()}"
         val link = Link(socket, token)
         synchronized(this) { if (token != epoch.get()) { socket.close(); return }; links[id] = link }
-        main.post { if (links[id] === link) emit("connected", "link" to id) }
+        main.post { if (links[id] === link) emit("connected", "link" to id, "generation" to -(token + 1)) }
         io.execute {
             try {
                 val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
@@ -248,7 +257,12 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
                         val bytes = ByteArray(length); input.readFully(bytes)
                         StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
                     } finally { deadline.cancel(false) }
-                    main.post { if (links[id] === link) emit("frame", "link" to id, "frame" to frame) }
+                    val held = holdFrame(-(token + 1), id)
+                    main.post {
+                        if (links[id] === link) emit("frame", "link" to id, "frame" to frame,
+                            "generation" to -(token + 1), "held" to held)
+                        else if (held) ConnectionService.finishFrame(-(token + 1))
+                    }
                 }
             } catch (_: Exception) { /* Only this member's link ends. */ }
             finally { main.post { if (links[id] === link) drop(id) } }
@@ -256,10 +270,13 @@ class GroupTransport(private val context: Context, messenger: BinaryMessenger,
     }
     private fun drop(id: String) {
         val link = links.remove(id) ?: return
-        link.socket.runCatching { close() }; emit("disconnected", "link" to id)
+        link.socket.runCatching { close() }
+        closed(backgroundGeneration(), "member")
+        emit("disconnected", "link" to id)
         if (!host) { stop(); emit("stopped") }
     }
-    fun stop() {
+    fun stop(reason: String = "disconnected") {
+        closed(backgroundGeneration(), reason)
         synchronized(this) {
             epoch.incrementAndGet(); running = false
             listener?.runCatching { close() }; listener = null

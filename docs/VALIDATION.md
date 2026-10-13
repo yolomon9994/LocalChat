@@ -1,5 +1,57 @@
 # Validation for v0.1.0
 
+## Hosted-group background protection - final checks 2026-10-13
+
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **362 passed**, exit 0 (340 existing + 22 new), 4m57s.
+  Output: `.dart_tool/group-background-milestone-tests.log` (local, ignored).
+- Nineteen new controller/channel checks cover empty hosting/discovery and
+  one-sided verification, foreground-unlock startup, admission arriving while
+  locked, foreground-authorized starts completing after locking, admitted-link
+  authorization, pending guests excluded until fresh approval, three-phone signed
+  host relay and per-member receipts, locked guest receiving/ACKs, generic alerts,
+  unread/visible-read gates, drafts/pin/archive, foreground-only new sends and
+  attachment gates, switch-off preservation and re-enable, locked notification
+  Stop, one-member departure versus last-verified-link loss with pending joins,
+  service/channel failures and explicit Retry without an incoming-message retry
+  loop, active-group deletion preserving unrelated history/drafts, queued start/
+  authorization cancellation, new-room stale Stop/status rejection, late direct
+  cleanup isolation, direct/group mode switching with fresh verification, and
+  held-frame completion after stale/unknown/malformed events. The Android bridge
+  check verifies exact negative room generation and admitted link IDs.
+- Three Settings widgets check group-only Retry after service failure, recovery
+  without a direct chat, 320 x 568 at 1.8x text with group/attachment guidance,
+  and PIN removal of Settings while the existing verified group stays protected.
+- Separate final new-test run: **22 passed**, exit 0, 17s;
+  `.dart_tool/group-background-targeted-tests.log`.
+- Initial existing background/group/search regression: **37 passed**, exit 0;
+  `.dart_tool/group-background-initial-tests.log`. Development lint issues and
+  fixture initialization (background/notifications), direct Go nearby setup and
+  UI teardown outside Flutter's fake clock were corrected. Temporary probe
+  markers were removed; obsolete hung test runs were stopped.
+- Final `flutter analyze`: no issues, exit 0;
+  `.dart_tool/group-background-analyze.log`.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0; `.dart_tool/group-background-apk-build.log`.
+  Compiles native BackgroundConnection, ConnectionService, MainActivity and
+  GroupTransport integration. APK:
+  `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Final `flutter build web --no-wasm-dry-run`: passed, exit 0;
+  `.dart_tool/group-background-web-build.log`; output `build/web`.
+  Existing optional Cupertino font warning remains; the app uses Material icons.
+- Code/docs review and `git -c core.safecrlf=false diff --check`: clean.
+  No dependencies, Android permissions, schema, backup payload or encrypted wire
+  messages changed. SQLite stays schema 11; v1-v8 backup compatibility remains.
+- Android's official foreground-service launch/type documentation was checked;
+  existing `remoteMessaging` integration is reused. Links are in
+  [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md).
+- Actual Android service/notification/Stop/wake-lock lifecycle, three-phone
+  screen-off relaying, battery/Doze/vendor behavior and upgrades remain pending;
+  see [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md). Simulated encrypted transports
+  and native compilation do not establish hardware reliability.
+- Changes are saved locally, unstaged and uncommitted. The user handles Git;
+  staging this milestone must include `android` as well as `lib`, `test` and docs.
+
 ## Saved group search - final checks 2026-10-13
 
 - Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
@@ -42,7 +94,8 @@
   No package, native permission, schema, backup-payload or wire changes.
 - Physical phone checks remain pending; see [GROUP_SEARCH.md](GROUP_SEARCH.md).
   Automated transport simulation does not establish hardware reliability.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed this milestone as `6f342bb`; local `origin/main` matches.
+  Physical group-search checks remain pending.
 
 ## Group pin/archive - final checks 2026-10-13
 

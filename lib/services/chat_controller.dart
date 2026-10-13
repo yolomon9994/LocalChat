@@ -401,6 +401,7 @@ class ChatController extends ChangeNotifier {
     chatFiles: chatFiles,
     prepare: _prepareGroup,
     notifications: notifications,
+    background: background,
     canAct: () => initialized && !_disposed && _appAccessible && _appForeground,
   );
   Future<bool> _prepareGroup() => _nearbyAction(() async {
@@ -925,6 +926,12 @@ class ChatController extends ChangeNotifier {
       case 'backgroundStatus':
         background.nativeStatus(event);
       case 'backgroundStopped':
+        final token = event['generation'] as int?;
+        if (token != null && token < 0) {
+          if (groups.transportGeneration == token) await groups.stop();
+          break;
+        }
+        if (token != null && token != _transportGeneration) break;
         await transport.stop();
         started = false;
         scanning = false;
@@ -1136,6 +1143,24 @@ class ChatController extends ChangeNotifier {
 
   void _requestBackground() => unawaited(_protectBackground());
   Future<void> _protectBackground() {
+    if (groups.backgroundReady) {
+      final epoch = groups.epoch;
+      final token = groups.transportGeneration;
+      bool same() =>
+          !_disposed &&
+          groups.backgroundReady &&
+          groups.epoch == epoch &&
+          groups.transportGeneration == token;
+      return background.protect(
+        token,
+        groupLinks: groups.links.values
+            .where((l) => l.admitted)
+            .map((l) => l.id)
+            .toList(),
+        canStart: () => same() && _appAccessible && _appForeground,
+        sameConnection: same,
+      );
+    }
     final session = _session;
     return background.protect(
       _transportGeneration,
@@ -1684,7 +1709,22 @@ class ChatController extends ChangeNotifier {
     super.dispose();
   }
 
+  String? _groupProtectionKey;
   void _groupChanged() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    final admitted =
+        groups.links.values.where((l) => l.admitted).map((l) => l.id).toList()
+          ..sort();
+    final key = groups.backgroundReady
+        ? '${groups.epoch}/${groups.transportGeneration}/${admitted.join(',')}'
+        : null;
+    if (key != _groupProtectionKey) {
+      _groupProtectionKey = key;
+      if (!groups.backgroundReady && background.protectsGroup) {
+        background.connectionEnded(group: true, unexpected: groups.running);
+      }
+      _requestBackground();
+    }
+    notifyListeners();
   }
 }

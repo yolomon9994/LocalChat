@@ -218,7 +218,7 @@ class _GroupHubScreenState extends State<GroupHubScreen> {
             ),
           const SizedBox(height: 20),
           const Text(
-            'Keep the host open for reliable delivery. Connection protection currently applies to direct chats. No host migration, automatic reconnect or offline group outbox. New members receive new messages only. Group history is included in encrypted backups.',
+            'Keep the host connected. Enable Keep connection active in Settings to help receive and relay group text in the background. Images and files require foreground unlock. No host migration, automatic reconnect or offline group outbox. New members receive new messages only. Group history is included in encrypted backups.',
           ),
         ],
       ),

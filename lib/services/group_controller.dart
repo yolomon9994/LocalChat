@@ -7,6 +7,7 @@ import '../core/secure_session.dart';
 import 'group_transport.dart';
 import 'draft_controller.dart';
 import 'chat_notifications.dart';
+import 'background_connection.dart';
 import 'image_files.dart';
 import 'attachment_transfers.dart';
 import 'chat_files.dart';
@@ -39,6 +40,7 @@ class GroupController extends ChangeNotifier {
     required this.canAct,
     this.accessRevision,
     this.notifications,
+    this.background,
     this.timeout = const Duration(seconds: 90),
     this.receiptTimeout = const Duration(seconds: 30),
     ImageFiles? imageFiles,
@@ -59,6 +61,7 @@ class GroupController extends ChangeNotifier {
   final DraftController drafts;
   final bool _ownsDrafts;
   final ChatNotifications? notifications;
+  final BackgroundConnection? background;
   final Future<bool> Function() prepare;
   final bool Function() canAct;
   final int Function()? accessRevision;
@@ -77,6 +80,13 @@ class GroupController extends ChangeNotifier {
   final _attempted = <String>{};
   List<GroupHistory> histories = [];
   int historyRevision = 0;
+  int? transportGeneration;
+  bool get backgroundReady =>
+      !_disposed &&
+      active != null &&
+      running &&
+      transportGeneration != null &&
+      links.values.any((l) => l.admitted && l.verified);
   List<GroupMember> members = [];
   List<Map<String, dynamic>> nearby = [];
   GroupHistory? active;
@@ -409,6 +419,13 @@ class GroupController extends ChangeNotifier {
             ? 'No nearby groups found'
             : 'Choose a nearby host';
       case 'connected':
+        final generation = event['generation'] as int?;
+        if (transportGeneration != null &&
+            generation != null &&
+            generation != transportGeneration) {
+          return;
+        }
+        transportGeneration = generation ?? transportGeneration;
         final id = event['link'] as String;
         if (!running ||
             links.containsKey(id) ||
@@ -435,15 +452,23 @@ class GroupController extends ChangeNotifier {
         );
         await transport.send(id, jsonEncode(link.session.hello));
       case 'frame':
-        final id = event['link'] as String;
-        final link = links[id];
-        if (link == null) return;
         try {
+          if (event['generation'] != null &&
+              event['generation'] != transportGeneration) {
+            return;
+          }
+          final id = event['link'] as String;
+          final link = links[id];
+          if (link == null) return;
           await _frame(link, event['frame'] as String);
         } catch (_) {
-          await _drop(id);
+          await _drop(event['link'] as String);
           error =
               'A group link failed verification or storage. Reconnect and compare fresh codes.';
+        } finally {
+          if (event['held'] == true) {
+            unawaited(background?.frameProcessed(event['generation'] as int?));
+          }
         }
       case 'disconnected':
         await _drop(event['link'] as String, close: false);
@@ -933,6 +958,7 @@ class GroupController extends ChangeNotifier {
         hosting = false;
         running = false;
         epoch = null;
+        transportGeneration = null;
         view = 0;
         members = [];
         nearby = [];

@@ -87,6 +87,8 @@ class FakeGroupTransport implements GroupTransport {
   final links = <String, (FakeGroupTransport, String)>{};
   final frames = <String>[];
   bool dropOutgoing = false;
+  bool holdReceived = false;
+  int generation = -2;
   Completer<void>? gate;
   @override
   Stream<Map<String, dynamic>> get events => bus.stream;
@@ -113,8 +115,12 @@ class FakeGroupTransport implements GroupTransport {
     final id = (++network.next).toString();
     links['g$id'] = (host, 'h$id');
     host.links['h$id'] = (this, 'g$id');
-    bus.add({'type': 'connected', 'link': 'g$id'});
-    host.bus.add({'type': 'connected', 'link': 'h$id'});
+    bus.add({'type': 'connected', 'link': 'g$id', 'generation': generation});
+    host.bus.add({
+      'type': 'connected',
+      'link': 'h$id',
+      'generation': host.generation,
+    });
   }
 
   @override
@@ -124,7 +130,13 @@ class FakeGroupTransport implements GroupTransport {
     if (target == null) throw StateError('Disconnected');
     frames.add(frame);
     if (!dropOutgoing) {
-      target.$1.bus.add({'type': 'frame', 'link': target.$2, 'frame': frame});
+      target.$1.bus.add({
+        'type': 'frame',
+        'link': target.$2,
+        'frame': frame,
+        'generation': target.$1.generation,
+        'held': target.$1.holdReceived,
+      });
     }
   }
 
@@ -143,5 +155,6 @@ class FakeGroupTransport implements GroupTransport {
       await closeLink(key);
     }
     if (identical(network.host, this)) network.host = null;
+    generation--;
   }
 }

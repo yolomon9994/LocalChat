@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Group background protection uses the [three-phone checklist](GROUP_BACKGROUND.md),
+including locked host relaying, member departure, Stop and screen-off battery limits.
+
 Group search uses the [search checklist](GROUP_SEARCH.md), including archived
 history, exact older-message navigation, unread/draft preservation and PIN gates.
 

@@ -22,7 +22,7 @@ class BackgroundSettings extends StatelessWidget {
             subtitle: Text(
               b.isDemo
                   ? 'Simulated mode only; no background browser connection.'
-                  : 'Keep the current verified direct chat while using another app or turning the screen off. Uses additional battery. Hosted groups are not protected.',
+                  : 'Keep the current verified direct chat or group while using another app or turning the screen off. Groups can receive and relay text. Uses additional battery.',
             ),
             value: b.enabled,
             onChanged: b.initialized && !b.busy
@@ -53,7 +53,9 @@ class BackgroundSettings extends StatelessWidget {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
-          if (b.enabled && !b.active && controller.ready)
+          if (b.enabled &&
+              !b.active &&
+              (controller.ready || controller.groups.backgroundReady))
             TextButton(
               onPressed: b.busy ? null : controller.retryBackground,
               child: const Text('Retry connection protection'),
@@ -79,7 +81,7 @@ class BackgroundSettings extends StatelessWidget {
             ),
           ],
           const Text(
-            'The ongoing notification has a Stop action. Queued messages send only while unlocked and in the foreground. Reconnection stays manual.',
+            'The ongoing notification has a Stop action. New messages, member approval, images and files require foreground unlock. Reconnection stays manual.',
           ),
           const SizedBox(height: 28),
         ],

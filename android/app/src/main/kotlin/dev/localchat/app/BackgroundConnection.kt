@@ -18,8 +18,8 @@ import java.lang.ref.WeakReference
 class BackgroundConnection(
     private val activity: MainActivity,
     private val bridge: MethodChannel,
-    private val eligible: (Int) -> Boolean,
-    private val stopConnection: (String) -> Unit,
+    private val eligible: (Int, List<String>) -> Boolean,
+    private val stopConnection: (Int, String) -> Unit,
     private val changed: (Map<String, Any>) -> Unit
 ) {
     private val prefs = activity.getSharedPreferences("background_connection", 0)
@@ -28,7 +28,11 @@ class BackgroundConnection(
     private val main = Handler(Looper.getMainLooper())
     private var pending: MethodChannel.Result? = null
     private var timeout: Runnable? = null
-    private var generation = -1
+    @Volatile private var generation = -1
+    @Volatile private var groupGeneration = 0
+    @Volatile private var groupLinks: List<String> = emptyList()
+    private fun isEligible(token: Int) = eligible(token,
+        if (token == groupGeneration) groupLinks else emptyList())
     var foreground = false
     private var disposed = false
 
@@ -55,7 +59,7 @@ class BackgroundConnection(
                     }
                     "start" -> {
                         val token = call.argument<Int>("generation") ?: error("No live connection")
-                        check(foreground && eligible(token)) { "Return to the verified chat first" }
+                        check(foreground && isEligible(token)) { "Return to the verified chat first" }
                         check(prefs.getBoolean("enabled", false))
                         if (!allowed()) {
                             result.error("NOTIFICATIONS_BLOCKED", "Allow connection notifications.", null)
@@ -84,6 +88,16 @@ class BackgroundConnection(
                         }
                     }
                     "stop" -> { deactivate(clearLoss = false); result.success(null) }
+                    "groupLinks" -> {
+                        val token = call.argument<Int>("generation") ?: error("Missing group generation")
+                        val ids = call.argument<List<String>>("links") ?: error("Missing verified links")
+                        require(token < 0 && ids.size <= 7 && ids.distinct().size == ids.size)
+                        if (eligible(token, ids)) {
+                            groupGeneration = token
+                            groupLinks = ids.toList()
+                        }
+                        result.success(null)
+                    }
                     "frameProcessed" -> {
                         call.argument<Int>("generation")?.let { ConnectionService.finishFrame(it) }
                         result.success(null)
@@ -117,6 +131,7 @@ class BackgroundConnection(
         "active" to (ConnectionService.activeEpoch != 0 && ConnectionService.activeEpoch == ConnectionService.desiredEpoch),
         "allowed" to allowed(),
         "batteryExempt" to power.isIgnoringBatteryOptimizations(activity.packageName),
+        "generation" to generation,
         "reason" to (prefs.getString("reason", "") ?: ""))
 
     private fun allowed() = manager.areNotificationsEnabled() &&
@@ -124,7 +139,11 @@ class BackgroundConnection(
         (Build.VERSION.SDK_INT < 26 || manager.getNotificationChannel(ConnectionService.CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE)
 
     fun mayRun(epoch: Int, token: Int) = !disposed && epoch == ConnectionService.desiredEpoch &&
-        token == generation && prefs.getBoolean("enabled", false) && eligible(token) && allowed()
+        token == generation && prefs.getBoolean("enabled", false) && isEligible(token) && allowed()
+
+    fun holdGroupFrame(token: Int, link: String): Boolean =
+        token == generation && token == groupGeneration && groupLinks.contains(link) &&
+            ConnectionService.holdFrame(token)
 
     fun started(epoch: Int) {
         if (epoch != ConnectionService.desiredEpoch || disposed) return
@@ -151,15 +170,18 @@ class BackgroundConnection(
         prefs.edit().putString("reason", reason).apply()
         deactivate()
         changed(status())
-        stopConnection(reason)
+        stopConnection(generation, reason)
     }
 
-    fun connectionClosed(reason: String) {
+    fun connectionClosed(reason: String, token: Int) {
+        if (token != generation) return
+        if (token < 0 && reason == "member" && isEligible(token)) return
+        val finalReason = if (reason == "member") "lost" else reason
         val wasActive = ConnectionService.desiredEpoch != 0
-        if (wasActive) prefs.edit().putString("reason", reason).apply()
+        if (wasActive) prefs.edit().putString("reason", finalReason).apply()
         deactivate(clearLoss = false)
         if (wasActive) {
-            if (reason == "lost" && allowed()) ConnectionService.showLoss(activity)
+            if (finalReason == "lost" && allowed()) ConnectionService.showLoss(activity)
             changed(status())
         }
     }
