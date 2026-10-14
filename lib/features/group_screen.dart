@@ -6,6 +6,7 @@ import '../services/group_controller.dart';
 import 'chats_tab.dart' show formatConversationTime;
 import 'group_image_bubble.dart';
 import 'group_file_bubble.dart';
+import 'text_message_actions.dart';
 import 'group_chat_tile.dart';
 import 'group_menu.dart';
 import 'archived_chats_screen.dart';
@@ -584,76 +585,93 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
   Widget _messageBubble(GroupText message) {
     final c = widget.controller;
     final highlighted = _showTarget && message.key == widget.focusMessageKey;
+    Widget bubble(EditableTextContextMenuBuilder? menu) => Container(
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(maxWidth: 520),
+      decoration: BoxDecoration(
+        color: message.author == g.selfId
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: highlighted
+            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (highlighted) const Text('Search result'),
+          Text(
+            message.author == g.selfId
+                ? 'You'
+                : '${message.name} • ${message.author.substring(0, 8)}',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          if (message.file != null)
+            GroupFileBubble(
+              key: ValueKey(message.key),
+              controller: c,
+              groupId: widget.id,
+              message: message,
+            )
+          else if (message.image != null)
+            GroupImageBubble(
+              key: ValueKey(message.key),
+              controller: c,
+              message: message,
+            )
+          else if (highlighted)
+            HighlightedSearchText(
+              message.text,
+              widget.searchQuery,
+              selectable: true,
+              contextMenuBuilder: menu,
+            )
+          else
+            SelectableText(message.text, contextMenuBuilder: menu),
+          Text(
+            formatConversationTime(message.timestamp),
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          if (message.author == g.selfId) ...[
+            Text(
+              'Saved locally • ${message.receipts.entries.where((e) => e.key != g.selfId && e.value == 'received').length}/${message.targets.length - 1} received',
+            ),
+            for (final id in message.targets.where((id) => id != g.selfId))
+              Text(
+                '${g.members.where((m) => m.id == id).isNotEmpty ? g.members.firstWhere((m) => m.id == id).name : id.substring(0, 8)}: ${message.receipts[id] ?? 'unconfirmed'}',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+          ],
+        ],
+      ),
+    );
     return Align(
       key: ValueKey(('group-message', widget.id, message.key)),
       alignment: message.author == g.selfId
           ? Alignment.centerRight
           : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        padding: const EdgeInsets.all(12),
-        constraints: const BoxConstraints(maxWidth: 520),
-        decoration: BoxDecoration(
-          color: message.author == g.selfId
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-          border: highlighted
-              ? Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 2,
-                )
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (highlighted) const Text('Search result'),
-            Text(
-              message.author == g.selfId
-                  ? 'You'
-                  : '${message.name} • ${message.author.substring(0, 8)}',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            if (message.file != null)
-              GroupFileBubble(
-                key: ValueKey(message.key),
-                controller: c,
-                groupId: widget.id,
-                message: message,
-              )
-            else if (message.image != null)
-              GroupImageBubble(
-                key: ValueKey(message.key),
-                controller: c,
-                message: message,
-              )
-            else if (highlighted)
-              HighlightedSearchText(
-                message.text,
-                widget.searchQuery,
-                selectable: true,
-              )
-            else
-              SelectableText(message.text),
-            Text(
-              formatConversationTime(message.timestamp),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-            if (message.author == g.selfId) ...[
-              Text(
-                'Saved locally • ${message.receipts.entries.where((e) => e.key != g.selfId && e.value == 'received').length}/${message.targets.length - 1} received',
+      child: message.image != null || message.file != null
+          ? bubble(null)
+          : TextMessageActions(
+              controller: c,
+              messageKey: (widget.id, message.key),
+              text: message.text,
+              isCurrent: () => g.histories.any(
+                (h) =>
+                    h.id == widget.id &&
+                    h.messages.any(
+                      (m) =>
+                          m.key == message.key &&
+                          m.image == null &&
+                          m.file == null &&
+                          m.text == message.text,
+                    ),
               ),
-              for (final id in message.targets.where((id) => id != g.selfId))
-                Text(
-                  '${g.members.where((m) => m.id == id).isNotEmpty ? g.members.firstWhere((m) => m.id == id).name : id.substring(0, 8)}: ${message.receipts[id] ?? 'unconfirmed'}',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-            ],
-          ],
-        ),
-      ),
+              builder: bubble,
+            ),
     );
   }
 

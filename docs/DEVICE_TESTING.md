@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Text copying has a [clipboard checklist](MESSAGE_COPY.md), including full/selected
+text, group/search history, PIN/background dismissal, paste and accessibility.
+
 Browser group UI/protocol simulation has a separate [checklist](BROWSER_GROUPS.md);
 it does not replace physical phone testing.
 

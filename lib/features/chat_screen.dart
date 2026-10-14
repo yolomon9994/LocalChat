@@ -6,6 +6,7 @@ import 'outgoing_message_actions.dart';
 import 'connection_help.dart';
 import 'chat_image_view.dart';
 import 'chat_file_bubble.dart';
+import 'text_message_actions.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -273,63 +274,86 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     ).toLocal();
     final stamp =
         '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    Widget bubble(EditableTextContextMenuBuilder? menu) => Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * .8,
+      ),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: message.outgoing
+            ? colors.primaryContainer
+            : colors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: highlighted
+            ? Border.all(color: colors.primary, width: 2)
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (highlighted)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                'Search result',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(color: foreground),
+              ),
+            ),
+          if (message.file != null)
+            ChatFileBubble(controller: widget.controller, message: message)
+          else if (message.image != null)
+            ChatImageBubble(controller: widget.controller, message: message)
+          else
+            SelectableText(
+              message.text,
+              style: TextStyle(color: foreground),
+              contextMenuBuilder: menu,
+            ),
+          const SizedBox(height: 5),
+          Text(
+            '$stamp${message.outgoing ? ' · ${message.status}' : ''}',
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: foreground),
+          ),
+          if (message.image == null &&
+              message.file == null &&
+              message.outgoing &&
+              (message.status == 'queued' || message.status == 'unconfirmed'))
+            OutgoingMessageActions(
+              controller: widget.controller,
+              message: message,
+            ),
+        ],
+      ),
+    );
     return Align(
       key: ValueKey((message.peerId, message.id, message.outgoing)),
       alignment: message.outgoing
           ? Alignment.centerRight
           : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * .8,
-        ),
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: message.outgoing
-              ? colors.primaryContainer
-              : colors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(16),
-          border: highlighted
-              ? Border.all(color: colors.primary, width: 2)
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (highlighted)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  'Search result',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: foreground),
-                ),
-              ),
-            if (message.file != null)
-              ChatFileBubble(controller: widget.controller, message: message)
-            else if (message.image != null)
-              ChatImageBubble(controller: widget.controller, message: message)
-            else
-              SelectableText(message.text, style: TextStyle(color: foreground)),
-            const SizedBox(height: 5),
-            Text(
-              '$stamp${message.outgoing ? ' · ${message.status}' : ''}',
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: foreground),
+      child: message.image != null || message.file != null
+          ? bubble(null)
+          : TextMessageActions(
+              controller: widget.controller,
+              messageKey: (message.peerId, message.id, message.outgoing),
+              text: message.text,
+              isCurrent: () =>
+                  widget.controller.selectedPeer == message.peerId &&
+                  widget.controller.messages.any(
+                    (m) =>
+                        m.peerId == message.peerId &&
+                        m.id == message.id &&
+                        m.outgoing == message.outgoing &&
+                        m.image == null &&
+                        m.file == null &&
+                        m.text == message.text,
+                  ),
+              builder: bubble,
             ),
-            if (message.image == null &&
-                message.file == null &&
-                message.outgoing &&
-                (message.status == 'queued' || message.status == 'unconfirmed'))
-              OutgoingMessageActions(
-                controller: widget.controller,
-                message: message,
-              ),
-          ],
-        ),
-      ),
     );
   }
 

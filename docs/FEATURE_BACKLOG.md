@@ -3,10 +3,26 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Browser group simulation
+## Current milestone: Copy text messages
 
-Implemented: 2026-10-13. Saved locally, unstaged and uncommitted; the user handles
-Git. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
+Implemented: 2026-10-14. Saved locally, unstaged and uncommitted; the user handles
+Git. See [MESSAGE_COPY.md](MESSAGE_COPY.md).
+
+- [x] Full-message copy in direct/group chats, offline history and search anchors.
+- [x] Preserve selection, with Copy message/Copy selection and Select all.
+- [x] Browser right-click menu and screen-reader Copy message action.
+- [x] PIN/foreground/message/route gates, stale callback rejection and dismissal.
+- [x] Exact Unicode/multiline text, generic success/failure and duplicate-tap guard.
+- [x] Preserve drafts, history, receipts and chat organization; no storage changes.
+- [x] All 395 tests and 13 Chrome checks pass; clean analysis, Android/browser builds
+      and review. See [VALIDATION.md](VALIDATION.md).
+- [ ] Manual clipboard/phone/browser checks; see [MESSAGE_COPY.md](MESSAGE_COPY.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Browser group simulation: implemented and committed
+
+Implemented: 2026-10-13. Committed by the user as `83fc101`; the local
+`origin/main` reference matches. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
 
 - [x] Browser factory selects in-tab simulated host/guests; Android keeps native transport.
 - [x] Create/find/join with clear demo labels and explicit local code confirmation.
@@ -17,7 +33,7 @@ Git. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
 - [x] All 382 tests pass, clean analysis, Android/browser builds and review.
 - [x] All 20 new checks pass in headless Chrome; see [VALIDATION.md](VALIDATION.md).
 - [ ] Manual browser checklist; see [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User commits browser group simulation (`83fc101`); local `origin/main` matches.
 
 ## Background protection for hosted groups: implemented and committed
 
@@ -366,7 +382,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Local notifications with hidden message previews by default and lock-aware taps.
 - [x] Optional background connection mode with battery/connection controls;
       protects a current running verified direct/group session, subject to Doze/vendor limits.
-- [ ] Reply to messages, copy actions, and starred messages.
+- [x] Copy text messages in direct/group chats, including selection and offline history.
+- [ ] Reply to messages and starred messages.
 - [ ] QR scanning for session verification (bind to the verified session).
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
 - [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
@@ -403,7 +420,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 6. Hosted group text chat (committed).
 7. Direct-chat image/file sharing and group images/files (committed).
 8. Saved group drafts, group pin/archive and group search (committed).
-9. Group background protection (committed), browser group simulation (current).
+9. Group background protection (committed), browser group simulation (committed).
+10. Copy text messages (current); replies and starred messages can follow.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

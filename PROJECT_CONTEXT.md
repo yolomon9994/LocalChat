@@ -29,13 +29,51 @@ Group drafts were committed by the user as `2a83b30`.
 Group pin/archive was committed by the user as `f07316d`.
 Group search was committed by the user as `6f342bb`.
 Group background protection was committed by the user as `734ea96`.
-The current milestone is browser group simulation.
+Browser group simulation was committed by the user as `83fc101`.
+The current milestone is copying text messages.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Message-copy milestone - implemented, 2026-10-14
+
+Baseline: `83fc101`, matching local `origin/main`; the tree was clean at startup.
+Changes are saved locally, unstaged and uncommitted. The user handles Git.
+See docs/MESSAGE_COPY.md and docs/VALIDATION.md.
+
+- Shared TextMessageActions wraps text bubbles in both screens. Bubble padding/
+  timestamps support long-press and browser secondary-click -> Copy; text keeps
+  selection with Copy message, Copy selection and Select all. Custom semantics
+  provide a screen-reader action; highlighted group search remains selectable.
+- Exact original bodies (Unicode/whitespace/newlines) are written via Flutter
+  Clipboard.setData. Failure/success notices are generic. A pending write rejects
+  duplicate taps; copies do not change drafts/history/receipts/organization.
+- Guard initialized/foreground/unlocked state, current route, access revision,
+  message key/body/kind and widget lifetime. Root notifications synchronously
+  invalidate callbacks on privacy/target loss; surviving overlays close at the
+  frame boundary. Lock removes pushed dialogs/routes as before. Delayed platform
+  completions cannot show a stale confirmation. Direct keys include direction;
+  group keys include author to handle colliding message IDs.
+- Browser startup disables the native context menu so Flutter-rendered selection
+  actions work. No native, dependency, schema, backup or wire changes.
+- Clipboard data is outside app encryption/lock; authorized writes can finish
+  after locking and are not automatically erased. Existing keyboard selection
+  shortcuts remain Flutter behavior. Do not claim secure clipboard erasure.
+- Thirteen new widget checks intercept Clipboard method calls for exact values,
+  errors/delays, privacy/deletion races, PIN removal, group search/drafts/flags,
+  same-ID directions/authors, small-screen semantics, right-click dismissal and
+  attachment isolation. Final full regression: **395 passed**, exit 0 (382 prior
+  + 13 new), 5m06s; separate final VM13 and Chrome13 checks pass. Analysis is clean
+  and Android/browser builds pass. See VALIDATION.md for exact commands/logs.
+- Chrome uses the existing cached-CanvasKit test-server workaround. Widget tests
+  acknowledge the browser context-menu engine channel and intercept clipboard
+  calls; actual browser permission/paste behavior remains a manual check. Fixture
+  backup/PIN crypto uses real time and read-state snapshots wait for the opening
+  read to settle. Temporary probes were removed. No SDK or app protocol changes.
+- Manual clipboard paste/browser-permission and Android device checks are pending.
+
 ## Browser-group milestone - implemented, 2026-10-13
 
-Baseline: `734ea96`. Changes are saved locally, unstaged and uncommitted.
+Baseline: `734ea96`. The user committed this milestone as `83fc101`.
 The user handles Git. See docs/BROWSER_GROUPS.md and docs/VALIDATION.md.
 
 - main.createDemoController() explicitly injects DemoGroupTransport only for the
@@ -145,8 +183,7 @@ The user handles Git. See docs/GROUP_SEARCH.md and docs/VALIDATION.md.
 - Final full regression: **340 passed**, exit 0 (324 prior + 16 new), using
   `--concurrency=2 --timeout=2m`. Analysis is clean; arm64 debug APK and browser
   builds pass. Logs are ignored in .dart_tool. Physical checks remain pending.
-  Group background protection is committed; browser group simulation is the
-  current milestone.
+  Group background protection is committed; browser group simulation is also committed.
 
 ## Group-management milestone - implemented, 2026-10-13
 

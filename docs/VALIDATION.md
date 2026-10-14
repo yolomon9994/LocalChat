@@ -1,5 +1,56 @@
 # Validation for v0.1.0
 
+## Copy text messages - final checks 2026-10-14
+
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **395 passed**, exit 0 (382 existing + 13 new), 5m06s.
+  Output: `.dart_tool/message-copy-milestone-final.log` (local, ignored by Git).
+- Separate final VM run of `test/message_copy_test.dart`: **13 passed**, exit 0,
+  15s; `.dart_tool/message-copy-targeted-final.log`. Covers exact incoming/queued
+  outgoing Unicode/multiline/whitespace copying while offline, colliding direct
+  IDs with different directions and group IDs with different authors, full-body
+  versus selected-text copying, highlighted archived group/search history,
+  preserved drafts/history/receipts/organization, background invalidation and
+  stale callbacks after return, deletion, PIN route removal/unlock, generic
+  clipboard errors/retry, delayed completion/duplicate taps, 320 x 568 at 1.8x
+  text with accessibility actions, right-click dismissal and file-bubble isolation.
+- Headless Chrome `flutter test test/message_copy_test.dart --platform chrome
+  --timeout=2m --reporter expanded --verbose`: **13 passed**, exit 0, 9s after
+  setup; `.dart_tool/message-copy-chrome-final.log`. Clipboard channel calls are
+  intercepted for exact values, errors and delays; real browser clipboard
+  permission/paste behavior is still a manual check, not claimed from mocks.
+- Installed Flutter 3.38.7's Windows Chrome test server again returned 404 for
+  present CanvasKit files. The existing ignored workspace CDP helper served the
+  exact cached SDK assets to the isolated test browser, without app/SDK changes,
+  dependencies or downloads; `.dart_tool/message-copy-chrome-final-assets.log`.
+- Chrome fixture setup initially stalled on BrowserContextMenu's engine-only
+  channel, which the automated widget binding does not dispatch. The fixture now
+  acknowledges that channel before enabling Flutter's custom selection toolbar;
+  actual browser context-menu/paste behavior remains in the manual checklist.
+  Backup fixture cryptography and PIN hashing run outside Flutter's fake clock.
+- Development failures were corrected: missing semantics import/fixture lint,
+  the semantics handle's cleanup timing, real-time controller deletion, read-state
+  snapshots taken before the opening read completed, and dismissing a dialog via
+  its barrier rather than looking for a BackButton. Initial full run had 392
+  passes/three fixture failures; the corrected full rerun passes all 395. Temporary
+  probe prints were removed; browser-only channel acknowledgment was added after
+  the full VM run and does not change its non-web test paths. Raw earlier logs
+  remain local/ignored.
+- Final `flutter analyze`: no issues, exit 0;
+  `.dart_tool/message-copy-analyze.log`.
+- `flutter build web --no-wasm-dry-run`: passed, exit 0, 147.5s;
+  `.dart_tool/message-copy-web-build.log`; output `build/web`.
+  Existing optional Cupertino font warning remains; the app uses Material icons.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, exit 0, 253s; `.dart_tool/message-copy-apk-build.log`.
+  APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Code/docs review and `git -c core.safecrlf=false diff --check`: clean.
+  No native permissions/code, dependencies, schema, backup or wire changes.
+- Physical clipboard/paste, browser permissions and TalkBack checks remain pending;
+  see [MESSAGE_COPY.md](MESSAGE_COPY.md). Copied text is outside the app lock;
+  an authorized platform write may finish after locking, with no late feedback.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Browser group simulation - final checks 2026-10-13
 
 - Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
@@ -53,7 +104,8 @@
 - Manual browser interaction/file-picker/download/visual checks remain pending;
   see [BROWSER_GROUPS.md](BROWSER_GROUPS.md). Android hardware/network/background
   checks remain pending separately; simulation does not validate those behaviors.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- The user committed browser group simulation as `83fc101`; local `origin/main`
+  matches. Manual checks remain pending. The user handles Git.
 
 ## Hosted-group background protection - final checks 2026-10-13
 

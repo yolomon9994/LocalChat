@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'core/local_store.dart';
 import 'demo/demo_store.dart';
 import 'demo/demo_transport.dart';
@@ -64,6 +65,9 @@ class _LocalChatAppState extends State<LocalChatApp>
   @override
   void initState() {
     super.initState();
+    // Use Flutter's selectable-text menus so the browser demo exposes the
+    // same full-message and selected-text copy actions as Android.
+    if (kIsWeb) unawaited(BrowserContextMenu.disableContextMenu());
     WidgetsBinding.instance.addObserver(this);
     controller.setAppAccess(_lock.canAccess);
     final lifecycle = WidgetsBinding.instance.lifecycleState;

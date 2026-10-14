@@ -311,6 +311,20 @@ erase exported copies. No plaintext temporary file is created by LocalChat, but
 temporary managed/native buffers do not guarantee forensic erasure. See
 [file controls and hardware checks](FILE_SHARING.md).
 
+## Explicit text copying
+
+Message-copy actions require foreground unlock and an existing text message in
+its current route. Access/message revisions reject stale menu callbacks after
+lock/background, deletion or route removal. Copy menus and active confirmations
+are dismissed on invalidation; delayed platform writes cannot show stale feedback.
+No extra plaintext index, stored clipboard value or wire message is introduced.
+
+Copied text is placed on the system/browser clipboard outside LocalChat's history
+encryption and app lock. An already authorized platform write may finish after
+locking, and copies survive app locking or chat deletion. LocalChat does not
+read or clear the clipboard on lock, avoiding overwriting newer clipboard data.
+See [copy controls and manual checks](MESSAGE_COPY.md).
+
 ## Before a production release
 
 Obtain an independent protocol/code review; test on several Android vendors and API levels; fuzz framing/handshake parsing; consider a reviewed protocol library, key pinning and identity-change UX, robust bounded storage and background lifecycle support. Use a private release signing key rather than the provided debug build configuration.

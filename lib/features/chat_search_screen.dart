@@ -15,10 +15,12 @@ class HighlightedSearchText extends StatelessWidget {
     super.key,
     this.maxLines,
     this.selectable = false,
+    this.contextMenuBuilder,
   });
   final String text, query;
   final int? maxLines;
   final bool selectable;
+  final EditableTextContextMenuBuilder? contextMenuBuilder;
   @override
   Widget build(BuildContext context) {
     final spans = <TextSpan>[];
@@ -44,7 +46,14 @@ class HighlightedSearchText extends StatelessWidget {
       }
     }
     spans.add(TextSpan(text: text.substring(end)));
-    if (selectable) return SelectableText.rich(TextSpan(children: spans));
+    if (selectable) {
+      return contextMenuBuilder == null
+          ? SelectableText.rich(TextSpan(children: spans))
+          : SelectableText.rich(
+              TextSpan(children: spans),
+              contextMenuBuilder: contextMenuBuilder,
+            );
+    }
     return Text.rich(
       TextSpan(children: spans),
       maxLines: maxLines,
