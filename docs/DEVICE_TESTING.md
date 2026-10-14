@@ -1,5 +1,8 @@
 # Two-device acceptance tests
 
+Replies have a [direct/group checklist](MESSAGE_REPLIES.md), including quote
+drafts, original jumps, outbox retry, older peers, group receipts and v9 backups.
+
 Text copying has a [clipboard checklist](MESSAGE_COPY.md), including full/selected
 text, group/search history, PIN/background dismissal, paste and accessibility.
 

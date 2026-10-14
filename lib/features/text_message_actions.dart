@@ -15,6 +15,7 @@ class TextMessageActions extends StatefulWidget {
     required this.text,
     required this.isCurrent,
     required this.builder,
+    this.onReply,
   });
 
   final ChatController controller;
@@ -22,6 +23,7 @@ class TextMessageActions extends StatefulWidget {
   final String text;
   final bool Function() isCurrent;
   final Widget Function(EditableTextContextMenuBuilder menu) builder;
+  final VoidCallback? onReply;
 
   @override
   State<TextMessageActions> createState() => _TextMessageActionsState();
@@ -92,6 +94,14 @@ class _TextMessageActionsState extends State<TextMessageActions> {
       revision == _revision &&
       access == widget.controller.accessRevision;
 
+  void _reply(int revision, int access) {
+    if (!_valid(revision, access)) return;
+    final action = widget.onReply;
+    _selection?.hideToolbar();
+    if (_menuRoute?.isCurrent == true) _menuRoute!.navigator?.pop();
+    action?.call();
+  }
+
   Future<void> _copy(String text, int revision, int access) async {
     if (_copying || text.isEmpty || !_valid(revision, access)) return;
     _copying = true;
@@ -135,6 +145,17 @@ class _TextMessageActionsState extends State<TextMessageActions> {
         return SimpleDialog(
           title: const Text('Message actions'),
           children: [
+            if (widget.onReply != null)
+              SimpleDialogOption(
+                onPressed: () => _reply(revision, access),
+                child: const Row(
+                  children: [
+                    Icon(Icons.reply),
+                    SizedBox(width: 12),
+                    Text('Reply'),
+                  ],
+                ),
+              ),
             SimpleDialogOption(
               onPressed: () => unawaited(_copy(text, revision, access)),
               child: const Row(
@@ -162,6 +183,11 @@ class _TextMessageActionsState extends State<TextMessageActions> {
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: editable.contextMenuAnchors,
       buttonItems: [
+        if (widget.onReply != null)
+          ContextMenuButtonItem(
+            label: 'Reply',
+            onPressed: () => _reply(revision, access),
+          ),
         ContextMenuButtonItem(
           label: 'Copy message',
           onPressed: () => unawaited(_copy(text, revision, access)),
@@ -197,6 +223,9 @@ class _TextMessageActionsState extends State<TextMessageActions> {
     final revision = _revision, access = widget.controller.accessRevision;
     return Semantics(
       customSemanticsActions: {
+        if (widget.onReply != null)
+          const CustomSemanticsAction(label: 'Reply to message'): () =>
+              _reply(revision, access),
         const CustomSemanticsAction(label: 'Copy message'): () =>
             unawaited(_copy(text, revision, access)),
       },

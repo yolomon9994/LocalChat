@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-13. The workspace is authoritative; read README.md,
+Updated: 2026-10-15. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -30,14 +30,68 @@ Group pin/archive was committed by the user as `f07316d`.
 Group search was committed by the user as `6f342bb`.
 Group background protection was committed by the user as `734ea96`.
 Browser group simulation was committed by the user as `83fc101`.
-The current milestone is copying text messages.
+Text copying was committed by the user as `b9ef43c`.
+The current milestone is replies to text messages.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Message-replies milestone - implemented, 2026-10-14
+
+Baseline: `b9ef43c`; tree clean at startup. The user handles Git.
+Changes are saved locally, unstaged and uncommitted. See MESSAGE_REPLIES.md and
+VALIDATION.md. Final validation on 2026-10-15: **430 tests pass**, exit 0
+(395 prior + 35 new), 4m52s; **12 Chrome UI checks pass**, clean analysis and
+Android/browser builds. Manual device/browser checks remain pending.
+
+- MessageReply holds a bounded 512-byte trimmed Unicode preview, author label,
+  original ID and local direction (direct) or identity author ID (groups). Direct
+  receivers invert reference direction; it remains stable across history/identity
+  imports. Quotes are supplied by the responder, not original-author proof.
+- Shared text menus/selection/semantics add Reply beside Copy. Both screens show
+  composer preview/cancel, preserve text, display sent/received quotes, and anchor
+  exact older originals using existing lazy lists. Missing/conflicting originals
+  show a generic notice. Jump to latest resets scroll without changing drafts.
+- DraftController owns quote selection with text/revision/target epochs. Quote-only
+  drafts persist, cancellations keep text, save/load failures retry, and matching
+  acceptance clears text+quote atomically. Newer edits and quotes not included in
+  a send are preserved. Deleted histories cannot regain queued draft writes.
+- SQLite 12 adds encrypted reply_drafts with scope/target AAD and an authenticated
+  direct-message kind reply; ordinary plaintext-in-ciphertext bodies, including
+  literal JSON, retain their format. Old ciphertext is not rewritten on upgrade.
+  Group quotes remain in encrypted signed group history. No native/package changes.
+- Direct verified features negotiate reply-v1; outbox retries retain metadata/ID.
+  Older peers keep plain text; a queued reply waits at the front rather than losing
+  its quote. Group links/rosters negotiate group-reply-v1; all admitted members
+  must support it. The group-reply/1 signature domain binds quote fields, context
+  and recipients; modification/insertion/removal fails. Departed authors can be
+  quoted. Replies deliberately share that preview with current/new members.
+- V9 quote-bearing archives include reply-only drafts and mixed histories; v1-v8
+  imports remain supported. Plain exports keep their applicable previous version.
+  Safe merge compares quotes, destination drafts win, migration re-encrypts data
+  and imported pending replies remain unconfirmed, never automatically sent.
+- interactionRevision records foreground/access changes for reply operations
+  without changing existing background-service authorization. Selection, cancel,
+  navigation and sending recheck privacy/source/route/lifetime. Quote cards hide on
+  background/lock and notifications retain only answer bodies. Group acceptance
+  interrupted by privacy keeps unconfirmed history and preserves newer drafts.
+- New coverage: 17 model/protocol/draft/archive, 12 UI (including live group send)
+  and six native encrypted migration/reopen/rollback/import checks. Initial focused
+  passes corrected stale schema expectations/idempotent migration fixtures and UI
+  label/finder issues. The live group UI fixture now drives fake-clock UI work
+  and real-time crypto/peer queues together; waiting on idle without pumping
+  caused the old fixture stall. Temporary probes were removed. One existing
+  400ms file-transfer check failed during concurrent builds, passed in isolation
+  unchanged, and passed in the final complete regression without builds running.
+- Browser direct demo acknowledges replies and quotes its response to a quoted
+  answer. Simulated group controllers use the same new features and signatures.
+  Browser test fixtures acknowledge the engine-only context menu channel, run
+  cryptography outside fake time, and use the cached-CanvasKit server workaround.
+  Physical/manual checks remain pending. The user commits/pushes themselves.
+
 ## Message-copy milestone - implemented, 2026-10-14
 
-Baseline: `83fc101`, matching local `origin/main`; the tree was clean at startup.
-Changes are saved locally, unstaged and uncommitted. The user handles Git.
+Baseline: `83fc101`; the user committed this milestone as `b9ef43c`.
+The user handles Git.
 See docs/MESSAGE_COPY.md and docs/VALIDATION.md.
 
 - Shared TextMessageActions wraps text bubbles in both screens. Bubble padding/

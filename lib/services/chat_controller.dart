@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show PlatformException;
 import '../core/local_store.dart';
 import '../demo/demo_group_transport.dart';
 import '../core/models.dart';
+import '../core/message_reply.dart';
 import '../core/chat_backup.dart';
 import 'backup_files.dart';
 import '../core/secure_session.dart';
@@ -28,6 +29,7 @@ class ChatController extends ChangeNotifier {
     this.transport,
     this.store, {
     this.isDemo = false,
+    this.supportsReplies = true,
     this.ackTimeout = const Duration(seconds: 30),
     this.connectionTimeout = const Duration(seconds: 90),
     NearbyTools? nearbyTools,
@@ -67,10 +69,12 @@ class ChatController extends ChangeNotifier {
                ? WifiGroupTransport()
                : UnavailableGroupTransport());
   final GroupTransport _groupTransport;
+  final bool supportsReplies;
   bool get simulatedGroups => isDemo && _groupTransport is DemoGroupTransport;
   bool get canUseGroups => !isDemo || simulatedGroups;
   final ImageFiles imageFiles;
   final Duration imageTimeout;
+  bool remoteSupportsReplies = false;
   bool remoteSupportsImages = false;
   bool pickingImage = false;
   SecretBox? _pendingImage;
@@ -400,6 +404,7 @@ class ChatController extends ChangeNotifier {
     store,
     drafts: drafts,
     accessRevision: () => accessRevision,
+    replyAccessRevision: () => interactionRevision,
     imageFiles: imageFiles,
     chatFiles: chatFiles,
     prepare: _prepareGroup,
@@ -453,6 +458,10 @@ class ChatController extends ChangeNotifier {
       connectionIssue != null && error == connectionIssue!.title;
   String get queueWaitingReason => outboxPaused
       ? 'Resolve the storage error, then tap Resume outbox in this chat.'
+      : ready &&
+            !remoteSupportsReplies &&
+            messages.any((m) => m.status == 'queued' && m.reply != null)
+      ? 'A queued reply needs the updated app on both phones. Update the other phone, or cancel that queued reply to send later messages.'
       : selectedPeer == connectedPeer && ready
       ? 'Queued messages send in order while the app is unlocked and in the foreground.'
       : !started
@@ -470,6 +479,7 @@ class ChatController extends ChangeNotifier {
   bool get appAccessible => _appAccessible;
   bool get appForeground => _appForeground;
   int accessRevision = 0;
+  int interactionRevision = 0;
   void backupFilePicked(Uint8List? bytes, {String? notice}) {
     pendingBackup = bytes;
     backupNotice = notice;
@@ -513,6 +523,12 @@ class ChatController extends ChangeNotifier {
       _appForeground &&
       selectedPeer != null &&
       (canSend || conversations.any((p) => p.id == selectedPeer));
+  bool get canSubmitText =>
+      canSubmit &&
+      (selectedPeer == null ||
+          drafts.replyFor(selectedPeer!) == null ||
+          !canSend ||
+          remoteSupportsReplies);
   bool get outboxPaused =>
       selectedPeer != null && _pausedOutboxes.contains(selectedPeer);
   int get queuedCount =>
@@ -547,6 +563,7 @@ class ChatController extends ChangeNotifier {
     }
     notifications.setAccessible(_appAccessible && _appForeground);
     accessRevision++;
+    interactionRevision++;
     unawaited(groups.accessChanged());
     _readVisible();
     notifyListeners();
@@ -626,6 +643,7 @@ class ChatController extends ChangeNotifier {
   void setAppForeground(bool foreground) {
     if (_appForeground == foreground) return;
     _appForeground = foreground;
+    interactionRevision++;
     if (!foreground) {
       _pauseImages();
       _pauseFiles();
@@ -994,6 +1012,9 @@ class ChatController extends ChangeNotifier {
           throw const FormatException('Repeated verification');
         }
         remoteVerified = true;
+        remoteSupportsReplies =
+            payload['features'] is List &&
+            (payload['features'] as List).contains('reply-v1');
         remoteSupportsImages =
             payload['features'] is List &&
             (payload['features'] as List).contains('image-v1');
@@ -1016,6 +1037,12 @@ class ChatController extends ChangeNotifier {
             timestamp > 8640000000000000) {
           throw const FormatException('Invalid text message');
         }
+        final reply = payload.containsKey('reply')
+            ? MessageReply.parse(payload['reply'], group: false).reversed()
+            : null;
+        if (reply != null && (!supportsReplies || !remoteSupportsReplies)) {
+          throw const FormatException('Unsupported message reply');
+        }
         await store.savePeer(connectedPeer!, _session!.peerName!);
         final inserted = await store.saveMessage(
           ChatMessage(
@@ -1025,6 +1052,7 @@ class ChatController extends ChangeNotifier {
             timestamp: timestamp,
             outgoing: false,
             status: 'received',
+            reply: reply,
           ),
         );
         if (inserted) {
@@ -1101,7 +1129,7 @@ class ChatController extends ChangeNotifier {
     try {
       await _sendPayload({
         'type': 'verified',
-        'features': ['image-v1', 'file-v1'],
+        'features': ['image-v1', 'file-v1', if (supportsReplies) 'reply-v1'],
       });
       localVerified = true;
       await _updateReady();
@@ -1177,11 +1205,56 @@ class ChatController extends ChangeNotifier {
     );
   }
 
+  Future<bool> replyTo(ChatMessage message) async {
+    final peer = selectedPeer, access = interactionRevision;
+    bool allowed() =>
+        !_disposed &&
+        initialized &&
+        appAccessible &&
+        appForeground &&
+        selectedPeer == peer &&
+        peer == message.peerId &&
+        access == interactionRevision &&
+        supportsReplies &&
+        message.text.trim().isNotEmpty &&
+        messages.any(
+          (m) =>
+              m.id == message.id &&
+              m.outgoing == message.outgoing &&
+              m.peerId == peer &&
+              m.text == message.text &&
+              m.image == null &&
+              m.file == null,
+        );
+    if (!allowed()) return false;
+    await drafts.load(peer!);
+    if (!allowed() || !drafts.isLoaded(peer)) return false;
+    final name = (message.outgoing ? profileName : selectedName).trim();
+    try {
+      drafts.setReply(
+        peer,
+        MessageReply(
+          id: message.id,
+          outgoing: message.outgoing,
+          name: name.isEmpty ? (message.outgoing ? 'You' : 'Peer') : name,
+          text: MessageReply.preview(message.text),
+        ),
+      );
+    } on FormatException {
+      error = 'Could not select this message for a reply.';
+      notifyListeners();
+      return false;
+    }
+    return true;
+  }
+
   /// True means accepted into local encrypted history, not delivered. The draft
   /// is removed atomically with acceptance, so a failed write is retried by ID.
   Future<bool> sendText(String text, {bool queueIfOffline = false}) async {
     final intendedPeer = selectedPeer;
     final access = accessRevision;
+    final interaction = interactionRevision;
+    final reply = intendedPeer == null ? null : drafts.replyFor(intendedPeer);
     final draftRevision =
         intendedPeer == null ||
             !drafts.isLoaded(intendedPeer) ||
@@ -1193,6 +1266,7 @@ class ChatController extends ChangeNotifier {
       error = null;
       if (!initialized ||
           access != accessRevision ||
+          (reply != null && interaction != interactionRevision) ||
           selectedPeer != intendedPeer ||
           intendedPeer == null ||
           !_appAccessible ||
@@ -1206,6 +1280,14 @@ class ChatController extends ChangeNotifier {
       );
       if (!canSend && (!queueIfOffline || !savedPeer)) {
         throw const FormatException('Verify both phones before sending');
+      }
+      if (reply != null) {
+        MessageReply.parse(reply.toJson(), group: false);
+        if (!supportsReplies || (canSend && !remoteSupportsReplies)) {
+          throw const FormatException(
+            'Replies require the updated app on both phones.',
+          );
+        }
       }
       final rawText = text;
       text = text.trim();
@@ -1227,6 +1309,7 @@ class ChatController extends ChangeNotifier {
             timestamp: timestamp,
             outgoing: true,
             status: 'queued',
+            reply: reply,
           ),
           draftRevision: draftRevision,
           draftText: rawText,
@@ -1234,7 +1317,8 @@ class ChatController extends ChangeNotifier {
               initialized &&
               _appAccessible &&
               _appForeground &&
-              access == accessRevision,
+              access == accessRevision &&
+              (reply == null || interaction == interactionRevision),
         );
       } catch (_) {
         throw const FormatException(
@@ -1324,6 +1408,12 @@ class ChatController extends ChangeNotifier {
       final pending = await store.queuedMessages(peer);
       if (pending.isEmpty || !_canDrain(peer)) return;
       message = pending.first;
+      if (message.reply != null && !remoteSupportsReplies) {
+        error =
+            'Queued reply needs the updated app on both phones. Update the peer or cancel this reply.';
+        notifyListeners();
+        return;
+      }
       if (!_validOutgoing(message)) {
         throw const FormatException('Invalid queued message');
       }
@@ -1359,6 +1449,7 @@ class ChatController extends ChangeNotifier {
         'id': outgoing.id,
         'timestamp': outgoing.timestamp,
         'text': outgoing.text,
+        if (outgoing.reply != null) 'reply': outgoing.reply!.toJson(),
       });
       if (!_appAccessible || !_appForeground || access != accessRevision) {
         // Encryption consumed a sequence number, so discard this session rather
@@ -1635,6 +1726,7 @@ class ChatController extends ChangeNotifier {
     _ackTimers.clear();
     _attemptedIds.clear();
     _session = null;
+    remoteSupportsReplies = false;
     remoteSupportsImages = false;
     remoteSupportsFiles = false;
     try {

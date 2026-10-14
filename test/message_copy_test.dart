@@ -270,7 +270,12 @@ void main() {
       await direct(tester);
       await openBubbleMenu(tester, directBubble(incoming));
       final callback = tester
-          .widget<SimpleDialogOption>(find.byType(SimpleDialogOption))
+          .widget<SimpleDialogOption>(
+            find.ancestor(
+              of: find.text('Copy'),
+              matching: find.byType(SimpleDialogOption),
+            ),
+          )
           .onPressed!;
       c.setAppForeground(false);
       await tester.pumpAndSettle();
@@ -290,7 +295,12 @@ void main() {
     await direct(tester);
     await openBubbleMenu(tester, directBubble(incoming));
     final callback = tester
-        .widget<SimpleDialogOption>(find.byType(SimpleDialogOption))
+        .widget<SimpleDialogOption>(
+          find.ancestor(
+            of: find.text('Copy'),
+            matching: find.byType(SimpleDialogOption),
+          ),
+        )
         .onPressed!;
     await tester.runAsync(() => c.deleteConversation('alice'));
     await tester.pumpAndSettle();
@@ -313,7 +323,12 @@ void main() {
       await tester.pumpAndSettle();
       await openBubbleMenu(tester, directBubble(incoming));
       final callback = tester
-          .widget<SimpleDialogOption>(find.byType(SimpleDialogOption))
+          .widget<SimpleDialogOption>(
+            find.ancestor(
+              of: find.text('Copy'),
+              matching: find.byType(SimpleDialogOption),
+            ),
+          )
           .onPressed!;
       lock.lock();
       await tester.pumpAndSettle();
@@ -353,7 +368,12 @@ void main() {
       gate = Completer<void>();
       await openBubbleMenu(tester, directBubble(incoming));
       final callback = tester
-          .widget<SimpleDialogOption>(find.byType(SimpleDialogOption))
+          .widget<SimpleDialogOption>(
+            find.ancestor(
+              of: find.text('Copy'),
+              matching: find.byType(SimpleDialogOption),
+            ),
+          )
           .onPressed!;
       callback();
       callback();

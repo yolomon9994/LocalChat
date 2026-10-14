@@ -7,6 +7,7 @@ import '../core/models.dart';
 import '../core/group_models.dart';
 import '../core/chat_image.dart';
 import '../core/chat_file.dart';
+import '../core/message_reply.dart';
 
 /// Preview-only state. Never opens SQLite or platform secure storage.
 class DemoStore extends LocalStore {
@@ -15,6 +16,7 @@ class DemoStore extends LocalStore {
   final _unread = <(String, String, bool)>{};
   final _drafts = <String, String>{};
   final _groupDrafts = <String, String>{};
+  final _replyDrafts = <(String, bool), MessageReply>{};
   final _groups = <String, GroupHistory>{};
   final _images = <(String, String, bool), Uint8List>{};
   @override
@@ -93,6 +95,7 @@ class DemoStore extends LocalStore {
   Future<void> deleteGroupHistory(String id) async {
     _groups.remove(id);
     _groupDrafts.remove(id);
+    _replyDrafts.remove((id, true));
   }
 
   @override
@@ -118,7 +121,10 @@ class DemoStore extends LocalStore {
     bool clearDraft = false,
   }) async {
     await saveGroupHistory(group);
-    if (clearDraft) _groupDrafts.remove(group.id);
+    if (clearDraft) {
+      _groupDrafts.remove(group.id);
+      _replyDrafts.remove((group.id, true));
+    }
   }
 
   @override
@@ -155,6 +161,7 @@ class DemoStore extends LocalStore {
               'outgoing': e.value.outgoing,
               'status': e.value.status,
               'read': !_unread.contains(e.key),
+              if (e.value.reply != null) 'reply': e.value.reply!.toJson(),
               if (e.value.file != null)
                 'file': {
                   ...e.value.file!.toJson(),
@@ -168,12 +175,30 @@ class DemoStore extends LocalStore {
             },
           )
           .toList(),
-      groupDrafts: _groupDrafts.entries
-          .map((e) => <String, Object?>{'group': e.key, 'text': e.value})
-          .toList(),
-      drafts: _drafts.entries
-          .map((e) => <String, Object?>{'peer': e.key, 'text': e.value})
-          .toList(),
+      groupDrafts: [
+        for (final id in {
+          ..._groupDrafts.keys,
+          ..._replyDrafts.keys.where((k) => k.$2).map((k) => k.$1),
+        })
+          {
+            'group': id,
+            'text': _groupDrafts[id] ?? '',
+            if (_replyDrafts[(id, true)] != null)
+              'reply': _replyDrafts[(id, true)]!.toJson(),
+          },
+      ],
+      drafts: [
+        for (final id in {
+          ..._drafts.keys,
+          ..._replyDrafts.keys.where((k) => !k.$2).map((k) => k.$1),
+        })
+          {
+            'peer': id,
+            'text': _drafts[id] ?? '',
+            if (_replyDrafts[(id, false)] != null)
+              'reply': _replyDrafts[(id, false)]!.toJson(),
+          },
+      ],
     );
   }
 
@@ -228,6 +253,9 @@ class DemoStore extends LocalStore {
         status: m['status'] as String,
         image: m['image'] == null ? null : ChatImage.parse(m['image']),
         file: m['file'] == null ? null : ChatFile.parse(m['file']),
+        reply: m['reply'] == null
+            ? null
+            : MessageReply.parse(m['reply'], group: false),
       );
       if (m['file'] != null) {
         _files[key] = base64Decode((m['file'] as Map)['data'] as String);
@@ -250,6 +278,12 @@ class DemoStore extends LocalStore {
     }
     for (final d in plan.data.drafts) {
       _drafts[d['peer'] as String] = d['text'] as String;
+      if (d['reply'] != null) {
+        _replyDrafts[(d['peer'] as String, false)] = MessageReply.parse(
+          d['reply'],
+          group: false,
+        );
+      }
     }
     identity = pair;
     for (final g in groupPlan) {
@@ -257,6 +291,12 @@ class DemoStore extends LocalStore {
     }
     for (final d in plan.data.groupDrafts) {
       _groupDrafts[d['group'] as String] = d['text'] as String;
+      if (d['reply'] != null) {
+        _replyDrafts[(d['group'] as String, true)] = MessageReply.parse(
+          d['reply'],
+          group: true,
+        );
+      }
     }
     return plan;
   }
@@ -270,6 +310,37 @@ class DemoStore extends LocalStore {
       _drafts.remove(peer);
     } else {
       _drafts[peer] = text;
+    }
+  }
+
+  @override
+  Future<MessageReply?> draftReply(String id, {bool group = false}) async =>
+      _replyDrafts[(id, group)];
+
+  @override
+  Future<void> saveDraftState(
+    String id,
+    String text,
+    MessageReply? reply, {
+    bool group = false,
+  }) async {
+    if (!(group ? _groups.containsKey(id) : _people.containsKey(id))) {
+      throw const FormatException('This conversation has been deleted.');
+    }
+    if (utf8.encode(text).length > 1024 * 1024) {
+      throw const FormatException('Draft exceeds the 1 MiB limit.');
+    }
+    if (reply != null) MessageReply.parse(reply.toJson(), group: group);
+    final drafts = group ? _groupDrafts : _drafts;
+    if (text.isEmpty) {
+      drafts.remove(id);
+    } else {
+      drafts[id] = text;
+    }
+    if (reply == null) {
+      _replyDrafts.remove((id, group));
+    } else {
+      _replyDrafts[(id, group)] = reply;
     }
   }
 
@@ -327,10 +398,17 @@ class DemoStore extends LocalStore {
 
   @override
   Future<bool> saveMessage(ChatMessage message) async {
+    if (message.reply != null) {
+      MessageReply.parse(message.reply!.toJson(), group: false);
+      if (message.image != null || message.file != null) {
+        throw const FormatException('Replies are text only');
+      }
+    }
     final key = (message.peerId, message.id, message.outgoing);
     final previous = _messages[key];
     if (previous != null) {
       if (previous.text != message.text ||
+          previous.reply != message.reply ||
           jsonEncode(previous.file?.toJson()) !=
               jsonEncode(message.file?.toJson()) ||
           jsonEncode(previous.image?.toJson()) !=
@@ -365,7 +443,10 @@ class DemoStore extends LocalStore {
     bool clearDraft = false,
   }) async {
     await saveMessage(message);
-    if (clearDraft) _drafts.remove(message.peerId);
+    if (clearDraft) {
+      _drafts.remove(message.peerId);
+      _replyDrafts.remove((message.peerId, false));
+    }
   }
 
   @override
@@ -417,6 +498,7 @@ class DemoStore extends LocalStore {
       status: status,
       image: message.image,
       file: message.file,
+      reply: message.reply,
     );
   }
 
@@ -496,10 +578,12 @@ class DemoStore extends LocalStore {
     _files.removeWhere((key, _) => key.$1 == peer);
     _unread.removeWhere((key) => key.$1 == peer);
     _drafts.remove(peer);
+    _replyDrafts.remove((peer, false));
   }
 
   @override
   Future<void> clearHistory() async {
+    _replyDrafts.clear();
     _groups.clear();
     _images.clear();
     _files.clear();

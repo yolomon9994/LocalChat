@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
+import 'package:local_chat/core/message_reply.dart';
 import 'package:local_chat/core/chat_backup.dart';
 import 'package:local_chat/core/group_models.dart';
 import 'package:local_chat/core/group_search.dart';
@@ -62,6 +63,235 @@ void main() {
     updated: 1,
   );
 
+  const reply = MessageReply(
+    id: 'original',
+    outgoing: false,
+    name: 'Alice',
+    text: 'Quoted secret reply',
+  );
+  ChatMessage answer({MessageReply? quote = reply}) => ChatMessage(
+    id: 'reply-answer',
+    peerId: 'alice',
+    text: 'Private reply body',
+    timestamp: 2000,
+    outgoing: true,
+    status: 'queued',
+    reply: quote,
+  );
+
+  test(
+    'schema 11 upgrade preserves ciphertext and adds encrypted reply drafts',
+    () async {
+      await store.saveMessage(message());
+      await store.saveDraft('alice', 'Old draft');
+      await store.close();
+      final old = await openDatabase(databasePath);
+      final body = (await old.query('messages')).single['body'];
+      await old.execute('DROP TABLE reply_drafts');
+      await old.setVersion(11);
+      await old.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      final upgraded = await openDatabase(databasePath);
+      expect(await upgraded.getVersion(), 12);
+      expect((await upgraded.query('messages')).single['body'], body);
+      expect(await store.draft('alice'), 'Old draft');
+      expect(await store.draftReply('alice'), isNull);
+      await store.saveDraftState('alice', '', reply);
+      final encrypted =
+          (await upgraded.query('reply_drafts')).single['body'] as String;
+      expect(
+        utf8.decode(base64Decode(encrypted), allowMalformed: true),
+        isNot(contains(reply.text)),
+      );
+      expect(await store.draftReply('alice'), reply);
+      expect((await store.exportBackup()).drafts.single['text'], '');
+    },
+  );
+
+  test(
+    'reply body uses authenticated kind and survives restart without interpreting plain JSON',
+    () async {
+      await store.saveMessage(answer());
+      await store.saveMessage(
+        const ChatMessage(
+          id: 'literal',
+          peerId: 'alice',
+          text: '{"text":"ordinary","reply":{"id":"fake"}}',
+          timestamp: 3000,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      final db = await openDatabase(databasePath);
+      final row = (await db.query(
+        'messages',
+        where: 'id = ?',
+        whereArgs: ['reply-answer'],
+      )).single;
+      expect(row['kind'], 'reply');
+      expect(
+        utf8.decode(base64Decode(row['body'] as String), allowMalformed: true),
+        isNot(contains(reply.text)),
+      );
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      final history = await store.messages('alice');
+      expect(history.first.reply, reply);
+      expect(history.last.reply, isNull);
+      expect(history.last.text, '{"text":"ordinary","reply":{"id":"fake"}}');
+      final reopened = await openDatabase(databasePath);
+      await reopened.update(
+        'messages',
+        {'kind': 'text'},
+        where: 'id = ?',
+        whereArgs: ['reply-answer'],
+      );
+      await expectLater(
+        store.messages('alice'),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+      await reopened.update(
+        'messages',
+        {'kind': 'reply'},
+        where: 'id = ?',
+        whereArgs: ['reply-answer'],
+      );
+    },
+  );
+
+  test(
+    'reply draft updates and cancellation are atomic on a storage failure',
+    () async {
+      await store.saveDraftState('alice', 'Kept answer', reply);
+      final db = await openDatabase(databasePath);
+      final before = (await db.query('drafts')).single['body'];
+      await db.execute(
+        "CREATE TRIGGER fail_reply_state BEFORE INSERT ON reply_drafts BEGIN SELECT RAISE(ABORT, 'blocked'); END",
+      );
+      await expectLater(
+        store.saveDraftState(
+          'alice',
+          'Wrong newer answer',
+          const MessageReply(
+            id: 'new',
+            outgoing: true,
+            name: 'Me',
+            text: 'New quote',
+          ),
+        ),
+        throwsA(anything),
+      );
+      expect(await store.draft('alice'), 'Kept answer');
+      expect(await store.draftReply('alice'), reply);
+      expect((await db.query('drafts')).single['body'], before);
+      await db.execute('DROP TRIGGER fail_reply_state');
+      await store.saveDraftState('alice', 'Kept answer', null);
+      expect(await store.draftReply('alice'), isNull);
+      expect(await store.draft('alice'), 'Kept answer');
+    },
+  );
+
+  test(
+    'failed reply draft cleanup rolls back outgoing message and preserves both draft parts',
+    () async {
+      await store.saveDraftState('alice', 'Private reply body', reply);
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_reply_cleanup BEFORE DELETE ON reply_drafts BEGIN SELECT RAISE(ABORT, 'blocked'); END",
+      );
+      await expectLater(
+        store.saveOutgoingMessage(answer(), clearDraft: true),
+        throwsA(anything),
+      );
+      expect(await store.messages('alice'), isEmpty);
+      expect(await store.draft('alice'), 'Private reply body');
+      expect(await store.draftReply('alice'), reply);
+      await db.execute('DROP TRIGGER fail_reply_cleanup');
+      await store.saveOutgoingMessage(answer(), clearDraft: true);
+      expect((await store.messages('alice')).single.reply, reply);
+      expect(await store.draft('alice'), '');
+      expect(await store.draftReply('alice'), isNull);
+      expect(await store.saveMessage(answer()), isFalse);
+      await expectLater(
+        store.saveMessage(answer(quote: null)),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test(
+    'v9 import re-encrypts quotes and quote-only drafts with destination keys',
+    () async {
+      await store.saveMessage(answer());
+      await store.saveDraftState('alice', '', reply);
+      final source = await store.exportBackup();
+      final db = await openDatabase(databasePath);
+      final original = (await db.query('messages')).single['body'];
+      await store.close();
+      await deleteDatabase(databasePath);
+      FlutterSecureStorage.setMockInitialValues({});
+      store = LocalStore(now: () => clock);
+      await store.open();
+      await store.importBackup(await BackupData.parse(source.toJson()));
+      expect((await store.messages('alice')).single.reply, reply);
+      expect((await store.messages('alice')).single.status, 'unconfirmed');
+      expect(await store.draftReply('alice'), reply);
+      final destination = await openDatabase(databasePath);
+      expect(
+        (await destination.query('messages')).single['body'],
+        isNot(original),
+      );
+      await store.deleteConversation('alice');
+      expect(await destination.query('reply_drafts'), isEmpty);
+    },
+  );
+
+  test(
+    'native signed group quotes and quote-only drafts survive restart and deletion',
+    () async {
+      final group = await draftGroup();
+      final self = await identityId(group.host);
+      final reference = MessageReply(
+        id: randomId(),
+        author: self,
+        name: 'Host',
+        text: 'Quoted group text',
+      );
+      final m = await GroupText.create(
+        store.identity,
+        'Host',
+        group: group.id,
+        host: group.host,
+        epoch: randomId(),
+        view: 1,
+        text: 'Group reply',
+        targets: [self],
+        reply: reference,
+      );
+      await store.saveGroupHistory(group.copy(messages: [m]));
+      await store.saveDraftState(group.id, '', reference, group: true);
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      expect(
+        (await store.groupHistories()).single.messages.single.reply,
+        reference,
+      );
+      expect(await store.draftReply(group.id, group: true), reference);
+      final backup = await store.exportBackup();
+      expect(backup.toJson()['version'], 9);
+      expect(backup.groupDrafts.single['text'], '');
+      final history = (await store.groupHistories()).single;
+      await store.saveOutgoingGroupHistory(history, clearDraft: true);
+      expect(await store.draftReply(group.id, group: true), isNull);
+      await store.saveDraftState(group.id, '', reference, group: true);
+      await store.deleteGroupHistory(group.id);
+      expect(await store.draftReply(group.id, group: true), isNull);
+    },
+  );
+
   test(
     'group search after reopening uses encrypted histories and preserves metadata and drafts',
     () async {
@@ -102,7 +332,7 @@ void main() {
       expect(await store.groupDraft(group.id), 'Secret unsearched draft');
       final afterDb = await openDatabase(databasePath);
       expect((await afterDb.query('group_history')).single, before);
-      expect(await afterDb.getVersion(), 11);
+      expect(await afterDb.getVersion(), 12);
       expect(
         await afterDb.query(
           'sqlite_master',
@@ -141,7 +371,7 @@ void main() {
       store = LocalStore();
       await store.open();
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 11);
+      expect(await upgraded.getVersion(), 12);
       expect((await upgraded.query('group_history')).single['body'], body);
       final restored = (await store.groupHistories()).single;
       expect(restored.pinned || restored.archived, isFalse);
@@ -300,7 +530,7 @@ void main() {
       await old.close();
       store = LocalStore();
       await store.open();
-      expect(await (await openDatabase(databasePath)).getVersion(), 11);
+      expect(await (await openDatabase(databasePath)).getVersion(), 12);
       expect((await store.messages('alice')).single.text, message().text);
       expect(await store.draft('alice'), 'Direct draft');
       expect((await store.groupHistories()).single.id, group.id);
@@ -489,7 +719,7 @@ void main() {
       await store.open();
       expect((await store.messages('alice')).single.text, message().text);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 11);
+      expect(await upgraded.getVersion(), 12);
       expect(await upgraded.query('images'), isEmpty);
     },
   );
@@ -573,7 +803,7 @@ void main() {
       );
       expect((await store.exportBackup()).seed, seed);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 11);
+      expect(await upgraded.getVersion(), 12);
       expect(await upgraded.query('files'), isEmpty);
     },
   );
@@ -662,7 +892,7 @@ void main() {
         utf8.decode(base64Decode(ciphertext), allowMalformed: true),
         isNot(contains(m.image!.digest)),
       );
-      expect(await db.getVersion(), 11);
+      expect(await db.getVersion(), 12);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -722,7 +952,7 @@ void main() {
       final raw = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
       expect(raw, isNot(contains(m.file!.name)));
       expect(raw, isNot(contains(m.file!.digest)));
-      expect(await db.getVersion(), 11);
+      expect(await db.getVersion(), 12);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -1152,7 +1382,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 11);
+      expect(await upgraded.getVersion(), 12);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -1563,7 +1793,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 11);
+      expect(await (await openDatabase(databasePath)).getVersion(), 12);
     },
   );
   test(
@@ -1642,7 +1872,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 11);
+      expect(await (await openDatabase(databasePath)).getVersion(), 12);
     },
   );
 

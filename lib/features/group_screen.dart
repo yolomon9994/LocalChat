@@ -7,6 +7,8 @@ import 'chats_tab.dart' show formatConversationTime;
 import 'group_image_bubble.dart';
 import 'group_file_bubble.dart';
 import 'text_message_actions.dart';
+import 'message_reply_card.dart';
+import '../core/message_reply.dart';
 import 'group_chat_tile.dart';
 import 'group_menu.dart';
 import 'archived_chats_screen.dart';
@@ -329,6 +331,9 @@ class GroupChatScreen extends StatefulWidget {
 
 class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
   final _text = TextEditingController();
+  final _composerFocus = FocusNode();
+  late String? _focusMessageKey = widget.focusMessageKey;
+  bool _fromReply = false;
   final _routeToken = Object();
   ModalRoute<dynamic>? _route;
   bool _sending = false;
@@ -367,6 +372,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     }
     if (oldWidget.id != widget.id ||
         oldWidget.controller != widget.controller) {
+      _focusMessageKey = widget.focusMessageKey;
+      _fromReply = false;
+      _showTarget = true;
+      _atLatest = false;
       _text.clear();
       _restoreDraft();
       if (g.drafts.errorFor(widget.id, group: true) == null) {
@@ -406,6 +415,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     widget.routeObserver?.unsubscribe(this);
     g.setVisible(_routeToken, widget.id, false);
     g.drafts.removeListener(_draftChanged);
+    _composerFocus.dispose();
     _text.dispose();
     _scroll.dispose();
     _focusScroll.dispose();
@@ -418,6 +428,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     final text = _text.text;
     await g.sendText(
       text,
+      reply: g.drafts.replyFor(widget.id, group: true),
       draftText: text,
       draftRevision: g.drafts.revisionFor(widget.id, group: true),
     );
@@ -584,7 +595,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
 
   Widget _messageBubble(GroupText message) {
     final c = widget.controller;
-    final highlighted = _showTarget && message.key == widget.focusMessageKey;
+    final interaction = c.interactionRevision;
+    final highlighted = _showTarget && message.key == _focusMessageKey;
     Widget bubble(EditableTextContextMenuBuilder? menu) => Container(
       margin: const EdgeInsets.symmetric(vertical: 5),
       padding: const EdgeInsets.all(12),
@@ -602,13 +614,27 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (highlighted) const Text('Search result'),
+          if (highlighted)
+            Text(_fromReply ? 'Original message' : 'Search result'),
           Text(
             message.author == g.selfId
                 ? 'You'
                 : '${message.name} • ${message.author.substring(0, 8)}',
             style: Theme.of(context).textTheme.labelLarge,
           ),
+          if (message.reply != null && c.appAccessible && c.appForeground)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: MessageReplyCard(
+                key: ValueKey(('group-quote', widget.id, message.key)),
+                reply: message.reply!,
+                name: message.reply!.author == g.selfId
+                    ? 'You'
+                    : message.reply!.name,
+                onTap: () =>
+                    _openReply(message.reply!, interaction: interaction),
+              ),
+            ),
           if (message.file != null)
             GroupFileBubble(
               key: ValueKey(message.key),
@@ -659,6 +685,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
               controller: c,
               messageKey: (widget.id, message.key),
               text: message.text,
+              onReply: () => unawaited(_replyTo(message)),
               isCurrent: () => g.histories.any(
                 (h) =>
                     h.id == widget.id &&
@@ -675,17 +702,67 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     );
   }
 
+  Future<void> _replyTo(GroupText message) async {
+    if (await g.replyTo(widget.id, message) &&
+        mounted &&
+        widget.controller.appAccessible &&
+        widget.controller.appForeground &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      _composerFocus.requestFocus();
+    }
+  }
+
+  void _openReply(MessageReply reply, {int? interaction}) {
+    if (!mounted) return;
+    final c = widget.controller;
+    if (!c.appAccessible ||
+        !c.appForeground ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        (interaction != null && c.interactionRevision != interaction)) {
+      return;
+    }
+    final histories = g.histories.where((h) => h.id == widget.id);
+    final matches = histories.isEmpty
+        ? <GroupText>[]
+        : histories.first.messages
+              .where(
+                (m) =>
+                    m.key == '${reply.author}/${reply.id}' &&
+                    m.image == null &&
+                    m.file == null &&
+                    reply.matchesText(m.text),
+              )
+              .toList();
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Original message unavailable.')),
+      );
+      return;
+    }
+    setState(() {
+      _focusMessageKey = matches.first.key;
+      _fromReply = true;
+      _showTarget = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusScroll.hasClients) _focusScroll.jumpTo(0);
+    });
+  }
+
   void _jumpToLatest() {
     setState(() {
       _showTarget = false;
       _atLatest = true;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+    });
   }
 
   Widget _historyView(GroupHistory? history, List<Widget> header) {
     final messages = history?.messages ?? <GroupText>[];
-    final pivot = _showTarget && widget.focusMessageKey != null
-        ? messages.indexWhere((m) => m.key == widget.focusMessageKey)
+    final pivot = _showTarget && _focusMessageKey != null
+        ? messages.indexWhere((m) => m.key == _focusMessageKey)
         : -1;
     if (pivot < 0) {
       return ListView.builder(
@@ -702,9 +779,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ...header,
-                  if (_showTarget && widget.focusMessageKey != null)
-                    const Text(
-                      'The matching message is no longer in this group.',
+                  if (_showTarget && _focusMessageKey != null)
+                    Text(
+                      _fromReply
+                          ? 'Original message unavailable.'
+                          : 'The matching message is no longer in this group.',
                     ),
                 ],
               )
@@ -757,14 +836,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
       final GroupHistory? history = found.isEmpty ? null : found.first;
       final active = g.active?.id == widget.id;
       final c = widget.controller;
+      final interaction = c.interactionRevision;
+      final groupId = widget.id;
       return Scaffold(
         appBar: AppBar(
           title: Text(
             '${c.simulatedGroups ? 'Demo • ' : ''}${history?.title ?? 'Group unavailable'}',
           ),
           actions: [
-            if (history != null &&
-                !(_showTarget && widget.focusMessageKey != null))
+            if (history != null && !(_showTarget && _focusMessageKey != null))
               IconButton(
                 tooltip: 'Search group messages',
                 icon: const Icon(Icons.search),
@@ -780,7 +860,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                       )
                     : null,
               ),
-            if (_showTarget && widget.focusMessageKey != null)
+            if (_showTarget && _focusMessageKey != null)
               IconButton(
                 tooltip: 'Jump to latest',
                 onPressed: _jumpToLatest,
@@ -910,6 +990,32 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                     ),
                 ]),
               ),
+              if (c.appAccessible && c.appForeground)
+                if (g.drafts.replyFor(widget.id, group: true)
+                    case final MessageReply reply)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: MessageReplyCard(
+                      key: const ValueKey('group-reply-composer-preview'),
+                      reply: reply,
+                      name: reply.author == g.selfId ? 'You' : reply.name,
+                      onTap: () => _openReply(reply, interaction: interaction),
+                      onCancel: () {
+                        if (mounted &&
+                            c.appAccessible &&
+                            c.appForeground &&
+                            c.interactionRevision == interaction &&
+                            widget.id == groupId &&
+                            ModalRoute.of(context)?.isCurrent == true &&
+                            g.drafts.replyFor(groupId, group: true) == reply) {
+                          g.drafts.setReply(groupId, null, group: true);
+                        }
+                      },
+                      notice: active && !g.repliesAvailable
+                          ? 'Replies require every group member to use the updated app.'
+                          : null,
+                    ),
+                  ),
               if (g.drafts.errorFor(widget.id, group: true)
                   case final String error)
                 Padding(
@@ -937,6 +1043,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                       child: TextField(
                         controller: _text,
                         key: const ValueKey('group-message-composer'),
+                        focusNode: _composerFocus,
                         enabled:
                             history != null &&
                             widget.controller.appAccessible &&
@@ -961,6 +1068,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                       onPressed:
                           active &&
                               g.canSend &&
+                              (g.drafts.replyFor(widget.id, group: true) ==
+                                      null ||
+                                  g.repliesAvailable) &&
                               !_sending &&
                               g.drafts.isLoaded(widget.id, group: true)
                           ? _send

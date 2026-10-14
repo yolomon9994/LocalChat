@@ -10,7 +10,8 @@ the bubble to open the same menu. Back, Escape or tapping outside cancels it.
 
 Long-press the text itself to keep normal text selection. Its toolbar offers
 **Copy message** for the entire body, **Copy selection** for the selected text,
-and **Select all** when available. The search highlight remains selectable.
+and **Select all** when available. **Reply** now shares these menus; see
+[reply controls](MESSAGE_REPLIES.md). The search highlight remains selectable.
 Screen readers also have a **Copy message** custom action on the text bubble.
 Image/file bubbles keep their existing viewing and saving controls.
 

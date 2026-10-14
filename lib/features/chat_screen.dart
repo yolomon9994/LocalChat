@@ -7,6 +7,8 @@ import 'connection_help.dart';
 import 'chat_image_view.dart';
 import 'chat_file_bubble.dart';
 import 'text_message_actions.dart';
+import 'message_reply_card.dart';
+import '../core/message_reply.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -97,6 +99,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   @override
   void didPop() => widget.controller.setChatVisible(this, false);
   final _text = TextEditingController();
+  final _composerFocus = FocusNode();
+  late ChatMessage? _focusMessage = widget.focusMessage;
+  bool _fromReply = false;
   final _scroll = ScrollController();
   final _focusScroll = ScrollController();
   late bool _showTarget = widget.focusMessage != null;
@@ -228,7 +233,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   }
 
   Future<void> _send() async {
-    if (_sending || !widget.controller.canSubmit || _text.text.trim().isEmpty) {
+    if (_sending ||
+        !widget.controller.canSubmitText ||
+        _text.text.trim().isEmpty) {
       return;
     }
     final text = _text.text;
@@ -248,6 +255,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     widget.controller.drafts.removeListener(_draftChanged);
     widget.routeObserver?.unsubscribe(this);
     widget.controller.setChatVisible(this, false);
+    _composerFocus.dispose();
     _text.dispose();
     _scroll.dispose();
     _focusScroll.dispose();
@@ -255,7 +263,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
   }
 
   bool _isTarget(ChatMessage message) {
-    final target = widget.focusMessage;
+    final target = _focusMessage;
     return _showTarget &&
         target != null &&
         target.peerId == message.peerId &&
@@ -265,6 +273,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
 
   Widget _messageBubble(ChatMessage message) {
     final colors = Theme.of(context).colorScheme;
+    final interaction = widget.controller.interactionRevision;
     final highlighted = _isTarget(message);
     final foreground = message.outgoing
         ? colors.onPrimaryContainer
@@ -296,10 +305,30 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                'Search result',
+                _fromReply ? 'Original message' : 'Search result',
                 style: Theme.of(
                   context,
                 ).textTheme.labelMedium?.copyWith(color: foreground),
+              ),
+            ),
+          if (message.reply != null &&
+              widget.controller.appAccessible &&
+              widget.controller.appForeground)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: MessageReplyCard(
+                key: ValueKey((
+                  'message-quote',
+                  message.peerId,
+                  message.id,
+                  message.outgoing,
+                )),
+                reply: message.reply!,
+                name: message.reply!.outgoing == true
+                    ? 'You'
+                    : message.reply!.name,
+                onTap: () =>
+                    _openReply(message.reply!, interaction: interaction),
               ),
             ),
           if (message.file != null)
@@ -341,6 +370,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
               controller: widget.controller,
               messageKey: (message.peerId, message.id, message.outgoing),
               text: message.text,
+              onReply: () => unawaited(_replyTo(message)),
               isCurrent: () =>
                   widget.controller.selectedPeer == message.peerId &&
                   widget.controller.messages.any(
@@ -355,6 +385,49 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
               builder: bubble,
             ),
     );
+  }
+
+  Future<void> _replyTo(ChatMessage message) async {
+    if (await widget.controller.replyTo(message) &&
+        mounted &&
+        widget.controller.appAccessible &&
+        widget.controller.appForeground &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      _composerFocus.requestFocus();
+    }
+  }
+
+  void _openReply(MessageReply reply, {int? interaction}) {
+    if (!mounted) return;
+    final c = widget.controller;
+    if (!c.appAccessible ||
+        !c.appForeground ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        (interaction != null && c.interactionRevision != interaction)) {
+      return;
+    }
+    final matches = c.messages.where(
+      (m) =>
+          m.id == reply.id &&
+          m.outgoing == reply.outgoing &&
+          m.image == null &&
+          m.file == null &&
+          reply.matchesText(m.text),
+    );
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Original message unavailable.')),
+      );
+      return;
+    }
+    setState(() {
+      _focusMessage = matches.first;
+      _fromReply = true;
+      _showTarget = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _focusScroll.hasClients) _focusScroll.jumpTo(0);
+    });
   }
 
   Widget _messageList(ChatController chat) {
@@ -400,11 +473,20 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     );
   }
 
+  void _jumpToLatest() {
+    setState(() => _showTarget = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+    });
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
     builder: (context, _) {
       final c = widget.controller;
+      final interaction = c.interactionRevision;
+      final draftPeer = _draftPeer;
       final current = c.selectedPeer == c.connectedPeer;
       final verifying = c.code != null && !c.ready && current;
       final draftReady = _draftPeer != null && c.drafts.isLoaded(_draftPeer!);
@@ -473,7 +555,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
               IconButton(
                 tooltip: 'Jump to latest',
                 icon: const Icon(Icons.arrow_downward),
-                onPressed: () => setState(() => _showTarget = false),
+                onPressed: _jumpToLatest,
               ),
             if (c.connectedPeer != null || c.state == 'Connecting')
               IconButton(
@@ -505,9 +587,13 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                 ),
               ),
             if (_showTarget && !verifying && !c.messages.any(_isTarget))
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('The matching message is no longer in this chat.'),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _fromReply
+                      ? 'Original message unavailable.'
+                      : 'The matching message is no longer in this chat.',
+                ),
               ),
             if (verifying)
               Expanded(
@@ -759,6 +845,34 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                   ),
                 ),
               ),
+            if (!verifying &&
+                c.appAccessible &&
+                c.appForeground &&
+                _draftPeer != null)
+              if (c.drafts.replyFor(_draftPeer!) case final MessageReply reply)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: MessageReplyCard(
+                    key: const ValueKey('reply-composer-preview'),
+                    reply: reply,
+                    name: reply.outgoing == true ? 'You' : reply.name,
+                    onTap: () => _openReply(reply, interaction: interaction),
+                    onCancel: () {
+                      if (mounted &&
+                          c.appAccessible &&
+                          c.appForeground &&
+                          c.interactionRevision == interaction &&
+                          _draftPeer == draftPeer &&
+                          ModalRoute.of(context)?.isCurrent == true &&
+                          c.drafts.replyFor(draftPeer!) == reply) {
+                        c.drafts.setReply(draftPeer, null);
+                      }
+                    },
+                    notice: c.canSend && !c.remoteSupportsReplies
+                        ? 'Replies require the updated app on both phones.'
+                        : null,
+                  ),
+                ),
             if (!verifying)
               SafeArea(
                 top: false,
@@ -786,6 +900,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                       Expanded(
                         child: TextField(
                           key: const ValueKey('message-composer'),
+                          focusNode: _composerFocus,
                           controller: _text,
                           enabled: draftReady && !_sending,
                           minLines: 1,
@@ -806,7 +921,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                       const SizedBox(width: 10),
                       IconButton.filled(
                         tooltip: c.canSend ? 'Send' : 'Queue message',
-                        onPressed: c.canSubmit && draftReady && !_sending
+                        onPressed: c.canSubmitText && draftReady && !_sending
                             ? _send
                             : null,
                         icon: _sending

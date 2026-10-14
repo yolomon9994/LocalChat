@@ -20,6 +20,7 @@ class GroupNetwork {
     ChatFiles? chatFiles,
     bool supportsImages = true,
     bool supportsFiles = true,
+    bool supportsReplies = true,
     Duration imageTimeout = const Duration(seconds: 30),
     Duration fileTimeout = const Duration(seconds: 30),
   }) async {
@@ -39,6 +40,7 @@ class GroupNetwork {
       chatFiles: chatFiles,
       supportsImages: supportsImages,
       supportsFiles: supportsFiles,
+      supportsReplies: supportsReplies,
       imageTimeout: imageTimeout,
       fileTimeout: fileTimeout,
     );

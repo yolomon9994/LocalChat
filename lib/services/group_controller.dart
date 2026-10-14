@@ -14,6 +14,7 @@ import 'chat_files.dart';
 import '../core/chat_file.dart';
 import 'image_content.dart';
 import '../core/models.dart';
+import '../core/message_reply.dart';
 import 'package:cryptography/cryptography.dart';
 
 part 'group_images.dart';
@@ -27,6 +28,7 @@ class GroupLink {
   bool localVerified = false, remoteVerified = false, admitted = false;
   bool supportsImages = false;
   bool supportsFiles = false;
+  bool supportsReplies = false;
   Timer? timer;
   bool get verified => localVerified && remoteVerified;
   String get name => session.peerName ?? 'Connecting member';
@@ -39,6 +41,7 @@ class GroupController extends ChangeNotifier {
     required this.prepare,
     required this.canAct,
     this.accessRevision,
+    this.replyAccessRevision,
     this.notifications,
     this.background,
     this.timeout = const Duration(seconds: 90),
@@ -50,6 +53,7 @@ class GroupController extends ChangeNotifier {
     this.fileTimeout = const Duration(seconds: 30),
     this.supportsImages = true,
     this.supportsFiles = true,
+    this.supportsReplies = true,
   }) : imageFiles = imageFiles ?? createImageFiles(),
        chatFiles = chatFiles ?? createChatFiles(),
        drafts = drafts ?? DraftController(store),
@@ -65,9 +69,12 @@ class GroupController extends ChangeNotifier {
   final Future<bool> Function() prepare;
   final bool Function() canAct;
   final int Function()? accessRevision;
+  final int Function()? replyAccessRevision;
+  int? _replyRevision() =>
+      replyAccessRevision?.call() ?? accessRevision?.call();
   final Duration timeout, receiptTimeout;
   final Duration imageTimeout, fileTimeout;
-  final bool supportsImages, supportsFiles;
+  final bool supportsImages, supportsFiles, supportsReplies;
   final ImageFiles imageFiles;
   final ChatFiles chatFiles;
   late final images = GroupImages(this);
@@ -101,6 +108,11 @@ class GroupController extends ChangeNotifier {
       active != null && (hosting || links.values.any((l) => l.admitted));
   bool get canSend =>
       !_disposed && connected && canAct() && !busy && _receiptTimers.length < 4;
+  bool get repliesAvailable =>
+      supportsReplies &&
+      members.isNotEmpty &&
+      members.every((m) => m.supportsReplies) &&
+      links.values.where((l) => l.admitted).every((l) => l.supportsReplies);
   Future<void> _run(Future<void> Function() f) {
     final result = _queue.then((_) async {
       if (!_disposed) await f();
@@ -206,6 +218,7 @@ class GroupController extends ChangeNotifier {
             selfPublic!,
             supportsImages: supportsImages,
             supportsFiles: supportsFiles,
+            supportsReplies: supportsReplies,
           ),
         ];
         active =
@@ -310,6 +323,7 @@ class GroupController extends ChangeNotifier {
         'features': [
           if (supportsImages) 'group-image-v1',
           if (supportsFiles) 'group-file-v1',
+          if (supportsReplies) 'group-reply-v1',
         ],
       });
       link.localVerified = true;
@@ -378,6 +392,7 @@ class GroupController extends ChangeNotifier {
       'public': linkRemotePublic(link),
       'images': link.supportsImages,
       'files': link.supportsFiles,
+      'replies': link.supportsReplies,
     });
     if (members.length >= groupLimit || members.any((m) => m.id == member.id)) {
       await _drop(link.id);
@@ -507,6 +522,9 @@ class GroupController extends ChangeNotifier {
       link.supportsFiles =
           p['features'] is List &&
           (p['features'] as List).contains('group-file-v1');
+      link.supportsReplies =
+          p['features'] is List &&
+          (p['features'] as List).contains('group-reply-v1');
       await _admit(link);
       return;
     }
@@ -614,6 +632,9 @@ class GroupController extends ChangeNotifier {
         if (jsonEncode(m.targets) != jsonEncode(targetIds)) {
           throw const FormatException('Wrong recipients');
         }
+        if (m.reply != null && (!repliesAvailable || !link.supportsReplies)) {
+          throw const FormatException('Unsupported group reply');
+        }
         if (hosting) {
           final saved = m.copy(
             receipts: {
@@ -702,6 +723,7 @@ class GroupController extends ChangeNotifier {
     bool outgoingText = false,
     int? draftRevision,
     String? draftText,
+    int? replyAccessToken,
   }) async {
     final group = active!;
     final old = group.messages.where((m) => m.key == message.key);
@@ -749,7 +771,10 @@ class GroupController extends ChangeNotifier {
         next,
         draftRevision: draftRevision,
         draftText: draftText,
-        canAccept: () => canSend && active?.id == next.id,
+        canAccept: () =>
+            canSend &&
+            active?.id == next.id &&
+            (message.reply == null || replyAccessToken == _replyRevision()),
       );
     } else {
       await store.saveGroupHistory(next);
@@ -770,15 +795,67 @@ class GroupController extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> replyTo(String id, GroupText message) async {
+    final access = _replyRevision();
+    bool allowed() =>
+        !_disposed &&
+        selfId != null &&
+        canAct() &&
+        _replyRevision() == access &&
+        supportsReplies &&
+        histories.any(
+          (h) =>
+              h.id == id &&
+              h.messages.any(
+                (m) =>
+                    m.key == message.key &&
+                    m.text == message.text &&
+                    m.image == null &&
+                    m.file == null,
+              ),
+        );
+    if (!allowed()) return false;
+    await drafts.load(id, group: true);
+    if (!allowed() || !drafts.isLoaded(id, group: true)) return false;
+    try {
+      drafts.setReply(
+        id,
+        MessageReply(
+          id: message.id,
+          author: message.author,
+          name: message.name,
+          text: MessageReply.preview(message.text),
+        ),
+        group: true,
+      );
+    } on FormatException {
+      error = 'Could not select this message for a reply.';
+      _notify();
+      return false;
+    }
+    return true;
+  }
+
   Future<bool> sendText(
     String text, {
     int? draftRevision,
     String? draftText,
+    MessageReply? reply,
   }) async {
     final intendedGroup = active?.id;
+    final replyAccess = _replyRevision();
     var sent = false;
     await _run(() async {
-      if (!canSend || active?.id != intendedGroup) return;
+      if (!canSend ||
+          active?.id != intendedGroup ||
+          (reply != null && replyAccess != _replyRevision())) {
+        return;
+      }
+      if (reply != null && !repliesAvailable) {
+        throw const FormatException(
+          'Replies require every group member to use the updated app.',
+        );
+      }
       text = text.trim();
       if (text.isEmpty || utf8.encode(text).length > 4096) {
         throw const FormatException('Messages must be 1–4096 UTF-8 bytes.');
@@ -794,12 +871,16 @@ class GroupController extends ChangeNotifier {
         epoch: epoch!,
         view: view,
         text: text,
+        reply: reply,
         targets: members.map((m) => m.id).toList(),
       );
-      if (!canSend) return;
+      if (!canSend || (reply != null && replyAccess != _replyRevision())) {
+        return;
+      }
       await _persist(
         m.copy(receipts: {...m.receipts, selfId!: 'received'}),
         outgoingText: true,
+        replyAccessToken: replyAccess,
         draftRevision: draftRevision,
         draftText: draftText,
       );
@@ -813,7 +894,7 @@ class GroupController extends ChangeNotifier {
           }),
         ),
       );
-      if (canAct()) {
+      if (canAct() && (reply == null || replyAccess == _replyRevision())) {
         try {
           if (hosting) {
             await _broadcast({'type': 'groupText', 'message': m.envelope});

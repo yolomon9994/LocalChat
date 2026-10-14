@@ -22,7 +22,7 @@ version 1, while older builds reject group archives. Group sessions/keys are nev
 restored, and imported pending receipts become unconfirmed. Import ends the current
 group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
 Archives containing direct-chat images use payload version 3, including bounded
-image bytes, dimensions and SHA-256 digest. New builds import v1-v8; older
+image bytes, dimensions and SHA-256 digest. New builds import v1-v9; older
 builds reject image archives. Images are re-encrypted with destination history
 keys and restored pending attempts remain unconfirmed. The 20 MiB total archive
 limit still applies; image-heavy exports can exceed it without changing history.
@@ -51,14 +51,14 @@ See [GROUP_FILES.md](GROUP_FILES.md).
 Archives with nonempty group drafts use payload **v7**, including validated
 `groupDrafts` rows (`group`, `text`). Existing destination drafts win, missing
 drafts import even without new messages, and conflicting group hosts cannot
-receive each other's drafts. Current builds import v1-v8; older builds reject v7.
+receive each other's drafts. Current builds import v1-v9; older builds reject v7.
 Both history-only and empty-phone identity imports support group drafts. The
 same encrypted envelope/KDF and 20 MiB total limit apply. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
 
 Archives with pinned or archived groups select payload **v8**. Group choices
 are validated booleans; older archives default missing choices to false. Existing
 destination choices always win, while new groups inherit the archive choices.
-Current builds import v1-v8. Mixed direct/group attachments and drafts are
+Current builds import v1-v9. Mixed direct/group attachments and drafts are
 supported, with the same envelope/KDF and total limits. Older builds reject v8.
 See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
@@ -156,3 +156,17 @@ without broad storage permissions. Browser file APIs use
 Automated checks and builds are recorded in [VALIDATION.md](VALIDATION.md).
 Physical phone/file-provider/Android Keystore checks remain pending. The user
 committed the backup milestone as `63eff9f`.
+
+## Replies to text messages
+
+Archives containing reply metadata in messages or direct/group drafts select
+payload **v9**. Quote-only drafts are included even with an empty answer. Quotes
+are bounded and validated before preview/import; group quote fields are covered
+by the responder's signature. Current builds retain v1-v8 imports. Exports without
+quotes keep their applicable older version; older builds reject v9.
+
+Destination quote/text drafts win as one saved choice; differing quoted metadata
+on the same message ID is a conflict. Imports re-encrypt with destination keys,
+retain local reference directions and never transmit pending replies. SQLite 12
+stores encrypted scoped quote drafts with atomic acceptance/deletion. See
+[reply controls and manual checks](MESSAGE_REPLIES.md).

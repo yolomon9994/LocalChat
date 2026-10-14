@@ -4,10 +4,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
 import 'package:local_chat/core/group_models.dart';
+import 'package:local_chat/core/message_reply.dart';
 import 'package:local_chat/services/chat_controller.dart';
 import 'package:local_chat/services/transport.dart';
 
 class MemoryStore extends LocalStore {
+  final draftReplies = <(String, bool), MessageReply>{};
+  @override
+  Future<MessageReply?> draftReply(String id, {bool group = false}) async =>
+      draftReplies[(id, group)];
+  @override
+  Future<void> saveDraftState(
+    String id,
+    String text,
+    MessageReply? reply, {
+    bool group = false,
+  }) async {
+    draftText[id] = text;
+    if (reply == null) {
+      draftReplies.remove((id, group));
+    } else {
+      draftReplies[(id, group)] = reply;
+    }
+  }
+
   final groupRecords = <String, GroupHistory>{};
   @override
   Future<List<GroupHistory>> groupHistories() async =>
@@ -53,7 +73,10 @@ class MemoryStore extends LocalStore {
     bool clearDraft = false,
   }) async {
     await saveMessage(message);
-    if (clearDraft) draftText.remove(message.peerId);
+    if (clearDraft) {
+      draftText.remove(message.peerId);
+      draftReplies.remove((message.peerId, false));
+    }
   }
 
   @override
@@ -107,6 +130,7 @@ class MemoryStore extends LocalStore {
         timestamp: m.timestamp,
         outgoing: true,
         status: status,
+        reply: m.reply,
       );
     }
   }
@@ -117,6 +141,7 @@ class MemoryStore extends LocalStore {
     saved.clear();
     people.clear();
     draftText.clear();
+    draftReplies.clear();
   }
 }
 

@@ -1,5 +1,81 @@
 # Validation for v0.1.0
 
+## Replies to text messages - final checks 2026-10-15
+
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **430 passed**, exit 0 (395 existing + 35 new), 4m52s.
+  Output: `.dart_tool/message-replies-milestone-final.log` (local, ignored by Git).
+- Seventeen new model/protocol/draft/archive checks cover bounded UTF-8 previews,
+  direct/group shape validation, signature changes/insertion/removal, encrypted v9
+  codec round trip, quote-only drafts, cancellation, generic save errors/retry,
+  mismatched or newer draft preservation, safe merging and identity retention,
+  deletion, actual encrypted direct reference-direction inversion, offline legacy
+  peer waiting/plain-text compatibility, original-ID retry/deduplication/unread,
+  transient background loading cancellation and failed acceptance. Hosted-group
+  checks verify signed relay/individual receipts, departed quote authors, all-member
+  capability gates and isolation of a modified quote without persistence or relay.
+- Twelve UI checks cover Reply/Copy menus and selection, author/quote composer
+  preview/cancel, text/draft/organization preservation, exact direction/author
+  anchors, missing/conflicting originals, Jump to latest, archived/scoped search,
+  actual host UI send with guest signature validation and atomic draft clearing,
+  PIN removal/stale callbacks, foreground preview removal and stale cancellation,
+  and 320 x 568 at 1.8x text.
+- Six new checks in `test/local_store_test.dart` verify schema-11 upgrade to 12
+  without ciphertext rewrite, encrypted quote-only drafts, authenticated reply kind
+  and literal ordinary JSON preservation, restart, atomic text/quote update rollback,
+  outgoing message/quote-draft cleanup rollback, duplicate conflict detection,
+  destination re-encryption/v9 import, and native signed group quotes, group draft
+  clearing and deletion. Older migrations and v1-v8 archives remain covered.
+- Separate focused passes: **53 passed**, exit 0, including reply protocol/UI,
+  existing copy and group-draft cases; `.dart_tool/message-replies-targeted-final.log`.
+  The extended new-only run passed **28**, exit 0;
+  `.dart_tool/message-replies-new-final.log`. The later live group UI check passed
+  separately in 3s; `.dart_tool/message-replies-live-final.log`. Final full suite
+  includes all current fixtures and the six new SQLite cases.
+- Headless Chrome `flutter test test/message_reply_screen_test.dart --platform
+  chrome --timeout=2m --reporter expanded --verbose`: **12 passed**, exit 0,
+  17s after startup; `.dart_tool/message-replies-chrome-final.log`. This exercises
+  real browser crypto during the live group UI send, using simulated transports.
+  Browser fixtures acknowledge the engine-only context-menu channel; real
+  browser menus, clipboard permissions and phone interaction remain manual checks.
+- Installed Flutter 3.38.7's Windows test server again returned 404 for present
+  CanvasKit JS/WASM files. The existing ignored CDP helper supplied exact cached
+  SDK bytes only to the isolated test browser; no app/SDK changes or downloads.
+  Asset log: `.dart_tool/message-replies-chrome-final-assets.log`.
+- Corrected development issues: old schema assertions/test-store methods needed
+  the new schema/draft API; migration table creation is idempotent for older-version
+  fixtures that retain the table. Reply jump label and widget finder were corrected.
+  Copy fixtures now select the Copy option beside Reply. Live group UI send initially
+  waited on fake-clock work from a real-time queue drain; the fixture now pumps both
+  clocks until authenticated receipt completion, then disposes/stops timers.
+  Temporary diagnostic markers were removed. A legacy-queue fixture now matches
+  its composer draft so the quoted selection is cleared only after acceptance.
+- Initial full run was stopped at the blocked live-group fixture and had a timing-
+  sensitive existing 400ms file-transfer assertion while builds were running. The
+  unchanged file check passed in isolation; `.dart_tool/message-replies-file-regression.log`.
+  Final full rerun, without concurrent builds, passed all 430. Earlier raw logs
+  remain ignored and are not represented as successful runs.
+- Final `flutter analyze`: no issues, exit 0;
+  `.dart_tool/message-replies-analyze.log`.
+- `flutter build web --no-wasm-dry-run`: passed, exit 0, 159.4s;
+  `.dart_tool/message-replies-web-build.log`; output `build/web`.
+  Existing optional Cupertino font warning remains; Material icons are used.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  final serial run passed with explicit Flutter exit **0**, 22.9s;
+  `.dart_tool/message-replies-apk-final.log`. The earlier 151.5s run produced
+  the APK but its PowerShell wrapper reported error status after Flutter's
+  startup-lock warning; `.dart_tool/message-replies-apk-build.log`. The serial
+  confirmation resolves that ambiguous wrapper status.
+  APK: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- Code/docs review and `git -c core.safecrlf=false diff --check`: clean.
+  No native permissions/code or dependencies changed. Schema 12 and quote-bearing
+  payload v9 preserve existing ciphertext and older imports. Negotiated reply
+  metadata adds a group signature domain; unquoted wire messages remain compatible.
+- Phone/vendor/TalkBack and real browser interaction checks remain pending;
+  see [MESSAGE_REPLIES.md](MESSAGE_REPLIES.md). Quotes are provided by responders,
+  not separate proof from original authors. Hosted groups retain the trusted host.
+- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+
 ## Copy text messages - final checks 2026-10-14
 
 - Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
@@ -49,7 +125,8 @@
 - Physical clipboard/paste, browser permissions and TalkBack checks remain pending;
   see [MESSAGE_COPY.md](MESSAGE_COPY.md). Copied text is outside the app lock;
   an authorized platform write may finish after locking, with no late feedback.
-- Changes are saved locally, unstaged and uncommitted; the user handles Git.
+- Text copying was committed by the user as `b9ef43c`; local `origin/main`
+  matched at the next milestone start. The user handles Git.
 
 ## Browser group simulation - final checks 2026-10-13
 

@@ -9,6 +9,7 @@ import 'chat_backup.dart';
 import 'group_models.dart';
 import 'chat_image.dart';
 import 'chat_file.dart';
+import 'message_reply.dart';
 
 class LocalStore {
   LocalStore({DateTime Function()? now, FlutterSecureStorage? vault})
@@ -43,7 +44,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 11,
+      version: 12,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -64,6 +65,7 @@ class LocalStore {
         await _createGroupDrafts(db);
         await _createImages(db);
         await _createFiles(db);
+        await _createReplyDrafts(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -86,6 +88,7 @@ class LocalStore {
         if (oldVersion < 9) await _createFiles(db);
         if (oldVersion < 10) await _createGroupDrafts(db);
         if (oldVersion < 11) await _addGroupManagement(db);
+        if (oldVersion < 12) await _createReplyDrafts(db);
       },
     );
     await _recoverIdentity();
@@ -144,6 +147,7 @@ class LocalStore {
         'outgoing': m.outgoing,
         'status': m.status,
         'read': row['is_read'] == 1,
+        if (m.reply != null) 'reply': m.reply!.toJson(),
         if (m.file != null)
           'file': {
             ...m.file!.toJson(),
@@ -166,6 +170,17 @@ class LocalStore {
     final draftResult = <Map<String, Object?>>[];
     for (final d in drafts) {
       draftResult.add({'peer': d['peer'], 'text': await _decodeDraft(d)});
+    }
+    for (final row in await db.query('reply_drafts')) {
+      final isGroup = row['is_group'] == 1;
+      final rows = isGroup ? groupDraftResult : draftResult;
+      final field = isGroup ? 'group' : 'peer';
+      final matches = rows.where((d) => d[field] == row['target']);
+      final draft = matches.isEmpty
+          ? <String, Object?>{field: row['target'], 'text': ''}
+          : matches.single;
+      if (matches.isEmpty) rows.add(draft);
+      draft['reply'] = (await _decodeDraftReply(row)).toJson();
     }
     return BackupData(
       seed: seed,
@@ -256,6 +271,8 @@ class LocalStore {
             utf8.encode(
               m['file'] != null
                   ? jsonEncode(ChatFile.parse(m['file']).toJson())
+                  : m['reply'] != null
+                  ? jsonEncode({'text': m['text'], 'reply': m['reply']})
                   : m['image'] == null
                   ? m['text'] as String
                   : jsonEncode(ChatImage.parse(m['image']).toJson()),
@@ -268,6 +285,7 @@ class LocalStore {
                 direction,
                 image: m['image'] != null,
                 file: m['file'] != null,
+                reply: m['reply'] != null,
               ),
             ),
           );
@@ -285,6 +303,8 @@ class LocalStore {
             'is_read': direction == 1 || m['read'] == true ? 1 : 0,
             'kind': m['file'] != null
                 ? 'file'
+                : m['reply'] != null
+                ? 'reply'
                 : m['image'] == null
                 ? 'text'
                 : 'image',
@@ -327,6 +347,14 @@ class LocalStore {
           );
         }
         for (final d in plan.data.drafts) {
+          await _writeDraftReply(
+            txn,
+            d['peer'] as String,
+            d['reply'] == null
+                ? null
+                : MessageReply.parse(d['reply'], group: false),
+            group: false,
+          );
           final box = await _cipher.encrypt(
             utf8.encode(d['text'] as String),
             secretKey: _historyKey,
@@ -342,6 +370,14 @@ class LocalStore {
           });
         }
         for (final d in plan.data.groupDrafts) {
+          await _writeDraftReply(
+            txn,
+            d['group'] as String,
+            d['reply'] == null
+                ? null
+                : MessageReply.parse(d['reply'], group: true),
+            group: true,
+          );
           await _writeGroupDraft(
             txn,
             d['group'] as String,
@@ -417,8 +453,11 @@ class LocalStore {
     int direction, {
     bool image = false,
     bool file = false,
+    bool reply = false,
   }) =>
-      '${file
+      '${reply
+          ? 'LocalChat/reply-message/1/'
+          : file
           ? 'LocalChat/file-message/1/'
           : image
           ? 'LocalChat/image-message/1/'
@@ -605,6 +644,7 @@ class LocalStore {
 
   Future<void> deleteGroupHistory(String id) =>
       _database.transaction((txn) async {
+        await _writeDraftReply(txn, id, null, group: true);
         await txn.delete('group_drafts', where: 'id = ?', whereArgs: [id]);
         await txn.delete('group_history', where: 'id = ?', whereArgs: [id]);
       });
@@ -615,6 +655,7 @@ class LocalStore {
   }) => _database.transaction((txn) async {
     await _writeGroup(txn, group);
     if (clearDraft) {
+      await _writeDraftReply(txn, group.id, null, group: true);
       await txn.delete('group_drafts', where: 'id = ?', whereArgs: [group.id]);
     }
   });
@@ -678,6 +719,95 @@ class LocalStore {
   Future<void> saveGroupDraft(String id, String text) =>
       _database.transaction((txn) => _writeGroupDraft(txn, id, text));
 
+  static Future<void> _createReplyDrafts(Database db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS reply_drafts (target TEXT NOT NULL, is_group INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(target, is_group))',
+  );
+
+  Future<MessageReply?> draftReply(String id, {bool group = false}) async {
+    final rows = await _database.query(
+      'reply_drafts',
+      where: 'target = ? AND is_group = ?',
+      whereArgs: [id, group ? 1 : 0],
+    );
+    return rows.isEmpty ? null : _decodeDraftReply(rows.single);
+  }
+
+  Future<MessageReply> _decodeDraftReply(Map<String, Object?> row) async {
+    final bytes = base64Decode(row['body'] as String);
+    final clear = await _cipher.decrypt(
+      SecretBox(
+        bytes.sublist(40),
+        nonce: bytes.sublist(0, 24),
+        mac: Mac(bytes.sublist(24, 40)),
+      ),
+      secretKey: _historyKey,
+      aad: utf8.encode(
+        jsonEncode(['LocalChat/reply-draft/1', row['target'], row['is_group']]),
+      ),
+    );
+    return MessageReply.parse(
+      jsonDecode(utf8.decode(clear)),
+      group: row['is_group'] == 1,
+    );
+  }
+
+  Future<void> _writeDraftReply(
+    DatabaseExecutor db,
+    String id,
+    MessageReply? reply, {
+    required bool group,
+  }) async {
+    if (reply == null) {
+      await db.delete(
+        'reply_drafts',
+        where: 'target = ? AND is_group = ?',
+        whereArgs: [id, group ? 1 : 0],
+      );
+      return;
+    }
+    MessageReply.parse(reply.toJson(), group: group);
+    final box = await _cipher.encrypt(
+      utf8.encode(jsonEncode(reply.toJson())),
+      secretKey: _historyKey,
+      aad: utf8.encode(
+        jsonEncode(['LocalChat/reply-draft/1', id, group ? 1 : 0]),
+      ),
+    );
+    await db.insert('reply_drafts', {
+      'target': id,
+      'is_group': group ? 1 : 0,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Text and quote change together, including quote-only drafts and cancellation.
+  Future<void> saveDraftState(
+    String id,
+    String text,
+    MessageReply? reply, {
+    bool group = false,
+  }) => _database.transaction((txn) async {
+    if (utf8.encode(text).length > 1024 * 1024) {
+      throw const FormatException('Draft exceeds the 1 MiB limit.');
+    }
+    final exists = await txn.query(
+      group ? 'group_history' : 'peers',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (exists.isEmpty) {
+      throw const FormatException('This conversation has been deleted.');
+    }
+    if (group) {
+      await _writeGroupDraft(txn, id, text);
+    } else {
+      await _writeDirectDraft(txn, id, text);
+    }
+    await _writeDraftReply(txn, id, reply, group: group);
+  });
+
   static Future<void> _createOutboxIndex(Database db) => db.execute(
     'CREATE INDEX IF NOT EXISTS message_outbox ON messages(peer, outgoing, status)',
   );
@@ -715,6 +845,7 @@ class LocalStore {
 
   Future<void> deleteConversation(String peer) =>
       _database.transaction((txn) async {
+        await _writeDraftReply(txn, peer, null, group: false);
         await txn.delete('files', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('images', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('messages', where: 'peer = ?', whereArgs: [peer]);
@@ -747,9 +878,16 @@ class LocalStore {
     return utf8.decode(clear);
   }
 
-  Future<void> saveDraft(String peer, String text) async {
+  Future<void> saveDraft(String peer, String text) =>
+      _writeDirectDraft(_database, peer, text);
+
+  Future<void> _writeDirectDraft(
+    DatabaseExecutor db,
+    String peer,
+    String text,
+  ) async {
     if (text.isEmpty) {
-      await _database.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
+      await db.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
       return;
     }
     final box = await _cipher.encrypt(
@@ -757,7 +895,7 @@ class LocalStore {
       secretKey: _historyKey,
       aad: utf8.encode(jsonEncode(['LocalChat/draft/1', peer])),
     );
-    await _database.insert('drafts', {
+    await db.insert('drafts', {
       'peer': peer,
       'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -836,6 +974,12 @@ class LocalStore {
     Uint8List? imageBytes,
     Uint8List? fileBytes,
   }) async {
+    if (message.reply != null) {
+      MessageReply.parse(message.reply!.toJson(), group: false);
+      if (message.file != null || message.image != null) {
+        throw const FormatException('Replies are text only');
+      }
+    }
     if (message.file != null) {
       if (message.image != null || fileBytes == null) {
         throw const FormatException('Missing or conflicting file contents.');
@@ -852,6 +996,11 @@ class LocalStore {
       utf8.encode(
         message.file != null
             ? jsonEncode(message.file!.toJson())
+            : message.reply != null
+            ? jsonEncode({
+                'text': message.text,
+                'reply': message.reply!.toJson(),
+              })
             : message.image == null
             ? message.text
             : jsonEncode(message.image!.toJson()),
@@ -864,6 +1013,7 @@ class LocalStore {
           message.outgoing ? 1 : 0,
           image: message.image != null,
           file: message.file != null,
+          reply: message.reply != null,
         ),
       ),
     );
@@ -877,6 +1027,7 @@ class LocalStore {
       if (existing.isNotEmpty) {
         final previous = await _decodeMessage(existing.single);
         if (previous.text != message.text ||
+            previous.reply != message.reply ||
             jsonEncode(previous.file?.toJson()) !=
                 jsonEncode(message.file?.toJson()) ||
             jsonEncode(previous.image?.toJson()) !=
@@ -900,6 +1051,8 @@ class LocalStore {
         'is_read': message.outgoing ? 1 : 0,
         'kind': message.file != null
             ? 'file'
+            : message.reply != null
+            ? 'reply'
             : message.image == null
             ? 'text'
             : 'image',
@@ -913,6 +1066,7 @@ class LocalStore {
         whereArgs: [message.peerId],
       );
       if (clearDraft) {
+        await _writeDraftReply(txn, message.peerId, null, group: false);
         await txn.delete(
           'drafts',
           where: 'peer = ?',
@@ -1012,9 +1166,13 @@ class LocalStore {
           r['outgoing'] as int,
           image: r['kind'] == 'image',
           file: r['kind'] == 'file',
+          reply: r['kind'] == 'reply',
         ),
       ),
     );
+    final replyBody = r['kind'] == 'reply'
+        ? jsonDecode(utf8.decode(clear)) as Map
+        : null;
     return ChatMessage(
       id: r['id'] as String,
       peerId: peer,
@@ -1022,7 +1180,12 @@ class LocalStore {
           ? 'File'
           : r['kind'] == 'image'
           ? 'Image'
+          : replyBody != null
+          ? replyBody['text'] as String
           : utf8.decode(clear),
+      reply: replyBody == null
+          ? null
+          : MessageReply.parse(replyBody['reply'], group: false),
       file: r['kind'] == 'file'
           ? ChatFile.parse(jsonDecode(utf8.decode(clear)))
           : null,
@@ -1112,6 +1275,7 @@ class LocalStore {
 
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
+      await txn.delete('reply_drafts');
       await txn.delete('group_drafts');
       await txn.delete('group_history');
       await txn.delete('files');

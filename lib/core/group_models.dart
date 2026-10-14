@@ -4,6 +4,7 @@ import 'package:cryptography/cryptography.dart';
 import 'secure_session.dart';
 import 'chat_image.dart';
 import 'chat_file.dart';
+import 'message_reply.dart';
 
 const groupLimit = 8; // Host plus seven guests; hardware may support fewer.
 const groupImageHistoryMaxBytes = 16 * 1024 * 1024;
@@ -20,16 +21,19 @@ class GroupMember {
     this.public, {
     this.supportsImages = false,
     this.supportsFiles = false,
+    this.supportsReplies = false,
   });
   final String id, name, public;
   final bool supportsImages;
   final bool supportsFiles;
+  final bool supportsReplies;
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
     'public': public,
     'images': supportsImages,
     'files': supportsFiles,
+    'replies': supportsReplies,
   };
   static Future<GroupMember> parse(Map raw) async {
     final public = raw['public'], name = raw['name'];
@@ -41,7 +45,8 @@ class GroupMember {
         name.length > 32 ||
         raw['id'] != await identityId(public) ||
         (raw.containsKey('images') && raw['images'] is! bool) ||
-        (raw.containsKey('files') && raw['files'] is! bool)) {
+        (raw.containsKey('files') && raw['files'] is! bool) ||
+        (raw.containsKey('replies') && raw['replies'] is! bool)) {
       throw const FormatException('Invalid group member');
     }
     return GroupMember(
@@ -50,6 +55,7 @@ class GroupMember {
       public,
       supportsImages: raw['images'] == true,
       supportsFiles: raw['files'] == true,
+      supportsReplies: raw['replies'] == true,
     );
   }
 }
@@ -72,6 +78,9 @@ class GroupText {
       envelope.containsKey('file') ? ChatFile.parse(envelope['file']) : null;
   ChatImage? get image =>
       envelope.containsKey('image') ? ChatImage.parse(envelope['image']) : null;
+  MessageReply? get reply => envelope.containsKey('reply')
+      ? MessageReply.parse(envelope['reply'], group: true)
+      : null;
   String get id => envelope['id'] as String;
   String get author => envelope['authorId'] as String;
   String get name => envelope['name'] as String;
@@ -101,7 +110,9 @@ class GroupText {
   };
   static List<int> _bytes(Map e) => utf8.encode(
     jsonEncode([
-      e.containsKey('file')
+      e.containsKey('reply')
+          ? 'LocalChat/group-reply/1'
+          : e.containsKey('file')
           ? 'LocalChat/group-file/1'
           : e.containsKey('image')
           ? 'LocalChat/group-image/1'
@@ -115,6 +126,8 @@ class GroupText {
       e['name'],
       e['timestamp'],
       e['text'],
+      if (e.containsKey('reply'))
+        MessageReply.parse(e['reply'], group: true).toJson(),
       if (e.containsKey('image')) ChatImage.parse(e['image']).toJson(),
       if (e.containsKey('file')) ChatFile.parse(e['file']).toJson(),
       e['targets'],
@@ -132,9 +145,16 @@ class GroupText {
     Uint8List? imageBytes,
     Uint8List? fileBytes,
     String? fileName,
+    MessageReply? reply,
   }) async {
     if (imageBytes != null && fileBytes != null) {
       throw const FormatException('Choose one attachment type');
+    }
+    if (reply != null) {
+      MessageReply.parse(reply.toJson(), group: true);
+      if (imageBytes != null || fileBytes != null) {
+        throw const FormatException('Replies are text only');
+      }
     }
     final public = base64Encode((await identity.extractPublicKey()).bytes);
     final e = <String, dynamic>{
@@ -148,6 +168,7 @@ class GroupText {
       'name': name,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'text': text,
+      if (reply != null) 'reply': reply.toJson(),
       'targets': [...targets]..sort(),
       if (imageBytes != null)
         'image': (await ChatImage.fromBytes(imageBytes)).toJson(),
@@ -183,6 +204,12 @@ class GroupText {
     final e = Map<String, dynamic>.from(raw['envelope'] as Map);
     final image = e.containsKey('image') ? ChatImage.parse(e['image']) : null;
     final file = e.containsKey('file') ? ChatFile.parse(e['file']) : null;
+    if (e.containsKey('reply')) {
+      MessageReply.parse(e['reply'], group: true);
+      if (image != null || file != null) {
+        throw const FormatException('Replies are text only');
+      }
+    }
     if ((image != null && file != null) ||
         (file != null && e['text'] != 'File') ||
         (file == null && raw.containsKey('fileData'))) {

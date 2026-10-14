@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'group_models.dart';
 import 'chat_image.dart';
 import 'chat_file.dart';
+import 'message_reply.dart';
 
 /// Version one fixes the KDF cost; files cannot request arbitrary work.
 const backupMaxPlaintext = 20 * 1024 * 1024;
@@ -31,7 +32,20 @@ class BackupData {
   final List<Map<String, Object?>> groups, groupDrafts;
   Map<String, Object?> toJson() => {
     'version':
-        groups.any((g) => g.containsKey('pinned') || g.containsKey('archived'))
+        messages.any((m) => m.containsKey('reply')) ||
+            drafts.any((d) => d.containsKey('reply')) ||
+            groupDrafts.any((d) => d.containsKey('reply')) ||
+            groups.any(
+              (g) => (g['messages'] as List).any(
+                (m) =>
+                    (m as Map)['envelope'] is Map &&
+                    ((m['envelope']) as Map).containsKey('reply'),
+              ),
+            )
+        ? 9
+        : groups.any(
+            (g) => g.containsKey('pinned') || g.containsKey('archived'),
+          )
         ? 8
         : groupDrafts.isNotEmpty
         ? 7
@@ -68,7 +82,7 @@ class BackupData {
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3, 4, 5, 6, 7, 8}.contains(raw['version'])) {
+    if (raw is! Map || !{1, 2, 3, 4, 5, 6, 7, 8, 9}.contains(raw['version'])) {
       throw invalid;
     }
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
@@ -131,6 +145,14 @@ class BackupData {
       final outgoing = boolean(m, 'outgoing');
       if (!ids.contains(peer) || !keys.add((peer, id, outgoing))) throw invalid;
       string(m, 'text', 4096);
+      if (m.containsKey('reply')) {
+        if (raw['version'] != 9 ||
+            m.containsKey('image') ||
+            m.containsKey('file')) {
+          throw invalid;
+        }
+        m['reply'] = MessageReply.parse(m['reply'], group: false).toJson();
+      }
       if (m.containsKey('file')) {
         if ((raw['version'] as int) < 4 ||
             m.containsKey('image') ||
@@ -179,7 +201,11 @@ class BackupData {
       final peer = string(d, 'peer', 128);
       if (!ids.contains(peer) || !draftPeers.add(peer)) throw invalid;
       // The composer counts graphemes; one grapheme may contain many code points.
-      string(d, 'text', 1024 * 1024);
+      string(d, 'text', 1024 * 1024, empty: d.containsKey('reply'));
+      if (d.containsKey('reply')) {
+        if (raw['version'] != 9) throw invalid;
+        d['reply'] = MessageReply.parse(d['reply'], group: false).toJson();
+      }
     }
     final groups = <Map<String, Object?>>[];
     final groupIds = <String>{};
@@ -191,6 +217,9 @@ class BackupData {
           throw invalid;
         }
         final group = await GroupHistory.parse(row);
+        if (group.messages.any((m) => m.reply != null) && raw['version'] != 9) {
+          throw invalid;
+        }
         if (group.messages.any((m) => m.image != null) &&
                 (raw['version'] as int) < 5 ||
             group.messages.any((m) => m.file != null) &&
@@ -210,7 +239,11 @@ class BackupData {
         if (!groupIds.contains(group) || !draftGroups.add(group)) throw invalid;
         groupDrafts.add({
           'group': group,
-          'text': string(d, 'text', 1024 * 1024),
+          'text': string(d, 'text', 1024 * 1024, empty: d.containsKey('reply')),
+          if (d.containsKey('reply'))
+            'reply': raw['version'] == 9
+                ? MessageReply.parse(d['reply'], group: true).toJson()
+                : throw invalid,
         });
       }
     }
@@ -322,7 +355,8 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     } else if (old['text'] == m['text'] &&
         old['timestamp'] == m['timestamp'] &&
         jsonEncode(old['image']) == jsonEncode(m['image']) &&
-        jsonEncode(old['file']) == jsonEncode(m['file'])) {
+        jsonEncode(old['file']) == jsonEncode(m['file']) &&
+        jsonEncode(old['reply']) == jsonEncode(m['reply'])) {
       duplicates++;
     } else {
       conflicts++;
@@ -331,7 +365,8 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
   for (final d in incoming.drafts) {
     if (!drafts.containsKey(d['peer'])) {
       newDrafts.add(d);
-    } else if (drafts[d['peer']]!['text'] != d['text']) {
+    } else if (drafts[d['peer']]!['text'] != d['text'] ||
+        jsonEncode(drafts[d['peer']]!['reply']) != jsonEncode(d['reply'])) {
       keptDrafts++;
     }
   }
@@ -343,7 +378,9 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     }
     if (!groupDrafts.containsKey(d['group'])) {
       newGroupDrafts.add(d);
-    } else if (groupDrafts[d['group']]!['text'] != d['text']) {
+    } else if (groupDrafts[d['group']]!['text'] != d['text'] ||
+        jsonEncode(groupDrafts[d['group']]!['reply']) !=
+            jsonEncode(d['reply'])) {
       keptDrafts++;
     }
   }

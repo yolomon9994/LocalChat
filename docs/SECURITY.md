@@ -325,6 +325,35 @@ locking, and copies survive app locking or chat deletion. LocalChat does not
 read or clear the clipboard on lock, avoiding overwriting newer clipboard data.
 See [copy controls and manual checks](MESSAGE_COPY.md).
 
+## Reply quotations
+
+Direct reply metadata is inside authenticated encrypted text payloads, negotiated
+with reply-v1. Local direction is inverted on receipt and scoped to the peer;
+reference IDs cannot open another chat. Unsupported peers retain plain text, and
+queued replies are not stripped or sent without capability support.
+
+Group reply envelopes use signature domain LocalChat/group-reply/1, including
+canonical reference ID, author ID, name and bounded preview alongside existing
+session/roster/recipient context. All admitted members need group-reply-v1.
+Signature verification rejects changed, added or removed quote fields; the
+trusted host decrypts and relays quotes as it does other group text. A quoted
+author need not remain in the roster. A preview is claimed by the replying sender,
+not separate cryptographic proof from the original author. Replying intentionally
+shares this bounded preview with current recipients, including new members.
+
+Schema 12 binds encrypted quote drafts to target and direct/group scope with
+LocalChat/reply-draft/1 AAD. Direct reply kind uses LocalChat/reply-message/1 AAD
+and encrypts answer+quote together; kind/direction/time/status and draft targets
+remain local plaintext metadata. Existing ciphertext is preserved during upgrade.
+Payload-v9 archives validate quotes/signatures and retain v1-v8 imports, merge
+conflict handling, destination encryption and explicit identity migration rules.
+
+Reply actions recheck foreground/unlock, revisions, message scope and route/
+lifetime; quote previews hide on background and PIN removes routes/menus. Existing
+verified background storage/receipts still work, while new sends/admissions retain
+foreground gates. Notifications never append the quoted preview. See
+[reply controls and validation](MESSAGE_REPLIES.md).
+
 ## Before a production release
 
 Obtain an independent protocol/code review; test on several Android vendors and API levels; fuzz framing/handshake parsing; consider a reviewed protocol library, key pinning and identity-change UX, robust bounded storage and background lifecycle support. Use a private release signing key rather than the provided debug build configuration.

@@ -1,3 +1,4 @@
+import '../core/message_reply.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -77,11 +78,16 @@ class DemoTransport implements Transport {
     _events.add({'type': 'frame', 'frame': jsonEncode(frame)});
   }
 
-  Future<void> _message(SecureSession peer, String text) => _emitPayload(peer, {
+  Future<void> _message(
+    SecureSession peer,
+    String text, {
+    MessageReply? reply,
+  }) => _emitPayload(peer, {
     'type': 'text',
     'id': randomId(),
     'timestamp': DateTime.now().millisecondsSinceEpoch,
     'text': text,
+    if (reply != null) 'reply': reply.toJson(),
   });
 
   @override
@@ -105,6 +111,7 @@ class DemoTransport implements Transport {
           'features': [
             if (supportsImages) 'image-v1',
             if (supportsFiles) 'file-v1',
+            'reply-v1',
           ],
         });
         await _message(
@@ -122,7 +129,18 @@ class DemoTransport implements Transport {
           'Try disconnecting and reopening this conversation from saved history.',
           'You can also change your display name or delete demo history in Settings.',
         ];
-        await _message(peer, replies[_reply++ % replies.length]);
+        await _message(
+          peer,
+          replies[_reply++ % replies.length],
+          reply: payload['reply'] == null
+              ? null
+              : MessageReply(
+                  id: payload['id'] as String,
+                  outgoing: false,
+                  name: peer.peerName ?? 'You',
+                  text: MessageReply.preview(payload['text'] as String),
+                ),
+        );
       case 'ack':
         // The demo peer has no persistent outbox.
         break;

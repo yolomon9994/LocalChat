@@ -4,6 +4,7 @@ import '../core/local_store.dart';
 import '../core/chat_backup.dart';
 import '../core/models.dart';
 import '../core/group_models.dart';
+import '../core/message_reply.dart';
 
 typedef _DraftTarget = (String, bool);
 
@@ -13,6 +14,8 @@ class DraftController extends ChangeNotifier {
   DraftController(this.store);
   final LocalStore store;
   final _text = <_DraftTarget, String>{};
+  final _replies = <_DraftTarget, MessageReply>{};
+  final _replyTargets = <_DraftTarget>{};
   final _loaded = <_DraftTarget>{};
   final _loading = <_DraftTarget>{};
   final _errors = <_DraftTarget, String>{};
@@ -27,6 +30,8 @@ class DraftController extends ChangeNotifier {
 
   String textFor(String peer, {bool group = false}) =>
       _text[(peer, group)] ?? '';
+  MessageReply? replyFor(String id, {bool group = false}) =>
+      _replies[(id, group)];
   bool isLoaded(String peer, {bool group = false}) =>
       _loaded.contains((peer, group));
   String? errorFor(String peer, {bool group = false}) => _errors[(peer, group)];
@@ -38,6 +43,7 @@ class DraftController extends ChangeNotifier {
     Future<void> Function(bool) save, {
     int? draftRevision,
     String? draftText,
+    MessageReply? draftReply,
     bool Function()? canAccept,
   }) {
     final generation = _generation(peer);
@@ -49,12 +55,14 @@ class DraftController extends ChangeNotifier {
           draftRevision != null &&
           _loaded.contains(peer) &&
           (_revisions[peer] ?? 0) == draftRevision &&
-          (_text[peer] ?? '') == draftText;
+          (_text[peer] ?? '') == draftText &&
+          _replies[peer] == draftReply;
       await save(clear);
       if (clear &&
           generation == _generation(peer) &&
           (_revisions[peer] ?? 0) == draftRevision) {
         _text[peer] = '';
+        _replies.remove(peer);
         _revisions[peer] = ++_nextRevision;
         _errors.remove(peer);
         _notify();
@@ -72,6 +80,7 @@ class DraftController extends ChangeNotifier {
     (clear) => store.saveOutgoingMessage(message, clearDraft: clear),
     draftRevision: draftRevision,
     draftText: draftText,
+    draftReply: message.reply,
     canAccept: canAccept,
   );
 
@@ -85,6 +94,7 @@ class DraftController extends ChangeNotifier {
     (clear) => store.saveOutgoingGroupHistory(history, clearDraft: clear),
     draftRevision: draftRevision,
     draftText: draftText,
+    draftReply: history.messages.isEmpty ? null : history.messages.last.reply,
     canAccept: canAccept,
   );
 
@@ -119,8 +129,13 @@ class DraftController extends ChangeNotifier {
         // Preserve edits made while storage work was in flight.
         if (_loaded.contains(peer) &&
             (_text[peer] ?? '').isEmpty &&
+            !_replies.containsKey(peer) &&
             (_revisions[peer] ?? 0) == (revisions[peer] ?? 0)) {
           _text[peer] = draft['text'] as String;
+          if (draft['reply'] != null) {
+            _replies[peer] = MessageReply.parse(draft['reply'], group: group);
+            _replyTargets.add(peer);
+          }
           _revisions[peer] = ++_nextRevision;
         }
       }
@@ -155,8 +170,13 @@ class DraftController extends ChangeNotifier {
       try {
         if (generation != _generation(peer)) return;
         final text = group ? await store.groupDraft(id) : await store.draft(id);
+        final reply = await store.draftReply(id, group: group);
         if (generation != _generation(peer)) return;
         _text[peer] = text;
+        if (reply != null) {
+          _replies[peer] = reply;
+          _replyTargets.add(peer);
+        }
         _loaded.add(peer);
         _errors.remove(peer);
       } catch (_) {
@@ -179,29 +199,54 @@ class DraftController extends ChangeNotifier {
     unawaited(_save(peer, text, _generation(peer), _revisions[peer]!));
   }
 
+  void setReply(String id, MessageReply? reply, {bool group = false}) {
+    final peer = (id, group);
+    if (!_loaded.contains(peer) || _replies[peer] == reply) return;
+    if (reply != null) MessageReply.parse(reply.toJson(), group: group);
+    _replyTargets.add(peer);
+    if (reply == null) {
+      _replies.remove(peer);
+    } else {
+      _replies[peer] = reply;
+    }
+    _revisions[peer] = ++_nextRevision;
+    _notify();
+    unawaited(
+      _save(peer, _text[peer] ?? '', _generation(peer), _revisions[peer]!),
+    );
+  }
+
   Future<void> _save(
     _DraftTarget peer,
     String text,
     (int, int) generation,
     int revision,
-  ) => _enqueue(() async {
-    if (generation != _generation(peer) || revision != _revisions[peer]) return;
-    try {
-      if (peer.$2) {
-        await store.saveGroupDraft(peer.$1, text);
-      } else {
-        await store.saveDraft(peer.$1, text);
+  ) {
+    final reply = _replies[peer];
+    final structured = _replyTargets.contains(peer);
+    return _enqueue(() async {
+      if (generation != _generation(peer) || revision != _revisions[peer]) {
+        return;
       }
-      if (generation == _generation(peer) && revision == _revisions[peer]) {
-        _errors.remove(peer);
+      try {
+        if (structured) {
+          await store.saveDraftState(peer.$1, text, reply, group: peer.$2);
+        } else if (peer.$2) {
+          await store.saveGroupDraft(peer.$1, text);
+        } else {
+          await store.saveDraft(peer.$1, text);
+        }
+        if (generation == _generation(peer) && revision == _revisions[peer]) {
+          _errors.remove(peer);
+        }
+      } catch (_) {
+        if (generation == _generation(peer) && revision == _revisions[peer]) {
+          _errors[peer] = 'Draft not saved on this device. Please retry.';
+        }
       }
-    } catch (_) {
-      if (generation == _generation(peer) && revision == _revisions[peer]) {
-        _errors[peer] = 'Draft not saved on this device. Please retry.';
-      }
-    }
-    _notify();
-  });
+      _notify();
+    });
+  }
 
   Future<void> retry(String id, {bool group = false}) =>
       isLoaded(id, group: group)
@@ -224,6 +269,8 @@ class DraftController extends ChangeNotifier {
     _epoch++;
     _targetEpochs.clear();
     _text.clear();
+    _replies.clear();
+    _replyTargets.clear();
     _loaded.clear();
     _loading.clear();
     _errors.clear();
@@ -240,6 +287,8 @@ class DraftController extends ChangeNotifier {
     final peer = (id, group);
     _targetEpochs[peer] = (_targetEpochs[peer] ?? 0) + 1;
     _text.remove(peer);
+    _replies.remove(peer);
+    _replyTargets.remove(peer);
     _loaded.remove(peer);
     _loading.remove(peer);
     _errors.remove(peer);

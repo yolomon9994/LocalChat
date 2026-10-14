@@ -48,6 +48,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   recent-message ordering in Chats. Opening a visible conversation clears its unread count.
 - Offline name/message search from the Chats toolbar; tap a message result to
   open its conversation at the highlighted message.
+- Reply to text messages in direct/group chats, with quoted previews, encrypted
+  reply drafts, backups and jumps to saved originals. Both direct peers/all group
+  members need reply support; see [reply controls and testing](docs/MESSAGE_REPLIES.md).
 - Copy full text messages in direct/group chats, including saved offline history
   and search results, or copy a selection. See [message copy controls](docs/MESSAGE_COPY.md).
 - Encrypted drafts for each chat, including offline editing; unfinished text
