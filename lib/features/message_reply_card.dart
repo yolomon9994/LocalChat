@@ -28,7 +28,11 @@ class MessageReplyCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.reply, size: 20),
+            Icon(
+              Icons.reply,
+              size: 20,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -55,7 +59,10 @@ class MessageReplyCard extends StatelessWidget {
               IconButton(
                 tooltip: 'Cancel reply',
                 onPressed: onCancel,
-                icon: const Icon(Icons.close),
+                icon: Icon(
+                  Icons.close,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
           ],
         ),

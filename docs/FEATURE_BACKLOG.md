@@ -3,9 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: QR session verification
+## Current milestone: Text size and high contrast
 
-Implemented locally: 2026-10-15. Baseline `04f5682`; user handles Git.
+Implemented locally: 2026-10-15. Baseline `d84c754`; user handles Git.
+See [ACCESSIBILITY.md](ACCESSIBILITY.md).
+
+- [x] Follow system / Larger (+15%) / Largest (+30%), preserving device scaling.
+- [x] High contrast across light/dark palettes and device high-contrast support.
+- [x] Live preview and preferences shared with Settings, chats, dialogs and PIN.
+- [x] Backward-compatible appearance v2 storage, atomic parsing and failed-save retry.
+- [x] Retain already-higher container contrast; matching group/attachment foregrounds.
+- [x] Combined large-text layouts and bounded browser demo notice.
+- [x] All 500 tests (12 new), 12 Chrome checks and clean analysis.
+- [x] Final Android/web builds and diff review; see VALIDATION.md.
+- [ ] Manual phone/browser/TalkBack checklist in ACCESSIBILITY.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## QR session verification: implemented and committed
+
+Implemented: 2026-10-15. Committed by the user as `d84c754`.
 See [QR_VERIFICATION.md](QR_VERIFICATION.md).
 
 - [x] Show/scan QR for direct and individual pending host/guest connections.
@@ -17,7 +33,7 @@ See [QR_VERIFICATION.md](QR_VERIFICATION.md).
 - [x] All 488 tests (32 new) and 11 Chrome UI checks pass; clean analysis.
       Android/web builds and diff review pass; see VALIDATION.md.
 - [ ] Manual phone/browser/TalkBack checks; see QR_VERIFICATION.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `d84c754`.
 
 ## Starred messages: implemented and committed
 
@@ -438,7 +454,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Starred messages in direct/group chats, with encrypted persistence and backups.
 - [x] QR session verification for direct/group links; Android camera and manual fallback.
       Physical offline/camera checks pending; see QR_VERIFICATION.md.
-- [ ] Accessibility: adjustable text size, contrast and optional vibration.
+- [x] Accessibility: adjustable text size and high contrast; see ACCESSIBILITY.md.
+- [ ] Optional vibration feedback (next planned step).
 - [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
       preview, offline viewer and encrypted backup support; hardware checks pending.
 - [x] Direct-chat files: implemented with bounds/progress/cancel, encrypted
@@ -476,8 +493,9 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 9. Group background protection (committed), browser group simulation (committed).
 10. Copy text messages (committed); replies to text messages (committed).
 11. Starred messages (committed).
-12. QR scanning for session verification (current).
-13. Accessibility: adjustable text size, contrast and optional vibration (planned).
+12. QR scanning for session verification (committed).
+13. Accessibility: adjustable text size and high contrast (current); optional
+    vibration can follow as a separate milestone.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

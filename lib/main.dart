@@ -231,39 +231,82 @@ class _LocalChatAppState extends State<LocalChatApp>
                   ),
                 ),
               );
-        return controller.isDemo
-            ? Column(
-                children: [
-                  Material(
-                    color: Theme.of(context).colorScheme.tertiaryContainer,
-                    child: DefaultTextStyle.merge(
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onTertiaryContainer,
-                      ),
-                      child: const SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'BROWSER DEMO — simulated devices and messages. '
-                            'No real Wi-Fi Direct communication. '
-                            'History and settings reset on reload.',
-                            textAlign: TextAlign.center,
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(
+            textScaler: _appearance.textSize.applyTo(media.textScaler),
+            highContrast: media.highContrast || _appearance.highContrast,
+          ),
+          child: controller.isDemo
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    final notice = Material(
+                      color: Theme.of(context).colorScheme.tertiaryContainer,
+                      child: DefaultTextStyle.merge(
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onTertiaryContainer,
+                        ),
+                        child: const SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: EdgeInsets.all(10),
+                            child: Text(
+                              'BROWSER DEMO — simulated devices and messages. '
+                              'No real Wi-Fi Direct communication. '
+                              'History and settings reset on reload.',
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  Expanded(child: content),
-                ],
-              )
-            : content;
+                    );
+                    final largeText =
+                        MediaQuery.textScalerOf(context).scale(14) > 21;
+                    return Column(
+                      children: [
+                        if (largeText || constraints.maxHeight < 400)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: constraints.maxHeight * .3,
+                            ),
+                            child: SingleChildScrollView(
+                              primary: false,
+                              child: notice,
+                            ),
+                          )
+                        else
+                          notice,
+                        Expanded(child: content),
+                      ],
+                    );
+                  },
+                )
+              : content,
+        );
       },
       themeMode: _appearance.mode,
-      theme: buildAppTheme(_appearance.palette, Brightness.light),
-      darkTheme: buildAppTheme(_appearance.palette, Brightness.dark),
+      theme: buildAppTheme(
+        _appearance.palette,
+        Brightness.light,
+        highContrast: _appearance.highContrast,
+      ),
+      darkTheme: buildAppTheme(
+        _appearance.palette,
+        Brightness.dark,
+        highContrast: _appearance.highContrast,
+      ),
+      highContrastTheme: buildAppTheme(
+        _appearance.palette,
+        Brightness.light,
+        highContrast: true,
+      ),
+      highContrastDarkTheme: buildAppTheme(
+        _appearance.palette,
+        Brightness.dark,
+        highContrast: true,
+      ),
       home: HomeScreen(
         controller: controller,
         appLock: _lock,

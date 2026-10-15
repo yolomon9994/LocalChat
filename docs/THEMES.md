@@ -5,7 +5,12 @@ Choose **Light**, **Dark** or **Follow system**, then **Mint**, **Blue**,
 **Purple** or **Amber**. Changes apply immediately after the preference saves,
 including the current Settings screen. The initial appearance is Dark/Mint.
 
-Android stores your selection locally, separately from chat history and lock
+Appearance also offers **Text size** (Follow system, Larger +15%, Largest +30%),
+**High contrast**, and a preview. Enlargement composes with the device's text
+scaler; device high contrast is also respected. See [ACCESSIBILITY.md](ACCESSIBILITY.md)
+for migration, contrast behavior and the enlarged-text/phone checklist.
+
+Android stores all four choices together locally, separately from chat history and lock
 settings. Restarting the app or deleting chat history preserves it. Browser
 Demo choices reset on reload, like its other settings.
 

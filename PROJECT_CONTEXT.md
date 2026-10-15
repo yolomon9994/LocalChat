@@ -33,13 +33,41 @@ Browser group simulation was committed by the user as `83fc101`.
 Text copying was committed by the user as `b9ef43c`.
 Replies to text messages were committed by the user as `4dae7fe`.
 Starred messages were committed by the user as `04f5682`.
-The current milestone is QR session verification.
+QR verification was committed by the user as `d84c754`.
+The current milestone is text size and high contrast.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## QR-verification milestone - implemented locally, 2026-10-15
+## Readability milestone - implemented locally, 2026-10-15
 
-Baseline: `04f5682`; clean working tree at startup. The user handles Git.
+Baseline: `d84c754`; clean working tree at startup. The user handles Git.
+See docs/ACCESSIBILITY.md, docs/THEMES.md and docs/VALIDATION.md.
+
+- Appearance adds Follow system / Larger (+15%) / Largest (+30%), a high-contrast
+  switch and preview. Root MediaQuery composes the existing nonlinear scaler with
+  added enlargement; no cap/reduction or replacement of device scaling. Routes,
+  profile edits, tabs, drafts and independent lock gating are preserved.
+- Both light/dark themes support explicit or OS-reported high contrast in every
+  palette. Material contrast level 1 is used, retaining existing container pairs
+  with higher contrast. Matching bubble foregrounds fix outgoing group text and
+  keep direct/group attachment labels, buttons and icons readable.
+- Appearance v2 extends the existing secure-storage entry; v1 mode/palette migrate
+  with default new choices and no startup rewrite. Whole-record parsing, save
+  serialization, previous applied/saved choices on failure and retry remain.
+- Browser preferences remain temporary. Its notice scrolls in a bounded area at
+  large text/short windows instead of pushing app content outside the viewport.
+- Twelve new migration/scaling/controller/UI checks, including PIN appearance,
+  combined 2.34 text on 320 x 568, device high contrast/brightness and all enhanced
+  palettes. All 500 tests and 12 Chrome checks pass; analysis is clean.
+  Android APK/web builds and diff review pass; see VALIDATION.md.
+  Actual Android restart/font settings, TalkBack and manual browser checks remain
+  pending. No native/permission/package/wire changes; SQLite 13 and backups v10.
+- All changes saved locally without staging or committing. Optional vibration is
+  the next planned step, not part of this milestone; do not implement it yet.
+
+## QR-verification milestone - implemented, 2026-10-15
+
+Baseline: `04f5682`; committed by the user as `d84c754`. The user handles Git.
 See docs/QR_VERIFICATION.md and docs/VALIDATION.md for controls/results.
 
 - Show QR / Scan QR for direct and individual pending group links; explicit local
@@ -64,8 +92,8 @@ See docs/QR_VERIFICATION.md and docs/VALIDATION.md for controls/results.
   Android APK/web builds pass. See VALIDATION.md; actual phone decoding/permission,
   first-use offline and TalkBack checks remain pending, not passed by mocks.
 - SQLite stays schema 13; backups stay v10. No history/identity transfer changes.
-  Saved locally without staging/committing. Next planned milestone is accessibility
-  (adjustable text, contrast and optional vibration); do not implement it yet.
+  Committed by the user as `d84c754`. Text size/contrast is now the current
+  milestone above; vibration remains planned.
 
 ## Starred-messages milestone - implemented, 2026-10-15
 

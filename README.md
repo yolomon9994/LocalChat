@@ -69,6 +69,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   automatic locking on launch/background, and manual Lock now in Settings.
 - Light, dark and follow-system themes with mint, blue, purple and amber palettes;
   choose them in Settings → Appearance. Android remembers your choices.
+- Text-size presets that add to device scaling, high contrast in every palette,
+  and a readability preview in Settings. Android saves the choices and applies them
+  to the PIN screen; see [readability controls/testing](docs/ACCESSIBILITY.md).
 - Opt-in local message notifications with hidden previews by default, lock-aware
   chat opening and suppression while reading the conversation. Configure in Settings.
 - Optional protection of the current verified connection while backgrounded,

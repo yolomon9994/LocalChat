@@ -111,3 +111,10 @@ LocalChat inactive, expiring the QR route and triggering the existing app lock.
 Finish the prompt, unlock if needed and reopen Scan QR. Late permission/capture
 results cannot approve the old request or restart its camera. See the
 [QR permission and physical testing guide](QR_VERIFICATION.md).
+
+## Readability preferences
+
+Text size and high contrast from Settings > Appearance also apply to the initial
+PIN screen, biometric fallback, errors and lock dialogs. Device text scaling is
+preserved. Appearance cannot bypass the independent lock gate. See the
+[large-text and high-contrast phone checklist](ACCESSIBILITY.md).

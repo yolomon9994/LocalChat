@@ -9,6 +9,7 @@ import 'chat_image_view.dart';
 import 'chat_file_bubble.dart';
 import 'text_message_actions.dart';
 import 'message_reply_card.dart';
+import 'message_bubble_content.dart';
 import 'verification_screen.dart';
 import '../core/message_reply.dart';
 
@@ -307,78 +308,81 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             ? Border.all(color: colors.primary, width: 2)
             : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (widget.controller.isStarred(star))
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
-              child: Icon(
-                Icons.star,
-                size: 18,
-                semanticLabel: 'Starred message',
+      child: MessageBubbleContent(
+        foreground: foreground,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.controller.isStarred(star))
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(
+                  Icons.star,
+                  size: 18,
+                  semanticLabel: 'Starred message',
+                ),
               ),
-            ),
-          if (highlighted)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                _fromReply
-                    ? 'Original message'
-                    : widget.fromStar
-                    ? 'Starred message'
-                    : 'Search result',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: foreground),
+            if (highlighted)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  _fromReply
+                      ? 'Original message'
+                      : widget.fromStar
+                      ? 'Starred message'
+                      : 'Search result',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: foreground),
+                ),
               ),
-            ),
-          if (message.reply != null &&
-              widget.controller.appAccessible &&
-              widget.controller.appForeground)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: MessageReplyCard(
-                key: ValueKey((
-                  'message-quote',
-                  message.peerId,
-                  message.id,
-                  message.outgoing,
-                )),
-                reply: message.reply!,
-                name: message.reply!.outgoing == true
-                    ? 'You'
-                    : message.reply!.name,
-                onTap: () =>
-                    _openReply(message.reply!, interaction: interaction),
+            if (message.reply != null &&
+                widget.controller.appAccessible &&
+                widget.controller.appForeground)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: MessageReplyCard(
+                  key: ValueKey((
+                    'message-quote',
+                    message.peerId,
+                    message.id,
+                    message.outgoing,
+                  )),
+                  reply: message.reply!,
+                  name: message.reply!.outgoing == true
+                      ? 'You'
+                      : message.reply!.name,
+                  onTap: () =>
+                      _openReply(message.reply!, interaction: interaction),
+                ),
               ),
+            if (message.file != null)
+              ChatFileBubble(controller: widget.controller, message: message)
+            else if (message.image != null)
+              ChatImageBubble(controller: widget.controller, message: message)
+            else
+              SelectableText(
+                message.text,
+                style: TextStyle(color: foreground),
+                contextMenuBuilder: menu,
+              ),
+            const SizedBox(height: 5),
+            Text(
+              '$stamp${message.outgoing ? ' · ${message.status}' : ''}',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: foreground),
             ),
-          if (message.file != null)
-            ChatFileBubble(controller: widget.controller, message: message)
-          else if (message.image != null)
-            ChatImageBubble(controller: widget.controller, message: message)
-          else
-            SelectableText(
-              message.text,
-              style: TextStyle(color: foreground),
-              contextMenuBuilder: menu,
-            ),
-          const SizedBox(height: 5),
-          Text(
-            '$stamp${message.outgoing ? ' · ${message.status}' : ''}',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: foreground),
-          ),
-          if (message.image == null &&
-              message.file == null &&
-              message.outgoing &&
-              (message.status == 'queued' || message.status == 'unconfirmed'))
-            OutgoingMessageActions(
-              controller: widget.controller,
-              message: message,
-            ),
-        ],
+            if (message.image == null &&
+                message.file == null &&
+                message.outgoing &&
+                (message.status == 'queued' || message.status == 'unconfirmed'))
+              OutgoingMessageActions(
+                controller: widget.controller,
+                message: message,
+              ),
+          ],
+        ),
       ),
     );
     return Align(

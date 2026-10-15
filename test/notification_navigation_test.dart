@@ -192,11 +192,19 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      // The Appearance section above can change height while lazy children
+      // are laid out. Apply the final scroll offset before hitting the switch.
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Message notifications'));
+      await tester.pumpAndSettle();
+      expect(find.text('Message notifications').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Message notifications'));
       await tester.pumpAndSettle();
       expect(c.notifications.enabled, true);
       expect(c.notifications.previews, false);
       await tester.ensureVisible(find.text('Show message previews'));
+      await tester.pumpAndSettle();
+      expect(find.text('Show message previews').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Show message previews'));
       await tester.pumpAndSettle();
       expect(c.notifications.previews, true);

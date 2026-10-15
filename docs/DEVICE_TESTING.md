@@ -1,5 +1,9 @@
 # Two-device acceptance tests
 
+Readability has a [text-size/high-contrast checklist](ACCESSIBILITY.md), including
+OS font settings, theme migration, restart/PIN, combined enlargement, TalkBack and
+small-screen browser notices. Optional vibration is not implemented yet.
+
 QR verification has a [camera/direct/group checklist](QR_VERIFICATION.md), including
 first-use offline models, permission/PIN behavior, both confirmations, old/wrong QR
 rejection and camera shutdown. Automated camera tests use a fake native platform.

@@ -20,7 +20,7 @@ class AppearanceSettings extends StatelessWidget {
           Text(
             c.isDemo
                 ? 'Try a theme here. Demo appearance resets on reload.'
-                : 'Your theme and color palette are saved on this phone.',
+                : 'Your appearance and readability settings are saved on this phone.',
           ),
           const SizedBox(height: 16),
           InputDecorator(
@@ -76,6 +76,67 @@ class AppearanceSettings extends StatelessWidget {
                         },
                 ),
             ],
+          ),
+          const SizedBox(height: 20),
+          InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Text size',
+              enabled: !disabled,
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<AppTextSize>(
+                key: const ValueKey('appearance-text-size'),
+                value: c.textSize,
+                isExpanded: true,
+                itemHeight: null,
+                items: [
+                  for (final size in AppTextSize.values)
+                    DropdownMenuItem(value: size, child: Text(size.label)),
+                ],
+                onChanged: disabled
+                    ? null
+                    : (size) {
+                        if (size != null) c.setTextSize(size);
+                      },
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Adds enlargement to your phone\'s text size. Follow system removes the extra enlargement.',
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            key: const ValueKey('appearance-high-contrast'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('High contrast'),
+            subtitle: const Text(
+              'Stronger text and control colors in every palette. Device high contrast is also respected.',
+            ),
+            value: c.highContrast,
+            onChanged: disabled ? null : c.setHighContrast,
+          ),
+          Card(
+            key: const ValueKey('appearance-readability-preview'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Readability preview',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Nearby conversations, easier to read.'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Message details',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
           ),
           if (c.saving)
             const Padding(

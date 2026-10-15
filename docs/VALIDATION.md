@@ -1,9 +1,84 @@
 # Validation for v0.1.0
 
+## Text size and high contrast - validation 2026-10-15
+
+Baseline: `d84c754` (QR verification committed by the user). Changes are local,
+unstaged and uncommitted; the user handles Git. See [ACCESSIBILITY.md](ACCESSIBILITY.md).
+
+- Existing `flutter test test/appearance_test.dart test/layout_test.dart
+  --concurrency=2 --timeout=2m --reporter expanded`: **9 passed**, exit 0, 5s;
+  `.dart_tool/accessibility-existing.log`.
+- Focused `flutter test test/readability_test.dart test/appearance_test.dart
+  test/group_search_screen_test.dart --concurrency=2 --timeout=2m --reporter expanded`:
+  **24 passed**, exit 0, 12s; `.dart_tool/accessibility-focused-checked.log`.
+- Twelve new checks cover v1->v2 preferences/restart, malformed-field atomicity,
+  write failures/overlap, nonlinear scaler composition and no cap/reduction,
+  actual Settings controls, profile edits/routes/tabs, PIN privacy/appearance,
+  device high contrast/brightness, all eight enhanced palettes, 320 x 568 with
+  1.8 OS x 1.3 app text, browser notice scrolling, direct/group bubble foregrounds,
+  drafts, save-disabled controls and error recovery. Camera/hardware is not used.
+- Contrast checks require >=7:1 for tested enhanced body/detail/container/error
+  text pairs, >=3:1 outline/surface and >=4.5:1 primary/surface controls. Generated
+  container pairs retain their existing colors if their contrast is higher.
+  Numerical checks do not establish whole-app accessibility compliance.
+- Development corrections: a draft fixture initially called the wrong setter,
+  then needed its draft explicitly loaded. Widget crypto setup now uses runAsync
+  so it does not stall in fake time; the stalled failed run was interrupted.
+  A device-brightness fixture now uses the actual last enum value for its final
+  expectation. Offscreen lazy Settings children are scrolled into view before
+  taps. Combined text exposed an overflowing browser notice; it now has a bounded
+  scroll area. Material enhanced containers could reduce existing contrast;
+  the app retains the higher pair. Actual group bubble testing caught outgoing
+  text using the page foreground; shared bubble content and group metadata now
+  use the matching foreground. Failed/interrupted runs are not counted as passes.
+- Final quote/bubble `flutter test test/readability_test.dart
+  test/message_reply_screen_test.dart --concurrency=2 --timeout=2m --reporter expanded`:
+  **24 passed**, exit 0, 11s; `.dart_tool/accessibility-quotes-final.log`.
+  This includes the twelfth new check for nested reply/cancel icon contrast.
+  A full run was stopped at 271 passing checks for this final quote styling fix;
+  it is not counted as a complete pass (`.dart_tool/accessibility-milestone-final.log`).
+- Final `flutter analyze`: no issues, exit 0, 6.6s;
+  `.dart_tool/accessibility-analyze-complete.log`.
+- The first Chrome run passed eleven checks but the demo notice fixture timed out
+  while waiting for WebCrypto during widget fake time. It now initializes the demo
+  controller in runAsync before pumping its route. No production startup change;
+  initial failed log: `.dart_tool/accessibility-chrome-final.log`.
+- Headless Chrome `flutter test test/readability_test.dart --platform chrome
+  --timeout=2m --reporter expanded --verbose`: **12 passed**, exit 0, 11s after
+  startup; `.dart_tool/accessibility-chrome-checked.log` (four model/controller
+  checks and eight widget/rendering checks).
+- Chrome uses the existing local cached-CanvasKit helper for Flutter 3.38.7's
+  Windows test-server path issue. Four exact cached SDK JS/WASM files are eligible
+  only in the isolated test browser; no SDK/app edits or downloads. Asset log:
+  `.dart_tool/accessibility-chrome-checked-assets.log`.
+- The first complete full run passed 499 checks with one notification-settings
+  fixture failure: it tapped before scrolling/layout finished after the taller
+  Appearance section. The fixture now settles layout, ensures visibility and
+  asserts hit-testability for both switches. Focused `flutter test
+  test/notification_navigation_test.dart --timeout=2m --reporter expanded`:
+  **5 passed**, exit 0, 4s; `.dart_tool/accessibility-notifications-final.log`.
+  Initial full log: `.dart_tool/accessibility-milestone-complete.log` (exit 1).
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **500 passed**, exit 0 (488 existing + 12 new), 4m15s;
+  `.dart_tool/accessibility-milestone-checked.log`. No builds ran during the suite.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, explicit Flutter exit 0, 36.0s; `.dart_tool/accessibility-apk-final.log`.
+  Artifact: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: passed, explicit Flutter exit 0, 55.7s;
+  `.dart_tool/accessibility-web-final.log`, artifact `build/web`. The existing
+  optional Cupertino font warning remains; no new font/package was added.
+- Final diff, UTF-8 and local documentation link review passes. New files have
+  final newlines and no trailing whitespace; `git diff --check` is clean. The
+  index remains empty and all changes are saved locally for user review/commit.
+- No native, permission, dependency, SQLite schema, backup or wire changes.
+  Appearance storage is independent of chat export/import and the lock gate.
+- Manual Android font/high-contrast settings, restart, keyboard, TalkBack and
+  browser checks remain pending; see [ACCESSIBILITY.md](ACCESSIBILITY.md).
+
 ## QR session verification - validation 2026-10-15
 
-Baseline: `04f5682` (starred messages committed by the user). Changes are local,
-unstaged and uncommitted; the user handles staging, committing and pushing.
+Baseline: `04f5682` (starred messages committed by the user). The user subsequently
+committed QR verification as `d84c754`.
 See [QR_VERIFICATION.md](QR_VERIFICATION.md) for controls and physical checks.
 
 - Protocol/controller regression: `flutter test test/session_verification_test.dart
