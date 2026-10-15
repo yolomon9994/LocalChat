@@ -7,6 +7,7 @@ import '../core/local_store.dart';
 import '../demo/demo_group_transport.dart';
 import '../core/models.dart';
 import '../core/message_reply.dart';
+import '../core/starred_message.dart';
 import '../core/chat_backup.dart';
 import 'backup_files.dart';
 import '../core/secure_session.dart';
@@ -509,6 +510,81 @@ class ChatController extends ChangeNotifier {
   String? selectedPeer;
   String selectedName = '';
   int historyRevision = 0;
+  List<StarredMessage> starred = const [];
+  final _starredKeys = <StarredMessage>{};
+  int starsRevision = 0;
+  String? starsError;
+  bool _starsLoading = false;
+  Future<void>? _starsLoad;
+  int _starsGeneration = 0;
+  (int, int)? _starsStamp;
+  bool isStarred(StarredMessage s) => _starredKeys.contains(s);
+  void _replaceStars(List<StarredMessage> result) {
+    final keys = result.toSet();
+    if (setEquals(_starredKeys, keys)) return;
+    starred = List.unmodifiable(result);
+    _starredKeys
+      ..clear()
+      ..addAll(keys);
+    starsRevision++;
+  }
+
+  Future<void> refreshStars() {
+    if (_starsLoad != null) return _starsLoad!;
+    if (_disposed || !initialized) return Future.value();
+    return _starsLoad = _readStarredMessages();
+  }
+
+  Future<void> _readStarredMessages() async {
+    if (_disposed || !initialized || _starsLoading) return;
+    _starsLoading = true;
+    final generation = ++_starsGeneration;
+    _starsStamp = (historyRevision, groups.historyRevision);
+    try {
+      final result = await store.starredMessages();
+      if (!_disposed &&
+          generation == _starsGeneration &&
+          _starsStamp == (historyRevision, groups.historyRevision)) {
+        _replaceStars(result);
+        starsError = null;
+      }
+    } catch (_) {
+      if (!_disposed) {
+        starsError = 'Could not load starred messages. Try again.';
+      }
+    } finally {
+      _starsLoading = false;
+      _starsLoad = null;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Future<bool> setStarred(StarredMessage s, bool value) async {
+    final interaction = interactionRevision;
+    var success = false;
+    await _run(() async {
+      if (_disposed ||
+          !initialized ||
+          !appAccessible ||
+          !appForeground ||
+          interaction != interactionRevision) {
+        return;
+      }
+      try {
+        _starsGeneration++;
+        success = await store.setMessageStarred(s, value);
+        if (!success) throw const FormatException('Message no longer saved.');
+        _replaceStars(await store.starredMessages());
+        starsError = null;
+      } catch (_) {
+        success = false;
+        starsError = 'Could not update this starred message. Try again.';
+      }
+      notifyListeners();
+    });
+    return success;
+  }
+
   Object? _visibleChat;
   bool _appAccessible = true;
   bool _appForeground = true;
@@ -1776,7 +1852,14 @@ class ChatController extends ChangeNotifier {
 
   @override
   void notifyListeners() {
-    if (!_disposed) super.notifyListeners();
+    if (!_disposed) {
+      if (initialized &&
+          !_starsLoading &&
+          _starsStamp != (historyRevision, groups.historyRevision)) {
+        unawaited(refreshStars());
+      }
+      super.notifyListeners();
+    }
   }
 
   @override

@@ -48,6 +48,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   recent-message ordering in Chats. Opening a visible conversation clears its unread count.
 - Offline name/message search from the Chats toolbar; tap a message result to
   open its conversation at the highlighted message.
+- Star saved text, replies, images and files in direct/group chats. Browse Starred
+  messages from Chats, jump to originals, and keep stars in encrypted backups.
+  See [starred message controls and testing](docs/STARRED_MESSAGES.md).
 - Reply to text messages in direct/group chats, with quoted previews, encrypted
   reply drafts, backups and jumps to saved originals. Both direct peers/all group
   members need reply support; see [reply controls and testing](docs/MESSAGE_REPLIES.md).

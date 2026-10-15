@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:local_chat/core/starred_message.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
@@ -9,6 +10,8 @@ import 'package:local_chat/services/chat_controller.dart';
 import 'package:local_chat/services/transport.dart';
 
 class MemoryStore extends LocalStore {
+  @override
+  Future<List<StarredMessage>> starredMessages() async => [];
   final draftReplies = <(String, bool), MessageReply>{};
   @override
   Future<MessageReply?> draftReply(String id, {bool group = false}) async =>

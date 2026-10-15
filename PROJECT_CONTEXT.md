@@ -31,15 +31,45 @@ Group search was committed by the user as `6f342bb`.
 Group background protection was committed by the user as `734ea96`.
 Browser group simulation was committed by the user as `83fc101`.
 Text copying was committed by the user as `b9ef43c`.
-The current milestone is replies to text messages.
+Replies to text messages were committed by the user as `4dae7fe`.
+The current milestone is starred messages.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
+## Starred-messages milestone - implemented locally, 2026-10-15
+
+Baseline: `4dae7fe`; clean working tree at startup. Saved locally, not committed.
+See docs/STARRED_MESSAGES.md and docs/VALIDATION.md. The user handles Git.
+
+- Private local stars cover direct/group text, replies, images and files. Shared
+  menus/selection/semantics offer Star/Unstar; attachment menus omit text actions.
+  Bubble markers and a Chats toolbar saved list include archived histories.
+  Exact direction/author anchors reuse lazy history; drafts/organization stay intact.
+- Schema 13 adds message_stars: HMAC-SHA256 keyed reference IDs plus XChaCha20-
+  Poly1305 reference ciphertext/AAD. No body copies, migration rewrite, native,
+  dependency or wire changes. Browser demo remains in memory.
+- V10 archives validate bounded references, preserve old v1-v9 imports, add stars
+  only for imported/identical originals, retain destination stars and re-encrypt
+  atomically. Preview/success counts explain additive restore without tombstones.
+  Existing identity-transfer/history-only rules and archive encryption are unchanged.
+- Conversation/group deletion, queued cancellation and clear remove stars atomically.
+  Root cache refreshes coalesce and use generation/history revisions. Foreground,
+  PIN and route checks invalidate obsolete callbacks; the list clears decrypted
+  rows on privacy loss and rejects delayed results. Authorized writes may finish.
+- All 456 tests pass, exit 0 (430 existing + 26 new), 4m20s; clean analysis.
+  Ten model/controller/archive, eleven UI and five native SQLite cases are new.
+  All eleven UI checks also pass in headless Chrome, including actual group-image
+  decoding with both frame and real-time clocks driven before route disposal.
+  The existing cached-CanvasKit test-server workaround remains necessary.
+  Android debug APK and web builds pass; see VALIDATION.md for commands/logs.
+  Manual phone/browser/TalkBack checks remain pending. All changes are saved
+  locally, unstaged and uncommitted for the user to review and commit.
+
 ## Message-replies milestone - implemented, 2026-10-14
 
-Baseline: `b9ef43c`; tree clean at startup. The user handles Git.
-Changes are saved locally, unstaged and uncommitted. See MESSAGE_REPLIES.md and
-VALIDATION.md. Final validation on 2026-10-15: **430 tests pass**, exit 0
+Baseline: `b9ef43c`; committed by the user as `4dae7fe`. The user handles Git.
+See MESSAGE_REPLIES.md and VALIDATION.md. Final validation on 2026-10-15:
+**430 tests pass**, exit 0
 (395 prior + 35 new), 4m52s; **12 Chrome UI checks pass**, clean analysis and
 Android/browser builds. Manual device/browser checks remain pending.
 

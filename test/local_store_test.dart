@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/local_store.dart';
 import 'package:local_chat/core/models.dart';
+import 'package:local_chat/core/starred_message.dart';
 import 'package:local_chat/core/message_reply.dart';
 import 'package:local_chat/core/chat_backup.dart';
 import 'package:local_chat/core/group_models.dart';
@@ -79,6 +80,207 @@ void main() {
     reply: quote,
   );
 
+  const star = StarredMessage(target: 'alice', id: 'id-1', outgoing: true);
+  test(
+    'schema 12 upgrade adds encrypted stars without rewriting history',
+    () async {
+      await store.saveMessage(message());
+      await store.saveDraft('alice', 'Keep draft');
+      await store.close();
+      final old = await openDatabase(databasePath);
+      final body = (await old.query('messages')).single['body'];
+      await old.execute('DROP TABLE message_stars');
+      await old.setVersion(12);
+      await old.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      final db = await openDatabase(databasePath);
+      expect(await db.getVersion(), 13);
+      expect((await db.query('messages')).single['body'], body);
+      expect(await store.draft('alice'), 'Keep draft');
+      expect(await store.starredMessages(), isEmpty);
+      expect(await store.setMessageStarred(star, true), isTrue);
+      final row = (await db.query('message_stars')).single;
+      expect(row['id'], matches(RegExp(r'^[a-f0-9]{64}$')));
+      expect(
+        utf8.decode(base64Decode(row['body'] as String), allowMalformed: true),
+        isNot(contains('alice')),
+      );
+      expect((await db.query('messages')).single['body'], body);
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      expect(await store.starredMessages(), [star]);
+      await store.setStatus('id-1', 'alice', 'delivered');
+      expect(await store.starredMessages(), [star]);
+    },
+  );
+  test(
+    'star ciphertext authenticates its key and rejects moved or modified records',
+    () async {
+      await store.saveMessage(message());
+      await store.saveMessage(message(outgoing: false));
+      const incoming = StarredMessage(
+        target: 'alice',
+        id: 'id-1',
+        outgoing: false,
+      );
+      await store.setMessageStarred(star, true);
+      await store.setMessageStarred(incoming, true);
+      final db = await openDatabase(databasePath),
+          rows = await (await openDatabase(
+            databasePath,
+          )).query('message_stars');
+      await db.update(
+        'message_stars',
+        {'body': rows[1]['body']},
+        where: 'id = ?',
+        whereArgs: [rows[0]['id']],
+      );
+      await expectLater(store.starredMessages(), throwsA(anything));
+      await db.update(
+        'message_stars',
+        {'body': rows[0]['body']},
+        where: 'id = ?',
+        whereArgs: [rows[0]['id']],
+      );
+      final bytes = base64Decode(rows[0]['body'] as String);
+      bytes[bytes.length - 1] ^= 1;
+      await db.update(
+        'message_stars',
+        {'body': base64Encode(bytes)},
+        where: 'id = ?',
+        whereArgs: [rows[0]['id']],
+      );
+      await expectLater(store.starredMessages(), throwsA(anything));
+    },
+  );
+  test(
+    'star cleanup and queued cancellation are atomic with history deletion',
+    () async {
+      final queued = ChatMessage(
+        id: 'id-1',
+        peerId: 'alice',
+        text: 'Queued text',
+        timestamp: 1,
+        outgoing: true,
+        status: 'queued',
+      );
+      await store.saveMessage(queued);
+      await store.setMessageStarred(star, true);
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_star_delete BEFORE DELETE ON message_stars BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+      );
+      await expectLater(
+        store.deleteQueuedMessage('id-1', 'alice'),
+        throwsA(anything),
+      );
+      expect((await store.messages('alice')).single.status, 'queued');
+      expect(await store.starredMessages(), [star]);
+      await expectLater(store.deleteConversation('alice'), throwsA(anything));
+      expect(await store.conversations(), hasLength(1));
+      expect(await store.messages('alice'), hasLength(1));
+      await db.execute('DROP TRIGGER fail_star_delete');
+      expect(await store.deleteQueuedMessage('id-1', 'alice'), isTrue);
+      expect(await store.starredMessages(), isEmpty);
+      expect(await store.setMessageStarred(star, true), isFalse);
+    },
+  );
+  test(
+    'v10 import re-encrypts stars and rolls back the whole archive on star write failure',
+    () async {
+      final source = DemoStore();
+      await source.open();
+      await source.savePeer('bob', 'Bob');
+      await source.saveMessage(
+        const ChatMessage(
+          id: 'new',
+          peerId: 'bob',
+          text: 'Imported secret',
+          timestamp: 5,
+          outgoing: false,
+          status: 'received',
+        ),
+      );
+      const importedStar = StarredMessage(
+        target: 'bob',
+        id: 'new',
+        outgoing: false,
+      );
+      await source.setMessageStarred(importedStar, true);
+      final data = await BackupData.parse({
+        ...((await source.exportBackup()).toJson()),
+        'demo': false,
+      });
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_star_insert BEFORE INSERT ON message_stars BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+      );
+      await expectLater(store.importBackup(data), throwsA(anything));
+      expect(await store.messages('bob'), isEmpty);
+      expect((await store.conversations()).map((p) => p.id), ['alice']);
+      expect(await store.starredMessages(), isEmpty);
+      await db.execute('DROP TRIGGER fail_star_insert');
+      await store.importBackup(data);
+      expect(await store.starredMessages(), [importedStar]);
+      final encrypted = (await db.query('message_stars')).single;
+      final snapshot = await store.exportBackup();
+      expect(snapshot.toJson()['version'], 10);
+      final oldKey = await store.starredMessages();
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      expect(await store.starredMessages(), oldKey);
+      expect(
+        (await (await openDatabase(
+          databasePath,
+        )).query('message_stars')).single,
+        encrypted,
+      );
+      await store.clearHistory();
+      expect(await store.starredMessages(), isEmpty);
+    },
+  );
+  test(
+    'signed group stars retain author scope, survive saving and delete without direct stars',
+    () async {
+      await store.saveMessage(message());
+      await store.setMessageStarred(star, true);
+      final group = await draftGroup();
+      final author = await identityId(group.host);
+      final text = await GroupText.create(
+        store.identity,
+        'Member',
+        group: group.id,
+        host: group.host,
+        epoch: randomId(),
+        view: 1,
+        text: 'Group star',
+        targets: [author],
+      );
+      await store.saveGroupHistory(group.copy(messages: [text]));
+      final groupStar = StarredMessage(
+        target: group.id,
+        id: text.id,
+        author: author,
+      );
+      expect(await store.setMessageStarred(groupStar, true), isTrue);
+      await store.saveGroupHistory(
+        group.copy(messages: [text.copy(read: true)]),
+      );
+      expect(await store.starredMessages(), unorderedEquals([star, groupStar]));
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      expect(await store.starredMessages(), unorderedEquals([star, groupStar]));
+      await store.deleteGroupHistory(group.id);
+      expect(await store.starredMessages(), [star]);
+      await store.deleteConversation('alice');
+      expect(await store.starredMessages(), isEmpty);
+    },
+  );
+
   test(
     'schema 11 upgrade preserves ciphertext and adds encrypted reply drafts',
     () async {
@@ -93,7 +295,7 @@ void main() {
       store = LocalStore(now: () => clock);
       await store.open();
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 12);
+      expect(await upgraded.getVersion(), 13);
       expect((await upgraded.query('messages')).single['body'], body);
       expect(await store.draft('alice'), 'Old draft');
       expect(await store.draftReply('alice'), isNull);
@@ -332,7 +534,7 @@ void main() {
       expect(await store.groupDraft(group.id), 'Secret unsearched draft');
       final afterDb = await openDatabase(databasePath);
       expect((await afterDb.query('group_history')).single, before);
-      expect(await afterDb.getVersion(), 12);
+      expect(await afterDb.getVersion(), 13);
       expect(
         await afterDb.query(
           'sqlite_master',
@@ -371,7 +573,7 @@ void main() {
       store = LocalStore();
       await store.open();
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 12);
+      expect(await upgraded.getVersion(), 13);
       expect((await upgraded.query('group_history')).single['body'], body);
       final restored = (await store.groupHistories()).single;
       expect(restored.pinned || restored.archived, isFalse);
@@ -530,7 +732,7 @@ void main() {
       await old.close();
       store = LocalStore();
       await store.open();
-      expect(await (await openDatabase(databasePath)).getVersion(), 12);
+      expect(await (await openDatabase(databasePath)).getVersion(), 13);
       expect((await store.messages('alice')).single.text, message().text);
       expect(await store.draft('alice'), 'Direct draft');
       expect((await store.groupHistories()).single.id, group.id);
@@ -719,7 +921,7 @@ void main() {
       await store.open();
       expect((await store.messages('alice')).single.text, message().text);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 12);
+      expect(await upgraded.getVersion(), 13);
       expect(await upgraded.query('images'), isEmpty);
     },
   );
@@ -803,7 +1005,7 @@ void main() {
       );
       expect((await store.exportBackup()).seed, seed);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 12);
+      expect(await upgraded.getVersion(), 13);
       expect(await upgraded.query('files'), isEmpty);
     },
   );
@@ -892,7 +1094,7 @@ void main() {
         utf8.decode(base64Decode(ciphertext), allowMalformed: true),
         isNot(contains(m.image!.digest)),
       );
-      expect(await db.getVersion(), 12);
+      expect(await db.getVersion(), 13);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -952,7 +1154,7 @@ void main() {
       final raw = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
       expect(raw, isNot(contains(m.file!.name)));
       expect(raw, isNot(contains(m.file!.digest)));
-      expect(await db.getVersion(), 12);
+      expect(await db.getVersion(), 13);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -1382,7 +1584,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 12);
+      expect(await upgraded.getVersion(), 13);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -1793,7 +1995,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 12);
+      expect(await (await openDatabase(databasePath)).getVersion(), 13);
     },
   );
   test(
@@ -1872,7 +2074,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 12);
+      expect(await (await openDatabase(databasePath)).getVersion(), 13);
     },
   );
 

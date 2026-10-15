@@ -3,10 +3,27 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Replies to text messages
+## Current milestone: Starred messages
 
-Implemented: 2026-10-14. Saved locally, unstaged and uncommitted; the user handles
-Git. See [MESSAGE_REPLIES.md](MESSAGE_REPLIES.md).
+Implemented locally: 2026-10-15. Baseline `4dae7fe`; user handles Git.
+See [STARRED_MESSAGES.md](STARRED_MESSAGES.md).
+
+- [x] Star/Unstar menus, selection actions, semantics and bubble markers.
+- [x] Saved direct/group text, replies, images and files; archived history included.
+- [x] Chats toolbar list, remove stars and exact direction/author original anchors.
+- [x] Preserve drafts, unread while browsing, organization and receipts.
+- [x] Foreground/PIN/revision/route guards and delayed-load cancellation.
+- [x] Schema 13 encrypted references, keyed IDs, restart and atomic cleanup.
+- [x] V10 encrypted backups, safe merge, identity rules and star counts in preview.
+- [x] All 456 tests and 11 Chrome UI checks pass; clean analysis, Android/web
+      builds and diff review. See [VALIDATION.md](VALIDATION.md).
+- [ ] Manual Android/browser checks; see [STARRED_MESSAGES.md](STARRED_MESSAGES.md).
+- [ ] User reviews, commits and pushes the milestone.
+
+## Replies to text messages: implemented and committed
+
+Implemented: 2026-10-14. Committed by the user as `4dae7fe`.
+See [MESSAGE_REPLIES.md](MESSAGE_REPLIES.md).
 
 - [x] Reply/Copy menus in direct/group text bubbles, selection and accessibility.
 - [x] Author/preview composer card, cancel preserving text and independent drafts.
@@ -19,7 +36,7 @@ Git. See [MESSAGE_REPLIES.md](MESSAGE_REPLIES.md).
 - [x] Final checks 2026-10-15: all 430 tests and 12 Chrome UI checks pass; clean
       analysis, Android/browser builds and review. See [VALIDATION.md](VALIDATION.md).
 - [ ] Manual phone/browser checks; see [MESSAGE_REPLIES.md](MESSAGE_REPLIES.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `4dae7fe`.
 
 ## Copy text messages: implemented and committed
 
@@ -402,7 +419,7 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
       protects a current running verified direct/group session, subject to Doze/vendor limits.
 - [x] Copy text messages in direct/group chats, including selection and offline history.
 - [x] Reply to text messages in direct/group chats, with quotes, drafts and backups.
-- [ ] Starred messages.
+- [x] Starred messages in direct/group chats, with encrypted persistence and backups.
 - [ ] QR scanning for session verification (bind to the verified session).
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
 - [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
@@ -440,8 +457,9 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 7. Direct-chat image/file sharing and group images/files (committed).
 8. Saved group drafts, group pin/archive and group search (committed).
 9. Group background protection (committed), browser group simulation (committed).
-10. Copy text messages (committed); replies to text messages (current).
-11. Starred messages can follow.
+10. Copy text messages (committed); replies to text messages (committed).
+11. Starred messages (current).
+12. QR scanning for session verification can follow.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

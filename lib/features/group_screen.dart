@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/group_models.dart';
+import '../core/starred_message.dart';
 import '../services/chat_controller.dart';
 import '../services/group_controller.dart';
 import 'chats_tab.dart' show formatConversationTime;
@@ -319,11 +320,13 @@ class GroupChatScreen extends StatefulWidget {
     this.routeObserver,
     this.focusMessageKey,
     this.searchQuery = '',
+    this.fromStar = false,
   });
   final ChatController controller;
   final String id;
   final String? focusMessageKey;
   final String searchQuery;
+  final bool fromStar;
   final RouteObserver<ModalRoute<dynamic>>? routeObserver;
   @override
   State<GroupChatScreen> createState() => _GroupChatScreenState();
@@ -597,6 +600,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     final c = widget.controller;
     final interaction = c.interactionRevision;
     final highlighted = _showTarget && message.key == _focusMessageKey;
+    final star = StarredMessage(
+      target: widget.id,
+      id: message.id,
+      author: message.author,
+    );
     Widget bubble(EditableTextContextMenuBuilder? menu) => Container(
       margin: const EdgeInsets.symmetric(vertical: 5),
       padding: const EdgeInsets.all(12),
@@ -614,8 +622,23 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (c.isStarred(star))
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(
+                Icons.star,
+                size: 18,
+                semanticLabel: 'Starred message',
+              ),
+            ),
           if (highlighted)
-            Text(_fromReply ? 'Original message' : 'Search result'),
+            Text(
+              _fromReply
+                  ? 'Original message'
+                  : widget.fromStar
+                  ? 'Starred message'
+                  : 'Search result',
+            ),
           Text(
             message.author == g.selfId
                 ? 'You'
@@ -679,27 +702,44 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
       alignment: message.author == g.selfId
           ? Alignment.centerRight
           : Alignment.centerLeft,
-      child: message.image != null || message.file != null
-          ? bubble(null)
-          : TextMessageActions(
-              controller: c,
-              messageKey: (widget.id, message.key),
-              text: message.text,
-              onReply: () => unawaited(_replyTo(message)),
-              isCurrent: () => g.histories.any(
-                (h) =>
-                    h.id == widget.id &&
-                    h.messages.any(
-                      (m) =>
-                          m.key == message.key &&
-                          m.image == null &&
-                          m.file == null &&
-                          m.text == message.text,
-                    ),
+      child: TextMessageActions(
+        controller: c,
+        messageKey: (widget.id, message.key),
+        text: message.text,
+        onReply: message.image == null && message.file == null
+            ? () => unawaited(_replyTo(message))
+            : null,
+        allowCopy: message.image == null && message.file == null,
+        starred: c.isStarred(star),
+        onStar: () => unawaited(_starMessage(star)),
+        isCurrent: () => g.histories.any(
+          (h) =>
+              h.id == widget.id &&
+              h.messages.any(
+                (m) => m.key == message.key && m.text == message.text,
               ),
-              builder: bubble,
-            ),
+        ),
+        builder: bubble,
+      ),
     );
+  }
+
+  Future<void> _starMessage(StarredMessage star) async {
+    final c = widget.controller;
+    final interaction = c.interactionRevision;
+    final ok = await c.setStarred(star, !c.isStarred(star));
+    if (!ok &&
+        mounted &&
+        c.appAccessible &&
+        c.appForeground &&
+        interaction == c.interactionRevision &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update this starred message. Try again.'),
+        ),
+      );
+    }
   }
 
   Future<void> _replyTo(GroupText message) async {

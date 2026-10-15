@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
+import '../core/starred_message.dart';
 import '../services/chat_controller.dart';
 import 'outgoing_message_actions.dart';
 import 'connection_help.dart';
@@ -16,10 +17,12 @@ class ChatScreen extends StatefulWidget {
     required this.controller,
     this.routeObserver,
     this.focusMessage,
+    this.fromStar = false,
   });
   final ChatController controller;
   final RouteObserver<ModalRoute<dynamic>>? routeObserver;
   final ChatMessage? focusMessage;
+  final bool fromStar;
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
@@ -275,6 +278,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     final colors = Theme.of(context).colorScheme;
     final interaction = widget.controller.interactionRevision;
     final highlighted = _isTarget(message);
+    final star = StarredMessage(
+      target: message.peerId,
+      id: message.id,
+      outgoing: message.outgoing,
+    );
     final foreground = message.outgoing
         ? colors.onPrimaryContainer
         : colors.onSurface;
@@ -301,11 +309,24 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.controller.isStarred(star))
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(
+                Icons.star,
+                size: 18,
+                semanticLabel: 'Starred message',
+              ),
+            ),
           if (highlighted)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                _fromReply ? 'Original message' : 'Search result',
+                _fromReply
+                    ? 'Original message'
+                    : widget.fromStar
+                    ? 'Starred message'
+                    : 'Search result',
                 style: Theme.of(
                   context,
                 ).textTheme.labelMedium?.copyWith(color: foreground),
@@ -364,27 +385,46 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
       alignment: message.outgoing
           ? Alignment.centerRight
           : Alignment.centerLeft,
-      child: message.image != null || message.file != null
-          ? bubble(null)
-          : TextMessageActions(
-              controller: widget.controller,
-              messageKey: (message.peerId, message.id, message.outgoing),
-              text: message.text,
-              onReply: () => unawaited(_replyTo(message)),
-              isCurrent: () =>
-                  widget.controller.selectedPeer == message.peerId &&
-                  widget.controller.messages.any(
-                    (m) =>
-                        m.peerId == message.peerId &&
-                        m.id == message.id &&
-                        m.outgoing == message.outgoing &&
-                        m.image == null &&
-                        m.file == null &&
-                        m.text == message.text,
-                  ),
-              builder: bubble,
+      child: TextMessageActions(
+        controller: widget.controller,
+        messageKey: (message.peerId, message.id, message.outgoing),
+        text: message.text,
+        onReply: message.image == null && message.file == null
+            ? () => unawaited(_replyTo(message))
+            : null,
+        allowCopy: message.image == null && message.file == null,
+        starred: widget.controller.isStarred(star),
+        onStar: () => unawaited(_starMessage(star)),
+        isCurrent: () =>
+            widget.controller.selectedPeer == message.peerId &&
+            widget.controller.messages.any(
+              (m) =>
+                  m.peerId == message.peerId &&
+                  m.id == message.id &&
+                  m.outgoing == message.outgoing &&
+                  m.text == message.text,
             ),
+        builder: bubble,
+      ),
     );
+  }
+
+  Future<void> _starMessage(StarredMessage star) async {
+    final c = widget.controller;
+    final interaction = c.interactionRevision;
+    final ok = await c.setStarred(star, !c.isStarred(star));
+    if (!ok &&
+        mounted &&
+        c.appAccessible &&
+        c.appForeground &&
+        interaction == c.interactionRevision &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update this starred message. Try again.'),
+        ),
+      );
+    }
   }
 
   Future<void> _replyTo(ChatMessage message) async {

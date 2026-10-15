@@ -12,6 +12,7 @@ import 'settings_screen.dart';
 import 'archived_chats_screen.dart';
 import 'connection_help.dart';
 import 'group_screen.dart';
+import 'starred_messages_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -73,6 +74,19 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           title: const Text('LocalChat'),
           actions: [
+            if (_selectedTab == 0 && c.initialized)
+              IconButton(
+                tooltip: 'Starred messages',
+                icon: const Icon(Icons.star_border),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => StarredMessagesScreen(
+                      controller: c,
+                      routeObserver: widget.routeObserver,
+                    ),
+                  ),
+                ),
+              ),
             if (c.initialized)
               IconButton(
                 tooltip: 'Group chats',

@@ -6,6 +6,7 @@ import 'group_models.dart';
 import 'chat_image.dart';
 import 'chat_file.dart';
 import 'message_reply.dart';
+import 'starred_message.dart';
 
 /// Version one fixes the KDF cost; files cannot request arbitrary work.
 const backupMaxPlaintext = 20 * 1024 * 1024;
@@ -24,24 +25,26 @@ class BackupData {
     required this.drafts,
     this.groups = const [],
     this.groupDrafts = const [],
+    this.stars = const [],
   });
   final String seed, owner, name;
   final int created;
   final bool demo;
   final List<Map<String, Object?>> peers, messages, drafts;
-  final List<Map<String, Object?>> groups, groupDrafts;
+  final List<Map<String, Object?>> groups, groupDrafts, stars;
   Map<String, Object?> toJson() => {
-    'version':
-        messages.any((m) => m.containsKey('reply')) ||
-            drafts.any((d) => d.containsKey('reply')) ||
-            groupDrafts.any((d) => d.containsKey('reply')) ||
-            groups.any(
-              (g) => (g['messages'] as List).any(
-                (m) =>
-                    (m as Map)['envelope'] is Map &&
-                    ((m['envelope']) as Map).containsKey('reply'),
-              ),
-            )
+    'version': stars.isNotEmpty
+        ? 10
+        : messages.any((m) => m.containsKey('reply')) ||
+              drafts.any((d) => d.containsKey('reply')) ||
+              groupDrafts.any((d) => d.containsKey('reply')) ||
+              groups.any(
+                (g) => (g['messages'] as List).any(
+                  (m) =>
+                      (m as Map)['envelope'] is Map &&
+                      ((m['envelope']) as Map).containsKey('reply'),
+                ),
+              )
         ? 9
         : groups.any(
             (g) => g.containsKey('pinned') || g.containsKey('archived'),
@@ -78,11 +81,13 @@ class BackupData {
     'drafts': drafts,
     if (groups.isNotEmpty) 'groups': groups,
     if (groupDrafts.isNotEmpty) 'groupDrafts': groupDrafts,
+    if (stars.isNotEmpty) 'stars': stars,
   };
 
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
-    if (raw is! Map || !{1, 2, 3, 4, 5, 6, 7, 8, 9}.contains(raw['version'])) {
+    if (raw is! Map ||
+        !{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}.contains(raw['version'])) {
       throw invalid;
     }
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
@@ -140,13 +145,17 @@ class BackupData {
       boolean(p, 'archived');
     }
     final keys = <(String, String, bool)>{};
+    final starSources = <String>{};
     for (final m in messages) {
       final peer = string(m, 'peer', 128), id = string(m, 'id', 128);
       final outgoing = boolean(m, 'outgoing');
       if (!ids.contains(peer) || !keys.add((peer, id, outgoing))) throw invalid;
+      starSources.add(
+        StarredMessage(target: peer, id: id, outgoing: outgoing).key,
+      );
       string(m, 'text', 4096);
       if (m.containsKey('reply')) {
-        if (raw['version'] != 9 ||
+        if ((raw['version'] as int) < 9 ||
             m.containsKey('image') ||
             m.containsKey('file')) {
           throw invalid;
@@ -203,7 +212,7 @@ class BackupData {
       // The composer counts graphemes; one grapheme may contain many code points.
       string(d, 'text', 1024 * 1024, empty: d.containsKey('reply'));
       if (d.containsKey('reply')) {
-        if (raw['version'] != 9) throw invalid;
+        if ((raw['version'] as int) < 9) throw invalid;
         d['reply'] = MessageReply.parse(d['reply'], group: false).toJson();
       }
     }
@@ -217,7 +226,8 @@ class BackupData {
           throw invalid;
         }
         final group = await GroupHistory.parse(row);
-        if (group.messages.any((m) => m.reply != null) && raw['version'] != 9) {
+        if (group.messages.any((m) => m.reply != null) &&
+            (raw['version'] as int) < 9) {
           throw invalid;
         }
         if (group.messages.any((m) => m.image != null) &&
@@ -229,6 +239,15 @@ class BackupData {
         groupMessages += group.messages.length;
         if (!groupIds.add(group.id) || groupMessages > 100000) throw invalid;
         groups.add(group.toJson());
+        starSources.addAll(
+          group.messages.map(
+            (m) => StarredMessage(
+              target: group.id,
+              id: m.id,
+              author: m.author,
+            ).key,
+          ),
+        );
       }
     }
     final groupDrafts = <Map<String, Object?>>[];
@@ -241,10 +260,22 @@ class BackupData {
           'group': group,
           'text': string(d, 'text', 1024 * 1024, empty: d.containsKey('reply')),
           if (d.containsKey('reply'))
-            'reply': raw['version'] == 9
+            'reply': (raw['version'] as int) >= 9
                 ? MessageReply.parse(d['reply'], group: true).toJson()
                 : throw invalid,
         });
+      }
+    }
+    final stars = <Map<String, Object?>>[];
+    final starKeys = <String>{};
+    if (raw.containsKey('stars')) {
+      if (raw['version'] != 10) throw invalid;
+      for (final row in rows('stars', 5000)) {
+        final star = StarredMessage.parse(row);
+        if (!starKeys.add(star.key) || !starSources.contains(star.key)) {
+          throw invalid;
+        }
+        stars.add(star.toJson());
       }
     }
     return BackupData(
@@ -258,9 +289,29 @@ class BackupData {
       drafts: drafts,
       groups: groups,
       groupDrafts: groupDrafts,
+      stars: stars,
     );
   }
 }
+
+bool _sameStarOriginal(Map a, Map b) => [
+  'text',
+  'timestamp',
+  'image',
+  'file',
+  'reply',
+].every((k) => jsonEncode(a[k]) == jsonEncode(b[k]));
+Map<(Object?, Object?, Object?), Map> _groupStarIndex(
+  List<Map<String, Object?>> groups,
+) => {
+  for (final g in groups)
+    for (final raw in g['messages'] as List)
+      (
+        g['id'],
+        (raw['envelope'] as Map)['authorId'],
+        (raw['envelope'] as Map)['id'],
+      ): raw as Map,
+};
 
 class BackupMerge {
   BackupMerge(
@@ -384,6 +435,41 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
       keptDrafts++;
     }
   }
+  final oldStars = current.stars
+      .map((s) => StarredMessage.parse(s).key)
+      .toSet();
+  final newStars = <Map<String, Object?>>[];
+  final currentGroupMessages = _groupStarIndex(current.groups);
+  final incomingGroupMessages = _groupStarIndex(incoming.groups);
+  final incomingMessages = {
+    for (final m in incoming.messages) (m['peer'], m['id'], m['outgoing']): m,
+  };
+  for (final row in incoming.stars) {
+    final star = StarredMessage.parse(row);
+    if (oldStars.contains(star.key)) continue;
+    if (star.group) {
+      final old = oldGroups[star.target];
+      final source = incomingGroups[star.target];
+      if (old != null && old['host'] != source?['host']) continue;
+      final previous =
+          currentGroupMessages[(star.target, star.author, star.id)];
+      final original =
+          incomingGroupMessages[(star.target, star.author, star.id)];
+      if (previous != null &&
+          (previous['envelope'] as Map)['signature'] !=
+              (original!['envelope'] as Map)['signature']) {
+        continue;
+      }
+    } else {
+      final old = messages[(star.target, star.id, star.outgoing)];
+      final original = incomingMessages[(star.target, star.id, star.outgoing)]!;
+      if (old != null && !_sameStarOriginal(old, original)) continue;
+    }
+    newStars.add(row);
+  }
+  if (current.stars.length + newStars.length > 5000) {
+    throw const FormatException('Starred message limit exceeded.');
+  }
   final data = BackupData(
     seed: incoming.seed,
     owner: incoming.owner,
@@ -395,6 +481,7 @@ BackupMerge planBackup(BackupData current, BackupData incoming) {
     drafts: newDrafts,
     groups: groupChanges,
     groupDrafts: newGroupDrafts,
+    stars: newStars,
   );
   return BackupMerge(
     data,

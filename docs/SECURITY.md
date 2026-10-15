@@ -357,3 +357,21 @@ foreground gates. Notifications never append the quoted preview. See
 ## Before a production release
 
 Obtain an independent protocol/code review; test on several Android vendors and API levels; fuzz framing/handshake parsing; consider a reviewed protocol library, key pinning and identity-change UX, robust bounded storage and background lifecycle support. Use a private release signing key rather than the provided debug build configuration.
+
+## Private starred-message references
+
+Stars are local, never included in direct/group wire payloads or group signatures.
+Schema 13 stores a canonical target/message/direction-or-author reference encrypted
+with the history key using XChaCha20-Poly1305 and LocalChat/star/1/<id> AAD. Row IDs
+are HMAC-SHA256 over LocalChat/star-key/1/<canonical-reference>, keyed by the same
+history key; database metadata alone does not expose the reference or allow an
+unkeyed message-ID lookup. Row counts and ciphertext sizes remain visible. Existing
+message metadata is unchanged. Deletion and star cleanup are transactional.
+
+V10 password-encrypted archives include stars; validation requires an exact scoped
+original in the archive. Merge skips conflicting originals, retains destination
+stars and re-encrypts imported references. Stars are additive, with no unstar
+history. Existing archive KDF, identity migration and demo/phone separation apply.
+Foreground/PIN/route/revision guards reject obsolete actions and delayed navigation;
+the saved list clears decrypted rows when backgrounded/locked. Already-authorized
+storage writes may finish after locking. See STARRED_MESSAGES.md and VALIDATION.md.

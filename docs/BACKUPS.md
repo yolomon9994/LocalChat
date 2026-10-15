@@ -22,7 +22,7 @@ version 1, while older builds reject group archives. Group sessions/keys are nev
 restored, and imported pending receipts become unconfirmed. Import ends the current
 group. See [GROUP_CHATS.md](GROUP_CHATS.md) for group merge and host identity rules.
 Archives containing direct-chat images use payload version 3, including bounded
-image bytes, dimensions and SHA-256 digest. New builds import v1-v9; older
+image bytes, dimensions and SHA-256 digest. New builds import v1-v10; older
 builds reject image archives. Images are re-encrypted with destination history
 keys and restored pending attempts remain unconfirmed. The 20 MiB total archive
 limit still applies; image-heavy exports can exceed it without changing history.
@@ -51,14 +51,14 @@ See [GROUP_FILES.md](GROUP_FILES.md).
 Archives with nonempty group drafts use payload **v7**, including validated
 `groupDrafts` rows (`group`, `text`). Existing destination drafts win, missing
 drafts import even without new messages, and conflicting group hosts cannot
-receive each other's drafts. Current builds import v1-v9; older builds reject v7.
+receive each other's drafts. Current builds import v1-v10; older builds reject v7.
 Both history-only and empty-phone identity imports support group drafts. The
 same encrypted envelope/KDF and 20 MiB total limit apply. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
 
 Archives with pinned or archived groups select payload **v8**. Group choices
 are validated booleans; older archives default missing choices to false. Existing
 destination choices always win, while new groups inherit the archive choices.
-Current builds import v1-v9. Mixed direct/group attachments and drafts are
+Current builds import v1-v10. Mixed direct/group attachments and drafts are
 supported, with the same envelope/KDF and total limits. Older builds reject v8.
 See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
@@ -170,3 +170,18 @@ on the same message ID is a conflict. Imports re-encrypt with destination keys,
 retain local reference directions and never transmit pending replies. SQLite 12
 stores encrypted scoped quote drafts with atomic acceptance/deletion. See
 [reply controls and manual checks](MESSAGE_REPLIES.md).
+
+## Starred messages (payload v10, schema 13)
+
+Archives containing local stars use v10; no-star exports keep their applicable
+v1-v9 format. Both text replies and their drafts remain valid in v10. Star
+references are scoped by direct direction or group author, bounded to 5,000,
+and must point to originals present in the same archive. Duplicate, dangling or
+malformed references and star fields on older payload versions are rejected.
+
+Import adds source stars for new/identical originals, retains destination stars,
+and skips stars on conflicting originals or group hosts. There are no unstar
+tombstones: importing an older archive can restore a previously removed star.
+Preview and success notices include added star counts. The entire import,
+including history-key re-encryption of references, remains transactional.
+See [STARRED_MESSAGES.md](STARRED_MESSAGES.md) for controls and test cases.

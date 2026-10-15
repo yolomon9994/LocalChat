@@ -202,8 +202,8 @@ class _BackupScreenState extends State<BackupScreen>
         accessToken: _accessToken,
       );
       final notice =
-          'Imported ${result.newChats} chats, ${result.newMessages} messages and '
-          '${result.newDrafts} drafts. Skipped ${result.duplicates} duplicates; '
+          'Imported ${result.newChats} chats, ${result.newMessages} messages, '
+          '${result.newDrafts} drafts and ${result.data.stars.length} stars. Skipped ${result.duplicates} duplicates; '
           'kept ${result.conflicts} conflicting messages and ${result.keptDrafts} existing drafts.';
       c.backupFilePicked(null, notice: notice);
       if (mounted && generation == _generation) {
@@ -245,7 +245,7 @@ class _BackupScreenState extends State<BackupScreen>
           children: [
             const Text(
               'Save an encrypted .lcbackup file and transfer it offline to another phone. '
-              'The file includes direct and group history, drafts, pin/archive choices and your messaging identity. '
+              'The file includes direct and group history, drafts, starred messages, pin/archive choices and your messaging identity. '
               'Anyone with the file and password can read it and use that identity.',
             ),
             const SizedBox(height: 12),
@@ -329,18 +329,18 @@ class _BackupScreenState extends State<BackupScreen>
               ),
               Text(
                 '${data.peers.length} direct chats • ${data.groups.length} groups • '
-                '${data.messages.length + data.groups.fold<int>(0, (sum, g) => sum + (g['messages'] as List).length)} messages • ${data.drafts.length + data.groupDrafts.length} drafts',
+                '${data.messages.length + data.groups.fold<int>(0, (sum, g) => sum + (g['messages'] as List).length)} messages • ${data.drafts.length + data.groupDrafts.length} drafts • ${data.stars.length} stars',
               ),
               const SizedBox(height: 12),
               Text(
-                'Add ${plan.newChats} chats, ${plan.newMessages} messages and ${plan.newDrafts} drafts. '
+                'Add ${plan.newChats} chats, ${plan.newMessages} messages, ${plan.newDrafts} drafts and ${plan.data.stars.length} stars. '
                 'Skip ${plan.duplicates} duplicates. Keep ${plan.conflicts} conflicting existing messages '
                 'and ${plan.keptDrafts} existing drafts.',
               ),
               const SizedBox(height: 8),
               const Text(
                 'Existing chat names, pin/archive choices and read/delivery state are kept. '
-                'New chats use the backup choices. Counts are checked again when importing.',
+                'New chats use the backup choices. Imported stars are added; an old backup can restore a star you removed. Counts are checked again when importing.',
               ),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,

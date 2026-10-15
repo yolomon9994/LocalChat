@@ -466,7 +466,12 @@ void main() {
     c.selectedPeer = 'alice';
     c.messages = [fileMessage];
     await direct(tester);
-    expect(find.byType(TextMessageActions), findsNothing);
+    final actions = tester.widget<TextMessageActions>(
+      find.byType(TextMessageActions),
+    );
+    expect(actions.allowCopy, isFalse);
+    expect(actions.onReply, isNull);
+    expect(actions.onStar, isNotNull);
     expect(find.text('Save to phone'), findsOneWidget);
   });
 }

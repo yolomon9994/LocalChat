@@ -10,6 +10,7 @@ import 'group_models.dart';
 import 'chat_image.dart';
 import 'chat_file.dart';
 import 'message_reply.dart';
+import 'starred_message.dart';
 
 class LocalStore {
   LocalStore({DateTime Function()? now, FlutterSecureStorage? vault})
@@ -44,7 +45,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -66,6 +67,7 @@ class LocalStore {
         await _createImages(db);
         await _createFiles(db);
         await _createReplyDrafts(db);
+        await _createStars(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -89,6 +91,7 @@ class LocalStore {
         if (oldVersion < 10) await _createGroupDrafts(db);
         if (oldVersion < 11) await _addGroupManagement(db);
         if (oldVersion < 12) await _createReplyDrafts(db);
+        if (oldVersion < 13) await _createStars(db);
       },
     );
     await _recoverIdentity();
@@ -202,9 +205,101 @@ class LocalStore {
       messages: result,
       drafts: draftResult,
       groupDrafts: groupDraftResult,
+      stars: (await _readStars(db)).map((s) => s.toJson()).toList(),
       groups: (await _groupHistories(db)).map((g) => g.toJson()).toList(),
     );
   }
+
+  Future<void> _createStars(DatabaseExecutor db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS message_stars (id TEXT PRIMARY KEY, body TEXT NOT NULL)',
+  );
+  Future<String> _starId(StarredMessage s) async =>
+      (await Hmac.sha256().calculateMac(
+        utf8.encode('LocalChat/star-key/1/${s.key}'),
+        secretKey: _historyKey,
+      )).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  Future<List<StarredMessage>> _readStars(DatabaseExecutor db) async {
+    final result = <StarredMessage>[];
+    for (final row in await db.query('message_stars')) {
+      final bytes = base64Decode(row['body'] as String);
+      final plain = await _cipher.decrypt(
+        SecretBox(
+          bytes.sublist(40),
+          nonce: bytes.sublist(0, 24),
+          mac: Mac(bytes.sublist(24, 40)),
+        ),
+        secretKey: _historyKey,
+        aad: utf8.encode('LocalChat/star/1/${row['id']}'),
+      );
+      final star = StarredMessage.parse(jsonDecode(utf8.decode(plain)));
+      if (await _starId(star) != row['id']) {
+        throw const FormatException('Invalid starred message.');
+      }
+      result.add(star);
+    }
+    return result;
+  }
+
+  Future<List<StarredMessage>> starredMessages() => _readStars(_database);
+  Future<void> _writeStar(DatabaseExecutor db, StarredMessage s) async {
+    final key = await _starId(s);
+    final box = await _cipher.encrypt(
+      utf8.encode(s.key),
+      secretKey: _historyKey,
+      aad: utf8.encode('LocalChat/star/1/$key'),
+    );
+    await db.insert('message_stars', {
+      'id': key,
+      'body': base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _removeStars(
+    DatabaseExecutor db,
+    bool Function(StarredMessage) predicate,
+  ) async {
+    for (final s in await _readStars(db)) {
+      if (predicate(s)) {
+        await db.delete(
+          'message_stars',
+          where: 'id = ?',
+          whereArgs: [await _starId(s)],
+        );
+      }
+    }
+  }
+
+  Future<bool> setMessageStarred(StarredMessage s, bool value) =>
+      _database.transaction((txn) async {
+        StarredMessage.parse(s.toJson());
+        if (!value) {
+          await txn.delete(
+            'message_stars',
+            where: 'id = ?',
+            whereArgs: [await _starId(s)],
+          );
+          return true;
+        }
+        final exists = s.group
+            ? (await _groupHistories(txn)).any(
+                (g) =>
+                    g.id == s.target &&
+                    g.messages.any((m) => m.id == s.id && m.author == s.author),
+              )
+            : (await txn.query(
+                'messages',
+                columns: ['id'],
+                where: 'peer = ? AND id = ? AND outgoing = ?',
+                whereArgs: [s.target, s.id, s.outgoing == true ? 1 : 0],
+              )).isNotEmpty;
+        if (!exists) return false;
+        final old = await _readStars(txn);
+        if (!old.contains(s) && old.length >= 5000) {
+          throw const FormatException('Starred message limit exceeded.');
+        }
+        await _writeStar(txn, s);
+        return true;
+      });
 
   Future<BackupData> exportBackup() => _database.transaction(_snapshot);
 
@@ -383,6 +478,9 @@ class LocalStore {
             d['group'] as String,
             d['text'] as String,
           );
+        }
+        for (final row in plan.data.stars) {
+          await _writeStar(txn, StarredMessage.parse(row));
         }
         if (moveIdentity) {
           final pending =
@@ -647,6 +745,7 @@ class LocalStore {
         await _writeDraftReply(txn, id, null, group: true);
         await txn.delete('group_drafts', where: 'id = ?', whereArgs: [id]);
         await txn.delete('group_history', where: 'id = ?', whereArgs: [id]);
+        await _removeStars(txn, (s) => s.group && s.target == id);
       });
 
   Future<void> saveOutgoingGroupHistory(
@@ -851,6 +950,7 @@ class LocalStore {
         await txn.delete('messages', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('drafts', where: 'peer = ?', whereArgs: [peer]);
         await txn.delete('peers', where: 'id = ?', whereArgs: [peer]);
+        await _removeStars(txn, (s) => !s.group && s.target == peer);
       });
 
   Future<String> draft(String peer) async {
@@ -1109,13 +1209,25 @@ class LocalStore {
         1;
   }
 
-  Future<bool> deleteQueuedMessage(String id, String peer) async =>
-      await _database.delete(
-        'messages',
-        where: "id = ? AND peer = ? AND outgoing = 1 AND status = 'queued'",
-        whereArgs: [id, peer],
-      ) ==
-      1;
+  Future<bool> deleteQueuedMessage(
+    String id,
+    String peer,
+  ) => _database.transaction((txn) async {
+    final removed =
+        await txn.delete(
+          'messages',
+          where: "id = ? AND peer = ? AND outgoing = 1 AND status = 'queued'",
+          whereArgs: [id, peer],
+        ) ==
+        1;
+    if (removed) {
+      await _removeStars(
+        txn,
+        (s) => !s.group && s.target == peer && s.id == id && s.outgoing == true,
+      );
+    }
+    return removed;
+  });
 
   Future<void> markRead(String peer) => _database
       .update(
@@ -1275,6 +1387,7 @@ class LocalStore {
 
   Future<void> clearHistory() async {
     await _database.transaction((txn) async {
+      await txn.delete('message_stars');
       await txn.delete('reply_drafts');
       await txn.delete('group_drafts');
       await txn.delete('group_history');

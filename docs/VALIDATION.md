@@ -1,5 +1,79 @@
 # Validation for v0.1.0
 
+## Starred messages - validation 2026-10-15
+
+Baseline: `4dae7fe` (replies committed by the user). Changes are local and
+uncommitted; the user handles staging, committing and pushing.
+
+- Focused `flutter test test/starred_messages_test.dart
+  test/starred_messages_screen_test.dart test/local_store_test.dart
+  test/message_copy_test.dart --concurrency=2 --timeout=2m --reporter expanded`:
+  **87 passed**, exit 0, 59s; `.dart_tool/stars-focused-final.log`. This preceded
+  the final extra privacy/image/cache checks and review refinements.
+- New model/controller/archive checks cover scoped references, idempotent stars,
+  unchanged messages/drafts/organization, signed group history saves, v10 encrypted
+  codec round trip with files/reply drafts/replies, history-only and empty-store
+  identity transfer, older imports, dangling/duplicate/oversized/downgraded data,
+  conflict-safe merge, additive imports, cancellation/deletion, generic errors,
+  coalesced refreshes and a delayed read after unstar.
+- New UI checks cover direct/group Star/Unstar alongside Reply/Copy, exact direct
+  direction and group-author anchors, archived groups, drafts/read state, saved-list
+  removal, file controls, group image stars, generic errors/retry, PIN removal,
+  obsolete menu/list actions, delayed decrypted loads on background and 320 x 568
+  at 1.8x text. Selection and accessibility actions reuse the tested shared menus.
+- Five new native SQLite cases cover schema-12 to 13 migration without rewriting
+  ciphertext, encrypted keyed references/restart, authenticated key binding and
+  tampering, transaction rollback on cleanup failure, queued cancellation,
+  v10 import rollback on star insert failure and encrypted restore, signed group
+  author scope, history saves, isolated deletion and clearing all history.
+- Development corrections: the first native import fixture accidentally used a
+  demo archive for a phone store; its explicit demo=false conversion now matches
+  the existing native fixtures. A file-copy test now verifies the star-only wrapper
+  instead of expecting no action wrapper. Awaiting controller work from widget
+  fake time stalled the first combined-list fixture; it now uses runAsync for
+  setup/crypto, then pumps UI work. The stale-list callback finder selects its
+  IconButton rather than Tooltip. Initial analyzer brace/import notes were fixed.
+  A delayed refresh exposed a cache completion race; refreshes now coalesce and
+  reject obsolete generations. Final diff review caught encoding damage from a
+  Windows editing script; original Unicode text was restored and UTF-8 reads made
+  explicit. An early full run was stopped before completion for that correction.
+  Temporary diagnostic markers were removed. Failed/interrupted runs are not
+  represented as successful validation.
+- Chrome initially passed ten UI cases but aborted an image frame during fixture
+  disposal. Waiting for the stream only in runAsync then timed out: browser decode
+  promises use real time while ImageStream delivery also needs widget frames.
+  The fixture now pumps both clocks until the actual visible image frame succeeds
+  before replacing/disposing its route; errors are asserted, not suppressed.
+  Initial browser logs: `.dart_tool/stars-chrome-initial.log` and
+  `.dart_tool/stars-chrome-image-clock.log`.
+- Final `flutter analyze`: no issues, exit 0, 4.6s;
+  `.dart_tool/stars-analyze-final.log`.
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **456 passed**, exit 0 (430 existing + 26 new), 4m20s;
+  `.dart_tool/stars-milestone-final.log`.
+- Headless Chrome `flutter test test/starred_messages_screen_test.dart --platform
+  chrome --timeout=2m --reporter expanded --verbose`: **11 passed**, exit 0,
+  15s after startup; `.dart_tool/stars-chrome-final.log`. This includes the actual
+  decoded group-image frame, menus, navigation and privacy using simulated data.
+- The installed Flutter 3.38.7 Windows test server still needs its existing
+  CanvasKit workaround: the ignored local helper supplies exact cached SDK JS/WASM
+  only to the isolated test browser. No SDK/app edits or downloads. Asset log:
+  `.dart_tool/stars-chrome-final-assets.log`.
+- Final VM rerun of `flutter test test/starred_messages_screen_test.dart
+  --timeout=2m --reporter expanded`: **11 passed**, exit 0, 10s;
+  `.dart_tool/stars-ui-vm-final.log`. This follows the image-clock fixture update;
+  production sources are unchanged from the passing full suite.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, explicit Flutter exit 0, 64.4s;
+  `.dart_tool/stars-apk-final.log`. Artifact:
+  `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: passed, explicit Flutter exit 0, 58.9s;
+  `.dart_tool/stars-web-final.log`, artifact `build/web`. The existing optional
+  Cupertino font warning remains; no new font dependency was added.
+- `git diff --check`: clean. No native, permission, package or wire changes.
+- Manual Android restart/import, physical Wi-Fi Direct, browser interaction and
+  TalkBack checks remain pending; see [STARRED_MESSAGES.md](STARRED_MESSAGES.md).
+
 ## Replies to text messages - final checks 2026-10-15
 
 - Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:

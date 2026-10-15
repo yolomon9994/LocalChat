@@ -8,9 +8,34 @@ import '../core/group_models.dart';
 import '../core/chat_image.dart';
 import '../core/chat_file.dart';
 import '../core/message_reply.dart';
+import '../core/starred_message.dart';
 
 /// Preview-only state. Never opens SQLite or platform secure storage.
 class DemoStore extends LocalStore {
+  final _stars = <StarredMessage>{};
+  @override
+  Future<List<StarredMessage>> starredMessages() async => _stars.toList();
+  @override
+  Future<bool> setMessageStarred(StarredMessage s, bool value) async {
+    StarredMessage.parse(s.toJson());
+    if (!value) {
+      _stars.remove(s);
+      return true;
+    }
+    final exists = s.group
+        ? _groups[s.target]?.messages.any(
+                (m) => m.id == s.id && m.author == s.author,
+              ) ==
+              true
+        : _messages.containsKey((s.target, s.id, s.outgoing!));
+    if (!exists) return false;
+    if (!_stars.contains(s) && _stars.length >= 5000) {
+      throw const FormatException('Starred message limit exceeded.');
+    }
+    _stars.add(s);
+    return true;
+  }
+
   final _people = <String, Conversation>{};
   final _messages = <(String, String, bool), ChatMessage>{};
   final _unread = <(String, String, bool)>{};
@@ -93,6 +118,7 @@ class DemoStore extends LocalStore {
 
   @override
   Future<void> deleteGroupHistory(String id) async {
+    _stars.removeWhere((s) => s.group && s.target == id);
     _groups.remove(id);
     _groupDrafts.remove(id);
     _replyDrafts.remove((id, true));
@@ -175,6 +201,7 @@ class DemoStore extends LocalStore {
             },
           )
           .toList(),
+      stars: _stars.map((s) => s.toJson()).toList(),
       groupDrafts: [
         for (final id in {
           ..._groupDrafts.keys,
@@ -298,6 +325,7 @@ class DemoStore extends LocalStore {
         );
       }
     }
+    _stars.addAll(plan.data.stars.map(StarredMessage.parse));
     return plan;
   }
 
@@ -476,6 +504,9 @@ class DemoStore extends LocalStore {
     final key = (peer, id, true);
     if (_messages[key]?.status != 'queued') return false;
     _messages.remove(key);
+    _stars.removeWhere(
+      (s) => !s.group && s.target == peer && s.id == id && s.outgoing == true,
+    );
     return true;
   }
 
@@ -572,6 +603,7 @@ class DemoStore extends LocalStore {
 
   @override
   Future<void> deleteConversation(String peer) async {
+    _stars.removeWhere((s) => !s.group && s.target == peer);
     _people.remove(peer);
     _messages.removeWhere((key, _) => key.$1 == peer);
     _images.removeWhere((key, _) => key.$1 == peer);
@@ -583,6 +615,7 @@ class DemoStore extends LocalStore {
 
   @override
   Future<void> clearHistory() async {
+    _stars.clear();
     _replyDrafts.clear();
     _groups.clear();
     _images.clear();

@@ -94,3 +94,9 @@ adb logcat -s flutter AndroidRuntime
 ```
 
 Never include secret keys or private conversations in diagnostic logs. The native transport does not log frame contents.
+
+## Starred messages
+
+Run the Android/browser/restart/import/privacy checklist in
+[STARRED_MESSAGES.md](STARRED_MESSAGES.md). Automated results are in VALIDATION.md;
+physical-device and TalkBack checks remain pending.

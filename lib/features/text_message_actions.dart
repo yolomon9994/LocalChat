@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../services/chat_controller.dart';
 
-/// Shared clipboard actions for an existing text message, including search anchors.
+/// Shared message actions, including text selection and saved-history anchors.
 class TextMessageActions extends StatefulWidget {
   const TextMessageActions({
     super.key,
@@ -16,6 +16,9 @@ class TextMessageActions extends StatefulWidget {
     required this.isCurrent,
     required this.builder,
     this.onReply,
+    this.onStar,
+    this.starred = false,
+    this.allowCopy = true,
   });
 
   final ChatController controller;
@@ -23,7 +26,8 @@ class TextMessageActions extends StatefulWidget {
   final String text;
   final bool Function() isCurrent;
   final Widget Function(EditableTextContextMenuBuilder menu) builder;
-  final VoidCallback? onReply;
+  final VoidCallback? onReply, onStar;
+  final bool starred, allowCopy;
 
   @override
   State<TextMessageActions> createState() => _TextMessageActionsState();
@@ -94,6 +98,14 @@ class _TextMessageActionsState extends State<TextMessageActions> {
       revision == _revision &&
       access == widget.controller.accessRevision;
 
+  void _star(int revision, int access) {
+    if (!_valid(revision, access)) return;
+    final action = widget.onStar;
+    _selection?.hideToolbar();
+    if (_menuRoute?.isCurrent == true) _menuRoute!.navigator?.pop();
+    action?.call();
+  }
+
   void _reply(int revision, int access) {
     if (!_valid(revision, access)) return;
     final action = widget.onReply;
@@ -156,16 +168,28 @@ class _TextMessageActionsState extends State<TextMessageActions> {
                   ],
                 ),
               ),
-            SimpleDialogOption(
-              onPressed: () => unawaited(_copy(text, revision, access)),
-              child: const Row(
-                children: [
-                  Icon(Icons.copy_outlined),
-                  SizedBox(width: 12),
-                  Text('Copy'),
-                ],
+            if (widget.onStar != null)
+              SimpleDialogOption(
+                onPressed: () => _star(revision, access),
+                child: Row(
+                  children: [
+                    Icon(widget.starred ? Icons.star : Icons.star_border),
+                    const SizedBox(width: 12),
+                    Text(widget.starred ? 'Unstar' : 'Star'),
+                  ],
+                ),
               ),
-            ),
+            if (widget.allowCopy)
+              SimpleDialogOption(
+                onPressed: () => unawaited(_copy(text, revision, access)),
+                child: const Row(
+                  children: [
+                    Icon(Icons.copy_outlined),
+                    SizedBox(width: 12),
+                    Text('Copy'),
+                  ],
+                ),
+              ),
           ],
         );
       },
@@ -188,10 +212,16 @@ class _TextMessageActionsState extends State<TextMessageActions> {
             label: 'Reply',
             onPressed: () => _reply(revision, access),
           ),
-        ContextMenuButtonItem(
-          label: 'Copy message',
-          onPressed: () => unawaited(_copy(text, revision, access)),
-        ),
+        if (widget.onStar != null)
+          ContextMenuButtonItem(
+            label: widget.starred ? 'Unstar' : 'Star',
+            onPressed: () => _star(revision, access),
+          ),
+        if (widget.allowCopy)
+          ContextMenuButtonItem(
+            label: 'Copy message',
+            onPressed: () => unawaited(_copy(text, revision, access)),
+          ),
         if (selection.isValid && !selection.isCollapsed)
           ContextMenuButtonItem(
             label: 'Copy selection',
@@ -226,8 +256,14 @@ class _TextMessageActionsState extends State<TextMessageActions> {
         if (widget.onReply != null)
           const CustomSemanticsAction(label: 'Reply to message'): () =>
               _reply(revision, access),
-        const CustomSemanticsAction(label: 'Copy message'): () =>
-            unawaited(_copy(text, revision, access)),
+        if (widget.onStar != null)
+          CustomSemanticsAction(
+            label: widget.starred ? 'Unstar message' : 'Star message',
+          ): () =>
+              _star(revision, access),
+        if (widget.allowCopy)
+          const CustomSemanticsAction(label: 'Copy message'): () =>
+              unawaited(_copy(text, revision, access)),
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
