@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../core/group_models.dart';
 import '../core/local_store.dart';
 import '../core/secure_session.dart';
+import '../core/session_verification.dart';
 import 'group_transport.dart';
 import 'draft_controller.dart';
 import 'chat_notifications.dart';
@@ -308,32 +309,87 @@ class GroupController extends ChangeNotifier {
     return success;
   }
 
-  Future<void> confirm(String linkId) => _run(() async {
+  VerificationRequest? verificationFor(String linkId) {
     final link = links[linkId];
-    if (!canAct() ||
+    final qr = link?.session.verificationQr(VerificationScope.group);
+    if (_disposed ||
+        !running ||
+        !canAct() ||
         link == null ||
-        link.localVerified ||
-        link.session.verificationCode == null) {
-      return;
+        link.admitted ||
+        qr == null) {
+      return null;
     }
-    try {
-      await _send(link, {
-        'type': 'groupVerified',
-        'version': 1,
-        'features': [
-          if (supportsImages) 'group-image-v1',
-          if (supportsFiles) 'group-file-v1',
-          if (supportsReplies) 'group-reply-v1',
-        ],
-      });
-      link.localVerified = true;
-      await _admit(link);
-    } catch (_) {
-      await _drop(linkId);
-      rethrow;
-    }
-    _notify();
-  });
+    return VerificationRequest(
+      owner: this,
+      sessionToken: link.session,
+      interactionRevision: _replyRevision() ?? 0,
+      qr: qr,
+      peerName: link.name,
+      linkId: linkId,
+    );
+  }
+
+  bool verificationCurrent(VerificationRequest request) {
+    final current = request.linkId == null
+        ? null
+        : verificationFor(request.linkId!);
+    return request.qr.scope == VerificationScope.group &&
+        current != null &&
+        identical(request.owner, this) &&
+        identical(request.sessionToken, current.sessionToken) &&
+        request.interactionRevision == (_replyRevision() ?? 0) &&
+        request.qr == current.qr;
+  }
+
+  bool canConfirmVerification(VerificationRequest request) =>
+      verificationCurrent(request) && !links[request.linkId]!.localVerified;
+
+  Future<bool> confirm(
+    String linkId, {
+    VerificationRequest? request,
+    String? scanned,
+  }) async {
+    final captured = request ?? verificationFor(linkId);
+    if (captured == null || captured.linkId != linkId) return false;
+    var success = false;
+    await _run(() async {
+      if (!canConfirmVerification(captured) ||
+          (scanned != null && !captured.qr.matchesRemote(scanned))) {
+        return;
+      }
+      final link = links[linkId]!;
+      try {
+        final frame = await link.session.encrypt({
+          'type': 'groupVerified',
+          'version': 1,
+          'features': [
+            if (supportsImages) 'group-image-v1',
+            if (supportsFiles) 'group-file-v1',
+            if (supportsReplies) 'group-reply-v1',
+          ],
+        });
+        if (!canConfirmVerification(captured)) {
+          if (identical(links[linkId], link)) await _drop(linkId);
+          return;
+        }
+        await transport.send(linkId, jsonEncode(frame));
+        if (!canConfirmVerification(captured)) {
+          if (identical(links[linkId], link)) await _drop(linkId);
+          return;
+        }
+        link.localVerified = true;
+        await _admit(link);
+        success = true;
+      } catch (_) {
+        if (identical(links[linkId], link)) await _drop(linkId);
+        rethrow;
+      }
+      _notify();
+    });
+    return success;
+  }
+
   Future<void> reject(String id) => _run(() async {
     if (canAct()) await _drop(id);
     _notify();

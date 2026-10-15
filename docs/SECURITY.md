@@ -12,7 +12,7 @@ external peers, OS background service, persistent secure storage or Android trus
 shortcut is introduced. Each tab/reload has independent temporary state; demo
 backups remain separate from phone backups. See [BROWSER_GROUPS.md](BROWSER_GROUPS.md).
 
-The implementation aims to protect message content against passive radio/network interception and reject modified/replayed frames. Active impersonation is addressed only when users compare the complete security code over an independent trusted channel and both explicitly confirm. A display name or a Wi-Fi Direct pairing prompt is not identity verification.
+The implementation aims to protect message content against passive radio/network interception and reject modified/replayed frames. Active impersonation is addressed only when users compare the complete security code over an independent trusted channel, or scan each other's current session QR in person, and both explicitly confirm. A display name or a Wi-Fi Direct pairing prompt is not identity verification.
 
 Encryption does not hide traffic existence, sizes, timing, Wi-Fi addresses, advertised names, handshake names or identity public keys. It cannot prevent jamming, discovery spoofing, denial of service, malware, rooted-device compromise, screenshots or a verified peer sharing the text. DNS-SD names are untrusted and public. This release does not automatically trust a previously seen identity.
 
@@ -26,9 +26,38 @@ The hello contains protocol version 1, `kind=hello`, identity public key, epheme
 
 The peer validates the version, key lengths, name bounds and signature. Self-reflection and repeated hellos are rejected. The canonical hellos are sorted by base64 identity string and prefixed with `LocalChat/transcript/1`; SHA-256 yields the session transcript hash. X25519 agreement is followed by HKDF-SHA256 using this hash as salt. Distinct info labels `LocalChat/1/low-to-high` and `LocalChat/1/high-to-low` derive independent 32-byte directional keys. All-zero agreement is rejected.
 
-The 80-bit displayed code is the first 10 bytes of SHA-256(`LocalChat/SAS/1` || transcriptHash), rendered as five hexadecimal groups. The code binds both identities, ephemeral keys, challenges and names. Both peers must compare it in person and send an encrypted `verified` payload before text is accepted. Fresh connections always require new verification. A 90-second connection/verification deadline limits unattended connections.
+The 80-bit displayed code is the first 10 bytes of SHA-256(`LocalChat/SAS/1` || transcriptHash), rendered as five hexadecimal groups. The code binds both identities, ephemeral keys, challenges and names. Both peers must compare it in person (or scan each other's current session QR) and explicitly send an encrypted `verified` payload before text is accepted. Fresh connections always require new verification. A 90-second connection/verification deadline limits unattended connections.
 
 There is no Double Ratchet, post-compromise recovery, offline prekey messaging or per-message forward secrecy. Fresh ephemeral agreement limits exposure across sessions if only a long-term identity key is later obtained, assuming ephemeral secrets have not been retained. Dart does not guarantee zeroization or immediate erasure of temporary key material.
+
+## QR comparison of the live session
+
+The QR contains a bounded public version-1 JSON payload with direct/group mode,
+the full 256-bit existing transcript hash, and sender/receiver identity public-key
+IDs. A scan must match the live session with reciprocal identities. It contains
+no identity seed, shared secret or reusable credential. Showing/scanning a QR
+does not change the hello/signature/key derivation or encrypted verified payload.
+Scanning alone does not trust: a separate local confirmation and the remote
+confirmation are still required. Manual comparison remains compatible.
+
+The app captures the exact controller/session/link and foreground/access revision
+before navigation or queued confirmation and rechecks after encryption and send.
+Reconnects, privacy changes, selection changes and timeouts invalidate requests.
+If an encrypted confirmation is interrupted, its session/link is closed to avoid
+reusing a consumed frame sequence. Group QR verifies only that host-guest link;
+it does not authenticate the roster independently of the host or join a room.
+
+Android scanning uses bundled barcode models and requests only QR detection,
+without returned images. Permission denial/errors retain manual fallback. Camera
+startup/shutdown is serialized across views, including late permission replies;
+privacy loss closes the view and stops capture without automatic resumption.
+Browser/unsupported platforms never start the plugin's web/CDN scanner.
+
+Compare directly with the intended person's phone through a trusted in-person
+channel. A relayed screenshot is public session information, not proof of who
+is holding the connected phone. Physical optical decoding/first-use offline and
+OS permission behavior remain unvalidated; see [QR_VERIFICATION.md](QR_VERIFICATION.md).
+No stored trust, SQLite schema or backup-format change is introduced.
 
 ## Frames and payloads
 

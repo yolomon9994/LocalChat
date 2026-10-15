@@ -92,6 +92,7 @@ class FakeGroupTransport implements GroupTransport {
   bool holdReceived = false;
   int generation = -2;
   Completer<void>? gate;
+  Completer<void>? gateEntered;
   @override
   Stream<Map<String, dynamic>> get events => bus.stream;
   @override
@@ -127,6 +128,9 @@ class FakeGroupTransport implements GroupTransport {
 
   @override
   Future<void> send(String link, String frame) async {
+    if (gate != null && gateEntered?.isCompleted == false) {
+      gateEntered!.complete();
+    }
     await gate?.future;
     final target = links[link];
     if (target == null) throw StateError('Disconnected');

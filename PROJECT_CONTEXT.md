@@ -32,13 +32,44 @@ Group background protection was committed by the user as `734ea96`.
 Browser group simulation was committed by the user as `83fc101`.
 Text copying was committed by the user as `b9ef43c`.
 Replies to text messages were committed by the user as `4dae7fe`.
-The current milestone is starred messages.
+Starred messages were committed by the user as `04f5682`.
+The current milestone is QR session verification.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Starred-messages milestone - implemented locally, 2026-10-15
+## QR-verification milestone - implemented locally, 2026-10-15
 
-Baseline: `4dae7fe`; clean working tree at startup. Saved locally, not committed.
+Baseline: `04f5682`; clean working tree at startup. The user handles Git.
+See docs/QR_VERIFICATION.md and docs/VALIDATION.md for controls/results.
+
+- Show QR / Scan QR for direct and individual pending group links; explicit local
+  Verify connection, both peers still required, and original manual controls.
+- Bounded six-field JSON binds mode, full signed-hello transcript hash and
+  reciprocal public identity IDs. Self/wrong/old/member QR codes fail; no URLs
+  open, secrets persist, or protocol payloads change. Group host trust is unchanged.
+- Captured requests bind controller/session/link/peer and interactionRevision.
+  Controllers recheck before queued encryption and after encryption/send. An
+  interrupted encrypted confirmation closes only the same session/affected link.
+- Android-only mobile_scanner 7.1.4 with explicitly bundled ML Kit models;
+  qr_flutter 4.1.0 renders black/white QR. Manifest camera permission and optional
+  camera hardware added. Existing Android toolchain is retained. No web scanner
+  or CDN fallback starts; browser QR/manual controls remain simulated.
+- Camera stops on match/mode/exit/error/privacy loss. Serialized startup/shutdown
+  prevents late permission completion disposing a replacement. First permission
+  prompts can expire the view and trigger PIN: unlock/reopen scanning afterward.
+- 16 new protocol/controller, five native-platform fake camera and eleven UI
+  checks. Tests verify rendered QR pixels, privacy/queue/send races, reconnect,
+  explicit two-sided trust, group isolation and enlarged-text/manual controls.
+  All 488 tests and eleven Chrome UI checks pass; analysis is clean and final
+  Android APK/web builds pass. See VALIDATION.md; actual phone decoding/permission,
+  first-use offline and TalkBack checks remain pending, not passed by mocks.
+- SQLite stays schema 13; backups stay v10. No history/identity transfer changes.
+  Saved locally without staging/committing. Next planned milestone is accessibility
+  (adjustable text, contrast and optional vibration); do not implement it yet.
+
+## Starred-messages milestone - implemented, 2026-10-15
+
+Baseline: `4dae7fe`; committed by the user as `04f5682`.
 See docs/STARRED_MESSAGES.md and docs/VALIDATION.md. The user handles Git.
 
 - Private local stars cover direct/group text, replies, images and files. Shared
@@ -62,8 +93,8 @@ See docs/STARRED_MESSAGES.md and docs/VALIDATION.md. The user handles Git.
   decoding with both frame and real-time clocks driven before route disposal.
   The existing cached-CanvasKit test-server workaround remains necessary.
   Android debug APK and web builds pass; see VALIDATION.md for commands/logs.
-  Manual phone/browser/TalkBack checks remain pending. All changes are saved
-  locally, unstaged and uncommitted for the user to review and commit.
+  Manual phone/browser/TalkBack checks remain pending. The user committed
+  the milestone as `04f5682`.
 
 ## Message-replies milestone - implemented, 2026-10-14
 

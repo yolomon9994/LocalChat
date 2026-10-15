@@ -9,6 +9,7 @@ import 'chat_image_view.dart';
 import 'chat_file_bubble.dart';
 import 'text_message_actions.dart';
 import 'message_reply_card.dart';
+import 'verification_screen.dart';
 import '../core/message_reply.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -529,6 +530,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
       final draftPeer = _draftPeer;
       final current = c.selectedPeer == c.connectedPeer;
       final verifying = c.code != null && !c.ready && current;
+      final verification = c.directVerification;
       final draftReady = _draftPeer != null && c.drafts.isLoaded(_draftPeer!);
       final draftError = _draftPeer == null
           ? null
@@ -669,13 +671,25 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                           ),
                           const SizedBox(height: 16),
                           FilledButton(
-                            onPressed: c.localVerified ? null : c.confirmCode,
+                            onPressed:
+                                verification != null &&
+                                    c.canConfirmVerification(verification)
+                                ? () => unawaited(
+                                    c.confirmCode(request: verification),
+                                  )
+                                : null,
                             child: Text(
                               c.localVerified
                                   ? 'Waiting for the other phone'
                                   : 'Codes match',
                             ),
                           ),
+                          if (verification != null)
+                            VerificationActions(
+                              controller: c,
+                              request: verification,
+                            ),
+                          const SizedBox(height: 12),
                           TextButton(
                             onPressed: c.disconnect,
                             child: const Text('Codes differ — disconnect'),

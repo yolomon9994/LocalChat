@@ -1,9 +1,86 @@
 # Validation for v0.1.0
 
+## QR session verification - validation 2026-10-15
+
+Baseline: `04f5682` (starred messages committed by the user). Changes are local,
+unstaged and uncommitted; the user handles staging, committing and pushing.
+See [QR_VERIFICATION.md](QR_VERIFICATION.md) for controls and physical checks.
+
+- Protocol/controller regression: `flutter test test/session_verification_test.dart
+  test/secure_session_test.dart test/chat_controller_test.dart
+  test/group_controller_test.dart test/demo_test.dart --concurrency=2 --timeout=2m
+  --reporter expanded`: **48 passed**, exit 0, 32s;
+  `.dart_tool/qr-protocol-final.log`. This includes 16 new payload/handshake,
+  explicit two-sided/mixed manual confirmation, reconnect/timeout, queue/send
+  privacy races and group-link isolation/rehosting/relay checks. An earlier
+  command named nonexistent group_test.dart; the corrected run is the one above.
+- `flutter test test/verification_camera_test.dart test/verification_screen_test.dart
+  --concurrency=2 --timeout=2m --reporter expanded`: **16 passed**, exit 0, 10s;
+  `.dart_tool/qr-ui-final.log` (five camera-platform fakes and eleven screen cases).
+  QR assertions compare actual rendered pixels with an independently generated
+  current-session payload. Screen tests inject scan strings; they do not decode
+  physical camera frames. The group UI case uses actual encrypted controllers.
+- Development corrections: initial QR widget syntax and brace/import analyzer
+  notes were fixed. qr_flutter does not expose its private input via a data getter;
+  tests now compare rendered pixels. Camera tests use TargetPlatformVariant,
+  not a manually retained global override. The camera lease releases its static
+  idle future to prevent retaining an old test zone; replacement startup still
+  waits for shutdown after a late permission result. Unsupported-platform UI tests
+  explicitly select Linux because VM widget tests default to Android. Manual
+  return controls are scrolled into view before taps; stale Back callbacks cannot
+  pop a new route after PIN unlock. Temporary diagnostic prints were removed.
+- The first full regression exposed a pre-existing demo-group fixture tapping
+  before its changed scroll/layout settled after taller QR cards. It now pumps
+  layout and asserts the confirmation button is hit-testable before tapping.
+  The corrected `flutter test test/demo_group_screen_test.dart --timeout=2m
+  --reporter expanded` passes all five checks, exit 0, 16s;
+  `.dart_tool/qr-demo-ui-final.log`. The initial full run passed 487 with this one
+  fixture failure (`.dart_tool/qr-milestone-final.log`).
+  Failed/interrupted runs are not counted as successful validation.
+- Native compile smoke: `flutter build apk --debug --target-platform android-arm64
+  --split-per-abi`: passed, explicit Flutter exit 0, 238.4s;
+  `.dart_tool/qr-apk-smoke.log`. The APK includes three barcode model .tflite assets
+  under assets/mlkit_barcode_models, confirming the bundled model configuration.
+  Kotlin incremental compilation reported different drive roots (C: Pub cache,
+  I: project), fell back without incremental caching and completed successfully.
+  No SDK/toolchain/cache deletion or Gradle workaround was applied.
+- Dependency review pins qr_flutter 4.1.0 and mobile_scanner 7.1.4 (plus qr 3.0.2).
+  The scanner version retains compatibility with the project's Kotlin 2.1/AGP
+  toolchain; newer scanner releases require newer native dependencies. Android
+  explicitly uses bundled ML Kit, adds CAMERA permission and optional camera
+  hardware; browser builds never start the scanner or its CDN fallback.
+- Final `flutter analyze`: no issues, exit 0, 5.5s;
+  `.dart_tool/qr-analyze-clean.log`.
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **488 passed**, exit 0 (456 existing + 32 new), 4m32s;
+  `.dart_tool/qr-milestone-final-checked.log`. No builds ran during this final suite.
+- Headless Chrome `flutter test test/verification_screen_test.dart --platform
+  chrome --timeout=2m --reporter expanded --verbose`: **11 passed**, exit 0,
+  12s after startup; `.dart_tool/qr-chrome-final.log`. Includes real rendered QR
+  pixels, manual fallback, explicit verification, PIN/privacy and group UI.
+- Flutter 3.38.7's Windows test server still needs the existing ignored local
+  helper to supply four exact cached CanvasKit JS/WASM files only to the isolated
+  test browser. No SDK/app edits or downloads; `.dart_tool/qr-chrome-assets.log`.
+  This does not exercise a real camera or external peer.
+- Final `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, explicit Flutter exit 0, 34.5s; `.dart_tool/qr-apk-final.log`.
+  Artifact: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`. Final ZIP
+  inspection confirms all three bundled barcode model assets are still present.
+- `flutter build web --no-wasm-dry-run`: passed, explicit Flutter exit 0, 61.5s;
+  `.dart_tool/qr-web-final.log`, artifact `build/web`. The existing optional
+  Cupertino font warning remains; no font dependency was added.
+- Final diff/UTF-8/local documentation link review: clean; `git diff --check`
+  passes and the index remains empty. All changes are saved locally for the user.
+- SQLite remains schema 13, encrypted backups v10 and existing wire payloads
+  unchanged. No identity/history migration or automatic peer trust is added.
+- Manual two/three-phone optical decoding, first-use offline scanning, Android
+  permission/PIN behavior, camera indicator, browser interaction and TalkBack
+  checks remain pending; see [QR_VERIFICATION.md](QR_VERIFICATION.md).
+
 ## Starred messages - validation 2026-10-15
 
-Baseline: `4dae7fe` (replies committed by the user). Changes are local and
-uncommitted; the user handles staging, committing and pushing.
+Baseline: `4dae7fe` (replies committed by the user). The user subsequently
+committed starred messages as `04f5682`.
 
 - Focused `flutter test test/starred_messages_test.dart
   test/starred_messages_screen_test.dart test/local_store_test.dart

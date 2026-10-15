@@ -11,6 +11,7 @@ import '../core/starred_message.dart';
 import '../core/chat_backup.dart';
 import 'backup_files.dart';
 import '../core/secure_session.dart';
+import '../core/session_verification.dart';
 import 'transport.dart';
 import 'draft_controller.dart';
 import 'nearby_support.dart';
@@ -1197,24 +1198,95 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  Future<void> confirmCode() => _run(() async {
-    if (code == null || localVerified || !_appAccessible || !_appForeground) {
-      return;
+  VerificationRequest? get directVerification {
+    final session = _session;
+    final qr = session?.verificationQr(VerificationScope.direct);
+    if (_disposed ||
+        !initialized ||
+        !_appAccessible ||
+        !_appForeground ||
+        session == null ||
+        qr == null ||
+        ready ||
+        selectedPeer != session.peerId) {
+      return null;
     }
-    error = null;
-    try {
-      await _sendPayload({
-        'type': 'verified',
-        'features': ['image-v1', 'file-v1', if (supportsReplies) 'reply-v1'],
-      });
-      localVerified = true;
-      await _updateReady();
-    } catch (_) {
-      await _disconnect();
-      rethrow;
+    return VerificationRequest(
+      owner: this,
+      sessionToken: session,
+      interactionRevision: interactionRevision,
+      qr: qr,
+      peerName: session.peerName ?? 'Nearby phone',
+    );
+  }
+
+  bool verificationCurrent(VerificationRequest request) {
+    if (request.qr.scope == VerificationScope.group) {
+      return groups.verificationCurrent(request);
     }
-    notifyListeners();
-  });
+    final current = directVerification;
+    return current != null &&
+        request.linkId == null &&
+        identical(request.owner, this) &&
+        identical(request.sessionToken, current.sessionToken) &&
+        request.interactionRevision == interactionRevision &&
+        request.qr == current.qr;
+  }
+
+  bool canConfirmVerification(VerificationRequest request) =>
+      verificationCurrent(request) &&
+      (request.qr.scope == VerificationScope.group
+          ? groups.canConfirmVerification(request)
+          : !localVerified);
+  Future<bool> confirmVerification(
+    VerificationRequest request,
+    String scanned,
+  ) => request.qr.scope == VerificationScope.group
+      ? groups.confirm(request.linkId ?? '', request: request, scanned: scanned)
+      : confirmCode(request: request, scanned: scanned);
+
+  Future<bool> confirmCode({
+    VerificationRequest? request,
+    String? scanned,
+  }) async {
+    final captured = request ?? directVerification;
+    if (captured == null || captured.qr.scope != VerificationScope.direct) {
+      return false;
+    }
+    var success = false;
+    await _run(() async {
+      if (!canConfirmVerification(captured) ||
+          (scanned != null && !captured.qr.matchesRemote(scanned))) {
+        return;
+      }
+      error = null;
+      final session = _session!;
+      try {
+        final frame = await session.encrypt({
+          'type': 'verified',
+          'features': ['image-v1', 'file-v1', if (supportsReplies) 'reply-v1'],
+        });
+        if (!canConfirmVerification(captured)) {
+          if (identical(session, _session)) await _disconnect();
+          return;
+        }
+        await transport.send(jsonEncode(frame));
+        if (!canConfirmVerification(captured)) {
+          if (identical(session, _session)) await _disconnect();
+          return;
+        }
+        localVerified = true;
+        await _updateReady();
+        success = true;
+      } catch (_) {
+        if (identical(session, _session)) await _disconnect();
+        rethrow;
+      }
+      notifyListeners();
+    });
+    return success;
+  }
+
   Future<void> _updateReady() async {
     if (ready) {
       _timeout?.cancel();

@@ -1,5 +1,12 @@
 # Two-device acceptance tests
 
+QR verification has a [camera/direct/group checklist](QR_VERIFICATION.md), including
+first-use offline models, permission/PIN behavior, both confirmations, old/wrong QR
+rejection and camera shutdown. Automated camera tests use a fake native platform.
+
+Starred messages have a [saved-message checklist](STARRED_MESSAGES.md), including
+restart, exact original jumps, deletion and encrypted v10 backups.
+
 Replies have a [direct/group checklist](MESSAGE_REPLIES.md), including quote
 drafts, original jumps, outbox retry, older peers, group receipts and v9 backups.
 

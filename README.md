@@ -27,7 +27,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 - Advertise a display name and discover nearby LocalChat phones using Wi-Fi Direct DNS-SD.
 - Connect through Android's Wi-Fi Direct pairing flow and exchange framed TCP messages.
 - Signed Ed25519 identity + fresh X25519 key exchange for each connection.
-- Compare an 80-bit session verification code on both phones before messaging.
+- Verify each direct/host-guest session by scanning the other phone's QR on Android
+  or comparing the full 80-bit code. Both phones explicitly confirm before messaging.
+  QR scanning uses bundled offline models; see [QR controls/testing](docs/QR_VERIFICATION.md).
 - XChaCha20-Poly1305 encrypted text and acknowledgements; reject replayed/modified frames.
 - Direct-chat images: local selection, preview, encrypted chunk transfer,
   progress/cancellation, encrypted storage, offline zoom viewing and backups.

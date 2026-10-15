@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:cryptography/cryptography.dart';
+import 'session_verification.dart';
 
 List<int> randomBytes(int count) {
   final random = Random.secure();
@@ -13,7 +14,17 @@ String hex(List<int> bytes) =>
 
 /// Experimental protocol v1. See docs/SECURITY.md before making security claims.
 class SecureSession {
-  SecureSession._(this.identity, this.ephemeral, this.hello);
+  SecureSession._(this.identity, this.ephemeral, this.hello, this.selfId);
+  final String selfId;
+  VerificationQr? verificationQr(VerificationScope scope) =>
+      sessionId == null || peerId == null || verificationCode == null
+      ? null
+      : VerificationQr(
+          scope: scope,
+          session: sessionId!,
+          sender: selfId,
+          receiver: peerId!,
+        );
   final SimpleKeyPair identity;
   final SimpleKeyPair ephemeral;
   final Map<String, dynamic> hello;
@@ -53,7 +64,10 @@ class SecureSession {
     hello['signature'] = base64Encode(
       (await Ed25519().sign(_helloBytes(hello), keyPair: identity)).bytes,
     );
-    return SecureSession._(identity, ephemeral, hello);
+    final selfId = hex(
+      (await Sha256().hash(base64Decode(hello['identity'] as String))).bytes,
+    );
+    return SecureSession._(identity, ephemeral, hello, selfId);
   }
 
   Future<void> acceptHello(Map<String, dynamic> remote) async {

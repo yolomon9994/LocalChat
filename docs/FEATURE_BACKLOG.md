@@ -3,9 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Starred messages
+## Current milestone: QR session verification
 
-Implemented locally: 2026-10-15. Baseline `4dae7fe`; user handles Git.
+Implemented locally: 2026-10-15. Baseline `04f5682`; user handles Git.
+See [QR_VERIFICATION.md](QR_VERIFICATION.md).
+
+- [x] Show/scan QR for direct and individual pending host/guest connections.
+- [x] Full transcript/reciprocal identity binding; wrong/self/old/member QR rejection.
+- [x] Explicit local confirmation, both peers required and manual-code fallback.
+- [x] Foreground/PIN/revision/session guards before and after queued async work.
+- [x] Android-only camera, bundled offline models, denial/error/manual guidance.
+- [x] Camera shutdown on match/exit/privacy loss and late-permission serialization.
+- [x] All 488 tests (32 new) and 11 Chrome UI checks pass; clean analysis.
+      Android/web builds and diff review pass; see VALIDATION.md.
+- [ ] Manual phone/browser/TalkBack checks; see QR_VERIFICATION.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Starred messages: implemented and committed
+
+Implemented: 2026-10-15. Committed by the user as `04f5682`.
 See [STARRED_MESSAGES.md](STARRED_MESSAGES.md).
 
 - [x] Star/Unstar menus, selection actions, semantics and bubble markers.
@@ -18,7 +34,7 @@ See [STARRED_MESSAGES.md](STARRED_MESSAGES.md).
 - [x] All 456 tests and 11 Chrome UI checks pass; clean analysis, Android/web
       builds and diff review. See [VALIDATION.md](VALIDATION.md).
 - [ ] Manual Android/browser checks; see [STARRED_MESSAGES.md](STARRED_MESSAGES.md).
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `04f5682`.
 
 ## Replies to text messages: implemented and committed
 
@@ -420,7 +436,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Copy text messages in direct/group chats, including selection and offline history.
 - [x] Reply to text messages in direct/group chats, with quotes, drafts and backups.
 - [x] Starred messages in direct/group chats, with encrypted persistence and backups.
-- [ ] QR scanning for session verification (bind to the verified session).
+- [x] QR session verification for direct/group links; Android camera and manual fallback.
+      Physical offline/camera checks pending; see QR_VERIFICATION.md.
 - [ ] Accessibility: adjustable text size, contrast and optional vibration.
 - [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
       preview, offline viewer and encrypted backup support; hardware checks pending.
@@ -458,8 +475,9 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 8. Saved group drafts, group pin/archive and group search (committed).
 9. Group background protection (committed), browser group simulation (committed).
 10. Copy text messages (committed); replies to text messages (committed).
-11. Starred messages (current).
-12. QR scanning for session verification can follow.
+11. Starred messages (committed).
+12. QR scanning for session verification (current).
+13. Accessibility: adjustable text size, contrast and optional vibration (planned).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

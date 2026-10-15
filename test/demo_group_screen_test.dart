@@ -80,6 +80,10 @@ void main() {
               .first,
         );
         await tester.ensureVisible(confirm);
+        // QR actions make pending-member cards taller. Apply the scroll/layout
+        // before tapping, including after the previous member's card disappears.
+        await tester.pumpAndSettle();
+        expect(confirm.hitTestable(), findsOneWidget);
         await tester.tap(confirm);
         await demoUiTurn(tester);
       }

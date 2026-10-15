@@ -8,6 +8,7 @@ import 'chats_tab.dart' show formatConversationTime;
 import 'group_image_bubble.dart';
 import 'group_file_bubble.dart';
 import 'text_message_actions.dart';
+import 'verification_screen.dart';
 import 'message_reply_card.dart';
 import '../core/message_reply.dart';
 import 'group_chat_tile.dart';
@@ -251,63 +252,66 @@ class GroupVerification extends StatelessWidget {
   Widget build(BuildContext context) {
     final g = controller.groups;
     return Column(
-      children: [
-        for (final link in g.links.values.where((l) => !l.admitted))
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      children: g.links.values.where((l) => !l.admitted).map((link) {
+        final verification = g.verificationFor(link.id);
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${g.hosting ? 'Joining member' : 'Host'}: ${link.name}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (link.session.verificationCode != null) ...[
                   Text(
-                    '${g.hosting ? 'Joining member' : 'Host'}: ${link.name}',
+                    controller.simulatedGroups
+                        ? 'Demo verification: the member and its confirmation are simulated. Tap Codes match to try this flow. On Android, compare the entire code on both phones in person.'
+                        : 'Compare this entire code on both phones in person. Display names alone do not verify identity.',
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    link.session.verificationCode!,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  if (link.session.verificationCode != null) ...[
-                    Text(
-                      controller.simulatedGroups
-                          ? 'Demo verification: the member and its confirmation are simulated. Tap Codes match to try this flow. On Android, compare the entire code on both phones in person.'
-                          : 'Compare this entire code on both phones in person. Display names alone do not verify identity.',
+                  Text(
+                    link.localVerified
+                        ? 'Waiting for the other phone to confirm.'
+                        : 'Confirm only when both codes match.',
+                  ),
+                  if (verification != null)
+                    VerificationActions(
+                      controller: controller,
+                      request: verification,
                     ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      link.session.verificationCode!,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      link.localVerified
-                          ? 'Waiting for the other phone to confirm.'
-                          : 'Confirm only when both codes match.',
-                    ),
-                    Wrap(
-                      spacing: 12,
-                      children: [
-                        FilledButton(
-                          onPressed:
-                              !link.localVerified &&
-                                  controller.appAccessible &&
-                                  controller.appForeground
-                              ? () => g.confirm(link.id)
-                              : null,
-                          child: const Text('Codes match'),
-                        ),
-                        TextButton(
-                          onPressed:
-                              controller.appAccessible &&
-                                  controller.appForeground
-                              ? () => g.reject(link.id)
-                              : null,
-                          child: const Text('Reject'),
-                        ),
-                      ],
-                    ),
-                  ] else
-                    const Text('Exchanging keys…'),
-                ],
-              ),
+                  Wrap(
+                    spacing: 12,
+                    children: [
+                      FilledButton(
+                        onPressed:
+                            verification != null &&
+                                g.canConfirmVerification(verification)
+                            ? () => g.confirm(link.id, request: verification)
+                            : null,
+                        child: const Text('Codes match'),
+                      ),
+                      TextButton(
+                        onPressed:
+                            controller.appAccessible && controller.appForeground
+                            ? () => g.reject(link.id)
+                            : null,
+                        child: const Text('Reject'),
+                      ),
+                    ],
+                  ),
+                ] else
+                  const Text('Exchanging keys…'),
+              ],
             ),
           ),
-      ],
+        );
+      }).toList(),
     );
   }
 }

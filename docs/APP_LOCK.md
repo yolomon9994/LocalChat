@@ -103,3 +103,11 @@ git commit -m "feat: add optional PIN and biometric app lock"
 
 Review staged files before committing; leave unrelated changes out. Publishing
 or pushing remains a separate user action.
+
+## QR camera permission and lock
+
+Opening Scan QR can request Android camera permission. The OS dialog may make
+LocalChat inactive, expiring the QR route and triggering the existing app lock.
+Finish the prompt, unlock if needed and reopen Scan QR. Late permission/capture
+results cannot approve the old request or restart its camera. See the
+[QR permission and physical testing guide](QR_VERIFICATION.md).
