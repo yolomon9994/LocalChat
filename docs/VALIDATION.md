@@ -1,9 +1,71 @@
 # Validation for v0.1.0
 
+## Preview privacy controls - validation 2026-10-16 to 2026-10-17
+
+Baseline: `f8c9cdc` (auto-lock timing committed by the user). All changes remain
+local for user review/Git. See [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).
+
+- Fifteen new checks: nine preference/controller/channel and six UI. Coverage
+  includes default/persistence/malformed/error cases, serial saves/disposal,
+  legacy and invalid notification modes, all raw payload variants, sender-only
+  channel arguments, rapid privacy transitions, restrictive failed/pending saves,
+  old-alert redaction, widget/semantics omission, archived/group/draft privacy,
+  unchanged history/read state, settings retry, opened chats and 2.34 text at
+  320 x 568.
+- Existing notification/navigation baseline: **15 passed**, exit 0, 5s;
+  `.dart_tool/preview-existing.log`.
+- Focused `flutter test test/preview_privacy_test.dart
+  test/preview_privacy_screen_test.dart test/chat_notifications_test.dart
+  test/notification_navigation_test.dart test/chats_list_test.dart --concurrency=2
+  --timeout=2m --reporter expanded`: **33 passed**, exit 0, 16s;
+  `.dart_tool/preview-focused-checked.log` (15 new + 18 existing).
+- `flutter analyze`: **no issues**, exit 0, 7.3s;
+  `.dart_tool/preview-analyze-clean.log`.
+- Development corrections: the synthetic chat-row fixture initializes its new
+  preference; real storage/controller work is driven in real crypto time, and
+  the semantics handle is disposed before end-of-test verification. An early
+  stalled/failed focused run was interrupted and is not a pass. Brace notes were
+  corrected without behavioral changes.
+- Paused at the user's request on 2026-10-16; both running checks were stopped.
+  Resumed on 2026-10-17. Changes remain uncommitted.
+- Full suite: interrupted after about 270 passing tests at 3m37s, with no failures
+  reported up to interruption; exit 1. This is not a completed pass.
+  `.dart_tool/preview-suite-final.log`.
+- Chrome: compilation and cached CanvasKit loading succeeded, but execution
+  stalled in the first new UI case; interrupted, exit 1. This is not a pass.
+  `.dart_tool/preview-chrome.log` and `.dart_tool/preview-chrome-assets.log`.
+  The temporary asset helper has exited.
+- Resumed Chrome: wrapping `store.exportBackup` in `tester.runAsync` lets browser
+  WebCrypto complete outside the widget test's simulated clock. All **six UI
+  tests passed**, exit 0 (10s execution; 133s Flutter invocation including compile
+  and browser setup). `.dart_tool/preview-chrome-resumed.log`.
+  The existing isolated test-browser helper supplied exactly two installed SDK
+  CanvasKit assets; `.dart_tool/preview-chrome-resumed-assets.log`. No downloads
+  or SDK/app changes were needed for that Windows test-server workaround.
+- Final `flutter analyze`: **no issues**, exit 0, 216.8s;
+  `.dart_tool/preview-analyze-resumed.log`.
+- `flutter build web`: **passed**, exit 0, 185.6s compilation;
+  `.dart_tool/preview-web.log`. Existing Wasm compatibility dry-run and optional
+  Cupertino font warnings remain; the JavaScript web artifact built successfully.
+- Formatting check of the corrected UI test and `git diff --check` passed;
+  relative links in nine touched documentation files resolve.
+- `flutter build apk --debug`: **passed**, exit 0, 421.9s Gradle task;
+  `.dart_tool/preview-apk.log`. This compiles the native Kotlin preview-mode
+  changes and produces `build/app/outputs/flutter-apk/app-debug.apk`.
+- Final `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **all 572 passed**, exit 0, 9m35s (557 baseline + 15 new);
+  `.dart_tool/preview-suite-resumed.log`.
+- No runtime dependency, permission, SQLite schema, backup, identity or protocol
+  changes. Independent local chat preference and native preview-mode metadata
+  are excluded from exported chat history. Existing native notification size,
+  private/public visibility and lifecycle guards remain.
+- Device notification presentation/migration/redaction, restart and TalkBack/
+  keyboard checks remain pending. Mocks do not prove Android system behavior.
+
 ## Configurable auto-lock timing - validation 2026-10-16
 
-Baseline: `6e5afe8` (nicknames committed by the user). Work remains local and
-uncommitted; the user handles Git. See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
+Baseline: `6e5afe8` (nicknames committed by the user). The user subsequently
+committed auto-lock timing as `f8c9cdc`. The user handles Git. See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
 
 - Twenty new checks: twelve controller/timer/storage and eight UI. Covers all
   delays and exact expiry, v1 migration/v2 malformed records, one absence across

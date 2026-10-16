@@ -122,6 +122,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final c = ChatController(DemoTransport(), DemoStore(), isDemo: true);
       addTearDown(c.dispose);
+      await c.previewPrivacy.initialize();
       c.conversations = [
         Conversation(
           'long',

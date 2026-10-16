@@ -3,9 +3,29 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Configurable auto-lock timing
+## Current milestone: Preview privacy controls
 
-Implemented locally: 2026-10-16. Baseline `6e5afe8`; user handles Git.
+Implemented locally: 2026-10-16. Baseline `f8c9cdc`; user handles Git.
+See [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).
+
+Resumed and automated validation completed on 2026-10-17. The Chrome fixture
+stall is fixed. Results and remaining device checks are recorded in
+[VALIDATION.md](VALIDATION.md). All changes remain local and uncommitted.
+
+- [x] Saved Hide chat-list previews toggle, shared with archived direct chats.
+- [x] Preserve names/counts/times/history/drafts; group rows retain summary-only text.
+- [x] Hidden, Sender only and Sender and message notification choices.
+- [x] Legacy preference migration, safe fallback and Dart/native payload enforcement.
+- [x] Active-alert redaction, rapid privacy guards and restrictive-failure suppression.
+- [x] Independent local preference and temporary browser controls; no backup/wire change.
+- [x] Focused tests: 33 passed; analysis: no issues.
+- [x] All 572 tests (15 new), six Chrome UI checks and Android/web builds; see VALIDATION.md.
+- [ ] Physical notification/restart/TalkBack checklist in PREVIEW_PRIVACY.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Configurable auto-lock timing: implemented and committed
+
+Implemented: 2026-10-16. Committed by the user as `f8c9cdc`.
 See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
 
 - [x] PIN-authorized Immediately/default, 30-second, 1-minute and 5-minute choices.
@@ -17,7 +37,7 @@ See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
 - [x] All 557 tests (20 new), eight Chrome UI checks and clean analysis.
 - [x] Android/web builds and final review; see VALIDATION.md.
 - [ ] Physical timing/biometric/notification/TalkBack checklist in AUTO_LOCK_TIMING.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `f8c9cdc`.
 
 ## Private contact nicknames: implemented and committed
 
@@ -526,7 +546,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 
 - [x] Configurable auto-lock timing with immediate privacy and notification redaction.
       Physical checks pending; see AUTO_LOCK_TIMING.md.
-- [ ] Further controls for chat/notification preview privacy.
+- [x] Chat-list privacy and three notification preview modes.
+      Physical checks pending; see PREVIEW_PRIVACY.md.
 - [ ] Group delivery behavior when members leave or the host disconnects.
 - [x] Backup format versioning, validation and explicit identity-migration flow.
 
@@ -549,7 +570,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 13. Accessibility: adjustable text size and high contrast (committed); optional
     vibration feedback (committed).
 14. Private local contact nicknames (committed).
-15. Configurable auto-lock timing (current).
+15. Configurable auto-lock timing (committed).
+16. Preview privacy controls (current).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-16. The workspace is authoritative; read README.md,
+Updated: 2026-10-17. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -37,11 +37,45 @@ QR verification was committed by the user as `d84c754`.
 Text size and high contrast were committed by the user as `09533a1`.
 Optional vibration feedback was committed by the user as `f045c38`.
 Private contact nicknames were committed by the user as `6e5afe8`.
-The current milestone is configurable auto-lock timing.
+Configurable auto-lock timing was committed by the user as `f8c9cdc`.
+The current milestone is preview privacy controls.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Auto-lock timing - implemented locally, 2026-10-16
+## Preview privacy - implemented locally, 2026-10-16
+
+Baseline: `f8c9cdc`; clean worktree at startup. User handles Git.
+See docs/PREVIEW_PRIVACY.md and docs/VALIDATION.md.
+
+- Independent PreviewPrivacy service stores strict {v:1, hidden:bool} in
+  preview_privacy_v1 secure storage (memory for demo/non-native controllers).
+  Default preserves snippets; loading/read failures hide. Generic write retry.
+- Settings > Preview privacy hides direct snippets in Chats/archive, leaving
+  metadata and empty labels. Group rows already omit content and drafts. Search,
+  Stars and opened chats still show content; history/drafts/outbox stay unchanged.
+- Notification enum hidden/sender/message replaces the old UI boolean, with
+  legacy migration. Hidden sends no name/body, sender never sends body, and both
+  Dart and native Android independently enforce mode plus foreground/privacy.
+  Android persists previewMode; legacy bool is true only for full mode, providing
+  safe downgrade for sender-only. Unknown explicit values resolve to hidden.
+- Mode changes redact alerts before writing; old plaintext is never cached or
+  reconstructed. Failed restrictive saves cap fields in-session until successful
+  explicit save. Queued privacy always redacts on loss and never replays a stale
+  true grant. Existing routing, private OS visibility and permissions stay intact.
+- No dependency, permission, SQLite-14, backup-v11, identity or wire change.
+  All preview preferences remain local and excluded from backups. Browser resets.
+- Resumed on 2026-10-17 after the user's requested pause. The stalled Chrome
+  fixture awaited browser WebCrypto under the simulated widget clock; wrapping
+  exportBackup in tester.runAsync fixes it. All six Chrome UI cases now pass.
+  Final full suite: 572 passed (15 new); six Chrome UI tests passed; final
+  analysis is clean; Android debug APK and web builds passed. See VALIDATION.md
+  for commands, logs and actual limits. Interrupted runs are not counted as passes.
+  Physical Android notifications, restart, TalkBack/keyboard and external OS
+  history remain pending.
+- Changes are saved locally for the user's Git workflow. Do not start another
+  milestone without direction.
+
+## Auto-lock timing - implemented and committed, 2026-10-16
 
 Baseline: `6e5afe8`; clean worktree at startup. User handles Git.
 See docs/AUTO_LOCK_TIMING.md and docs/VALIDATION.md.
@@ -66,9 +100,8 @@ See docs/AUTO_LOCK_TIMING.md and docs/VALIDATION.md.
 - All 557 tests (20 new), eight Chrome UI checks and clean analysis pass.
   Android/web builds and final diff review pass; consult VALIDATION.md. Physical
   timing, system picker, biometric, TalkBack and Recents checks remain pending.
-- All changes remain saved locally for user Git, including pubspec.yaml and
-  pubspec.lock for the test dependency. Do not start another milestone without
-  user direction.
+- Committed by the user as `f8c9cdc`. Preview privacy is the current milestone
+  above.
 
 ## Private contact nicknames - implemented and committed, 2026-10-16
 

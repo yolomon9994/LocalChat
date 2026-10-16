@@ -202,10 +202,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.notifications.enabled, true);
       expect(c.notifications.previews, false);
-      await tester.ensureVisible(find.text('Show message previews'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('notification-preview-mode')),
+      );
       await tester.pumpAndSettle();
-      expect(find.text('Show message previews').hitTestable(), findsOneWidget);
-      await tester.tap(find.text('Show message previews'));
+      expect(
+        find.byKey(const ValueKey('notification-preview-mode')).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('notification-preview-mode')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sender and message').last);
       await tester.pumpAndSettle();
       expect(c.notifications.previews, true);
       expect(tester.takeException(), null);

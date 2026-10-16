@@ -181,13 +181,15 @@ There is no automatic reconnect. See [outbox behavior and tests](OUTBOX.md).
 ## At-rest data
 
 Local notifications are opt-in, with sender/body previews disabled by default.
-Generic alerts send only the peer ID to Android. Preview opt-in passes bounded
-plaintext sender/text to the OS only while unlocked and foregrounded; Android
+Generic alerts send only the peer ID to Android. Sender-only mode omits the body
+across the native bridge; full preview opt-in passes bounded plaintext sender/text
+to the OS only while unlocked and foregrounded; Android
 private visibility and a generic public version protect device-lock-screen
 content. Lock/background and preview disabling redact active previews; OS
 notification history/listeners/connected devices can retain earlier plaintext
 and cannot be erased by this app. Native pause also gates/redacts previews before
-Dart lifecycle processing. Native preferences contain only notification booleans;
+Dart lifecycle processing. Native preferences contain notification enablement
+and preview mode only;
 tap intents and redaction bookkeeping retain peer IDs without names or bodies.
 Cold/warm taps wait for app unlock and saved-history validation, and never bypass
 fresh session verification. New persisted incoming rows notify; retained-history
@@ -418,3 +420,15 @@ history. Existing archive KDF, identity migration and demo/phone separation appl
 Foreground/PIN/route/revision guards reject obsolete actions and delayed navigation;
 the saved list clears decrypted rows when backgrounded/locked. Already-authorized
 storage writes may finish after locking. See STARRED_MESSAGES.md and VALIDATION.md.
+
+## Chat-list preview privacy
+
+An independent secure preference can omit direct chat snippets from Chats and
+archive widget/semantics trees. Loading/unreadable preferences hide snippets.
+Group rows and draft summaries retain summary-only behavior. This is a display
+choice: names/counts/times, explicit search, Starred messages and opened history
+remain available after unlock. No body/index is copied or deleted. Preview
+preferences are excluded from backups. Dart/native notification modes separately
+enforce hidden/sender/full choices, with redaction before setting changes and
+conservative in-session filtering after a failed restrictive save. See
+[PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).

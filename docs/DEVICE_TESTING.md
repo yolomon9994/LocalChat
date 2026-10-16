@@ -126,3 +126,9 @@ Follow [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md) for short/expired returns,
 launch/manual locking, OS picker/biometric lifecycle, notification/Recents privacy,
 restart persistence and narrow-screen/TalkBack checks. Use Immediately as the
 default when following older lock checklists.
+
+## Preview privacy
+
+Follow [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md) for chat/archive/group snippets,
+TalkBack text omission, saved preferences, three OS notification modes, native
+redaction and lock/grace behavior. Check both legacy migration and new choices.

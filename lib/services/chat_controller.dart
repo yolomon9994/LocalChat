@@ -26,6 +26,7 @@ import 'file_transfers.dart';
 import 'image_content.dart';
 import 'image_transfers.dart';
 import 'action_feedback.dart';
+import 'preview_privacy.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -39,12 +40,20 @@ class ChatController extends ChangeNotifier {
     ChatNotifications? notifications,
     BackgroundConnection? background,
     ActionFeedback? feedback,
+    PreviewPrivacy? previewPrivacy,
     GroupTransport? groupTransport,
     ImageFiles? imageFiles,
     ChatFiles? chatFiles,
     this.fileTimeout = const Duration(seconds: 30),
     this.imageTimeout = const Duration(seconds: 30),
-  }) : feedback =
+  }) : previewPrivacy =
+           previewPrivacy ??
+           PreviewPrivacy(
+             transport is WifiDirectTransport
+                 ? SecurePreviewPrivacyStorage()
+                 : MemoryPreviewPrivacyStorage(),
+           ),
+       feedback =
            feedback ??
            ActionFeedback(
              transport is WifiDirectTransport
@@ -82,6 +91,11 @@ class ChatController extends ChangeNotifier {
                : UnavailableGroupTransport());
   final GroupTransport _groupTransport;
   final ActionFeedback feedback;
+  final PreviewPrivacy previewPrivacy;
+  void _previewChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
   final bool supportsReplies;
   bool get simulatedGroups => isDemo && _groupTransport is DemoGroupTransport;
   bool get canUseGroups => !isDemo || simulatedGroups;
@@ -788,6 +802,8 @@ class ChatController extends ChangeNotifier {
     try {
       await store.open();
       await feedback.initialize();
+      await previewPrivacy.initialize();
+      previewPrivacy.addListener(_previewChanged);
       await groups.initialize();
       groups.addListener(_groupChanged);
       conversations = await store.conversations();
@@ -2017,6 +2033,8 @@ class ChatController extends ChangeNotifier {
     drafts.dispose();
     notifications.dispose();
     feedback.dispose();
+    previewPrivacy.removeListener(_previewChanged);
+    previewPrivacy.dispose();
     background.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {

@@ -12,7 +12,8 @@ The permission prompt or system settings can lock LocalChat; unlock to continue.
 
 - Previews are off by default. Alerts say **LocalChat — New message. Unlock
   LocalChat to read.** They include neither the sender name nor the message body.
-- **Show message previews** is an explicit choice. Sender/text appear only while
+- Choose **Hidden**, **Sender only** or **Sender and message**. Sender-only omits
+  the body; full previews include sender/text only while
   LocalChat is unlocked and in the foreground, outside the chat being read.
   Preview text is limited to 256 characters. Device-lock-screen content remains
   generic through Android's private visibility/public notification version.
@@ -44,6 +45,10 @@ cloud push, guaranteed background delivery or automatic reconnect. Keep both app
 running with a verified connection; vendor battery restrictions/process termination can stop receipt.
 The browser demo offers temporary settings only and requests no browser permission
 or OS notification. It does not validate Android notification behavior.
+
+See [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md) for the three-mode selector,
+legacy preference migration, restrictive-failure handling and additional phone
+checks. Modes and chat-list privacy preferences are independent.
 
 ## Two-phone checklist
 

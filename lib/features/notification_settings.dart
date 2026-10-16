@@ -24,16 +24,27 @@ class NotificationSettings extends StatelessWidget {
             value: n.enabled,
             onChanged: n.initialized && !n.busy ? n.setEnabled : null,
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Show message previews'),
-            subtitle: const Text(
-              'Include sender and text only while LocalChat is unlocked and in the foreground. Android may retain previews in notification history.',
-            ),
-            value: n.previews,
+          const Text('Notification previews'),
+          DropdownButton<NotificationPreview>(
+            key: const ValueKey('notification-preview-mode'),
+            value: n.previewMode,
+            isExpanded: true,
+            itemHeight: null,
+            items: [
+              for (final mode in NotificationPreview.values)
+                DropdownMenuItem(value: mode, child: Text(mode.label)),
+            ],
+            selectedItemBuilder: (_) => [
+              for (final mode in NotificationPreview.values)
+                Text(mode.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
             onChanged: n.initialized && n.enabled && !n.busy
-                ? n.setPreviews
+                ? (value) => n.setPreviewMode(value!)
                 : null,
+          ),
+          const Text(
+            'Sender or message content appears only while LocalChat is unlocked and in the foreground. '
+            'Android may retain previously delivered previews in notification history.',
           ),
           if (n.enabled && !n.allowed && !n.isDemo) ...[
             const Text(

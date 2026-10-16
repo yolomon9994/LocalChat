@@ -8,6 +8,7 @@ import 'backup_screen.dart';
 import 'notification_settings.dart';
 import 'background_settings.dart';
 import 'feedback_settings.dart';
+import 'preview_privacy_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -66,6 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (widget.appearance != null)
           AppearanceSettings(appearance: widget.appearance!),
         FeedbackSettings(controller: widget.controller),
+        PreviewPrivacySettings(controller: widget.controller),
         NotificationSettings(notifications: widget.controller.notifications),
         BackgroundSettings(controller: widget.controller),
         ListTile(

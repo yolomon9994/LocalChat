@@ -193,6 +193,8 @@ class ChatsTab extends StatelessWidget {
                     Text(
                       peer.latestMessage == null
                           ? 'No messages yet'
+                          : c.previewPrivacy.hidden
+                          ? 'Message preview hidden'
                           : '${peer.latestMessage!.outgoing ? 'You: ' : ''}${peer.latestMessage!.text.replaceAll(RegExp(r'\s+'), ' ').trim()}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,

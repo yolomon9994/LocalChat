@@ -1,5 +1,10 @@
 # Chats list testing
 
+Settings > Preview privacy can hide direct chat snippets in Chats/archive.
+Names, counts and times remain; opened chats/search still show content. Group
+rows and all draft summaries already omit content. See
+[PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md) for controls and physical checks.
+
 Saved direct chats can show a private nickname. Set/edit/remove it through Chat
 options in Chats, Archived chats or the conversation toolbar. Nicknames preserve
 activity order and unread state; see [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).

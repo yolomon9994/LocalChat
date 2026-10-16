@@ -80,8 +80,12 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 - Optional vibration feedback for accepted send/verification actions, off by default,
   with a Try vibration button and Android touch-feedback settings respected.
   See [action feedback controls/testing](docs/ACTION_FEEDBACK.md).
-- Opt-in local message notifications with hidden previews by default, lock-aware
-  chat opening and suppression while reading the conversation. Configure in Settings.
+- Hide chat-list snippets in Chats/archive without losing drafts or history.
+  Notification previews offer Hidden (default), Sender only or Sender and message,
+  with foreground/unlock gating and active-alert redaction. See
+  [preview privacy controls/testing](docs/PREVIEW_PRIVACY.md).
+- Opt-in local message notifications with lock-aware chat opening and suppression
+  while reading the conversation. Configure in Settings.
 - Optional protection of the current verified connection while backgrounded,
   including hosted group text receiving/relaying on admitted links, with an ongoing
   Stop notification, battery guidance and foreground-only originating sends/attachments.

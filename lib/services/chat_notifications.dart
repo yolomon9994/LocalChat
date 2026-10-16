@@ -3,10 +3,33 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+enum NotificationPreview {
+  hidden('hidden', 'Hidden'),
+  sender('sender', 'Sender only'),
+  message('message', 'Sender and message');
+
+  const NotificationPreview(this.value, this.label);
+  final String value, label;
+  static NotificationPreview parse(Map<String, dynamic> values) {
+    if (!values.containsKey('previewMode')) {
+      return values['previews'] == true ? message : hidden;
+    }
+    return values['previewMode'] == 'message'
+        ? message
+        : values['previewMode'] == 'sender'
+        ? sender
+        : hidden;
+  }
+}
+
 abstract class NotificationPlatform {
   Stream<String> get taps;
   Future<Map<String, dynamic>> settings();
-  Future<void> configure({required bool enabled, required bool previews});
+  Future<void> configure({
+    required bool enabled,
+    required bool previews,
+    NotificationPreview? previewMode,
+  });
   Future<bool> requestPermission();
   Future<void> privacy(bool accessible);
   Future<void> show(String peer, {String? name, String? text});
@@ -34,11 +57,15 @@ class AndroidNotificationPlatform implements NotificationPlatform {
     await _channel.invokeMapMethod('settings') ?? {},
   );
   @override
-  Future<void> configure({required bool enabled, required bool previews}) =>
-      _channel.invokeMethod('configure', {
-        'enabled': enabled,
-        'previews': previews,
-      });
+  Future<void> configure({
+    required bool enabled,
+    required bool previews,
+    NotificationPreview? previewMode,
+  }) => _channel.invokeMethod('configure', {
+    'enabled': enabled,
+    'previews': previews,
+    if (previewMode != null) 'previewMode': previewMode.value,
+  });
   @override
   Future<bool> requestPermission() async =>
       await _channel.invokeMethod<bool>('requestPermission') ?? false;
@@ -68,6 +95,7 @@ class MemoryNotificationPlatform implements NotificationPlatform {
   final alerts = <String, ({String? name, String? text})>{};
   bool enabled = false;
   bool previews = false;
+  NotificationPreview? savedPreviewMode;
   bool allowed = true;
   bool accessible = false;
   String? launchPeer;
@@ -77,15 +105,22 @@ class MemoryNotificationPlatform implements NotificationPlatform {
   Future<Map<String, dynamic>> settings() async => {
     'enabled': enabled,
     'previews': previews,
+    if (savedPreviewMode != null) 'previewMode': savedPreviewMode!.value,
     'allowed': allowed,
   };
   @override
   Future<void> configure({
     required bool enabled,
     required bool previews,
+    NotificationPreview? previewMode,
   }) async {
     this.enabled = enabled;
-    this.previews = previews;
+    final mode =
+        previewMode ??
+        (previews ? NotificationPreview.message : NotificationPreview.hidden);
+    if (mode != savedPreviewMode) await privacy(false);
+    savedPreviewMode = mode;
+    this.previews = mode == NotificationPreview.message;
     if (!enabled) alerts.clear();
     if (!previews) await privacy(false);
   }
@@ -106,8 +141,24 @@ class MemoryNotificationPlatform implements NotificationPlatform {
   Future<void> show(String peer, {String? name, String? text}) async {
     if (enabled && allowed) {
       alerts[peer] = (
-        name: accessible && previews ? name : null,
-        text: accessible && previews ? text : null,
+        name:
+            accessible &&
+                (savedPreviewMode ??
+                        (previews
+                            ? NotificationPreview.message
+                            : NotificationPreview.hidden)) !=
+                    NotificationPreview.hidden
+            ? name
+            : null,
+        text:
+            accessible &&
+                (savedPreviewMode ??
+                        (previews
+                            ? NotificationPreview.message
+                            : NotificationPreview.hidden)) ==
+                    NotificationPreview.message
+            ? text
+            : null,
       );
     }
   }
@@ -141,7 +192,9 @@ class ChatNotifications extends ChangeNotifier {
   final bool isDemo;
   bool initialized = false;
   bool enabled = false;
-  bool previews = false;
+  NotificationPreview previewMode = NotificationPreview.hidden;
+  NotificationPreview _ceiling = NotificationPreview.message;
+  bool get previews => previewMode != NotificationPreview.hidden;
   bool allowed = false;
   bool busy = false;
   String? error;
@@ -180,7 +233,7 @@ class ChatNotifications extends ChangeNotifier {
     _subscription ??= platform.taps.listen(_tap);
     final values = await platform.settings();
     enabled = values['enabled'] == true;
-    previews = values['previews'] == true;
+    previewMode = NotificationPreview.parse(values);
     allowed = values['allowed'] == true;
     await platform.privacy(_accessible);
     final peer = await platform.takeTap();
@@ -190,7 +243,9 @@ class ChatNotifications extends ChangeNotifier {
 
   void setAccessible(bool accessible) {
     _accessible = accessible;
-    if (initialized) unawaited(_run(() => platform.privacy(accessible)));
+    if (initialized) {
+      unawaited(_run(() => platform.privacy(accessible && _accessible)));
+    }
   }
 
   Future<void> refreshPermission() => _run(() async {
@@ -206,7 +261,11 @@ class ChatNotifications extends ChangeNotifier {
       try {
         error = null;
         if (value) allowed = await platform.requestPermission();
-        await platform.configure(enabled: value, previews: previews);
+        await platform.configure(
+          enabled: value,
+          previews: previewMode == NotificationPreview.message,
+          previewMode: previewMode,
+        );
         enabled = value;
         await platform.privacy(_accessible);
       } finally {
@@ -215,13 +274,32 @@ class ChatNotifications extends ChangeNotifier {
     });
   }
 
-  Future<void> setPreviews(bool value) => _run(() async {
-    if (!initialized || busy) return;
-    error = null;
-    await platform.configure(enabled: enabled, previews: value);
-    previews = value;
-    await platform.privacy(_accessible);
-  });
+  Future<void> setPreviews(bool value) => setPreviewMode(
+    value ? NotificationPreview.message : NotificationPreview.hidden,
+  );
+
+  Future<void> setPreviewMode(NotificationPreview value) async {
+    if (!initialized || busy || _disposed) return;
+    busy = true;
+    if (value.index < _ceiling.index) _ceiling = value;
+    notifyListeners();
+    await _run(() async {
+      try {
+        error = null;
+        await platform.privacy(false);
+        await platform.configure(
+          enabled: enabled,
+          previews: value == NotificationPreview.message,
+          previewMode: value,
+        );
+        previewMode = value;
+        _ceiling = value;
+        await platform.privacy(_accessible);
+      } finally {
+        busy = false;
+      }
+    });
+  }
 
   Future<void> openSettings() => _run(platform.openSettings);
 
@@ -233,11 +311,12 @@ class ChatNotifications extends ChangeNotifier {
   }) => _run(() async {
     if (!initialized || !enabled || isReading()) return;
     // Generic mode never sends plaintext sender/body across the native bridge.
-    final preview = previews && _accessible;
+    final mode = previewMode.index < _ceiling.index ? previewMode : _ceiling;
+    final preview = mode != NotificationPreview.hidden && _accessible;
     await platform.show(
       peer,
       name: preview ? name : null,
-      text: preview ? text : null,
+      text: preview && mode == NotificationPreview.message ? text : null,
     );
   });
 

@@ -48,14 +48,20 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
                 when (call.method) {
                     "settings" -> result.success(mapOf(
                         "enabled" to prefs.getBoolean("enabled", false),
-                        "previews" to prefs.getBoolean("previews", false),
+                        "previews" to (previewMode() == "message"),
+                        "previewMode" to previewMode(),
                         "allowed" to allowed()))
                     "configure" -> {
                         val enabled = call.argument<Boolean>("enabled") == true
                         val previews = call.argument<Boolean>("previews") == true
-                        check(prefs.edit().putBoolean("enabled", enabled).putBoolean("previews", previews).commit())
+                        val mode = call.argument<String>("previewMode") ?: if (previews) "message" else "hidden"
+                        require(mode in setOf("hidden", "sender", "message"))
+                        // Redact first, including a restrictive preference write that fails.
+                        redact()
+                        check(prefs.edit().putBoolean("enabled", enabled)
+                            .putBoolean("previews", mode == "message")
+                            .putString("previewMode", mode).commit())
                         if (!enabled) cancelMessages()
-                        else if (!previews) redact()
                         result.success(null)
                     }
                     "privacy" -> {
@@ -74,9 +80,10 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
                         val peer = call.argument<String>("peer") ?: error("Missing peer")
                         require(PEER.matches(peer))
                         if (prefs.getBoolean("enabled", false) && allowed()) {
-                            val preview = accessible && foreground && prefs.getBoolean("previews", false)
+                            val mode = previewMode()
+                            val preview = accessible && foreground && mode != "hidden"
                             post(peer, if (preview) call.argument<String>("name")?.take(32) else null,
-                                if (preview) call.argument<String>("text")?.take(256) else null)
+                                if (preview && mode == "message") call.argument<String>("text")?.take(256) else null)
                         }
                         result.success(null)
                     }
@@ -106,6 +113,15 @@ class MessageNotifications(private val activity: MainActivity, private val bridg
             } catch (_: Exception) {
                 result.error("NOTIFICATIONS", "Could not update notifications. Try again in Settings.", null)
             }
+        }
+    }
+
+    private fun previewMode(): String {
+        if (!prefs.contains("previewMode")) return if (prefs.getBoolean("previews", false)) "message" else "hidden"
+        return when (prefs.getString("previewMode", "hidden")) {
+            "sender" -> "sender"
+            "message" -> "message"
+            else -> "hidden"
         }
     }
 
