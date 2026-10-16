@@ -14,7 +14,8 @@ Implemented: 2026-10-11. Open **Settings → Chat backups**.
 The file includes all saved chats, messages, read/delivery state, drafts, pin and
 archive choices, and the private messaging identity. Anyone who has both the
 file and password can read the archive and use that identity. The archive does
-not contain the destination's history key, app PIN, biometric or theme settings.
+not contain the destination's history key, app PIN, biometric, auto-lock timing
+or theme settings.
 The source display name is shown in the preview; the destination name is kept.
 Hosted group history, signed authors, receipts and read state are included too.
 Archives containing groups use payload version 2; current builds also import

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_chat/core/models.dart';
 import 'package:local_chat/demo/demo_store.dart';
 import 'package:local_chat/demo/demo_transport.dart';
-import 'package:local_chat/features/app_lock_screen.dart';
 import 'package:local_chat/features/appearance_settings.dart';
 import 'package:local_chat/features/chat_screen.dart';
 import 'package:local_chat/features/home_screen.dart';
@@ -227,7 +226,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(HomeScreen), findsNothing);
       expect(
-        Theme.of(tester.element(find.byType(AppLockScreen))).colorScheme,
+        Theme.of(
+          tester.element(find.byKey(const ValueKey('app-privacy-cover'))),
+        ).colorScheme,
         expected,
       );
       lock.lifecycle(AppLifecycleState.resumed);

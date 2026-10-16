@@ -26,7 +26,7 @@ class AppLockSettings extends StatelessWidget {
         Text(
           lock.isDemo
               ? 'Try a PIN in this demo. It resets on reload; biometrics require Android.'
-              : 'Require your app PIN when opening LocalChat or returning to it. '
+              : 'Require your app PIN on launch and after your chosen auto-lock delay. '
                     'Remember it: there is no PIN recovery.',
         ),
         const SizedBox(height: 8),
@@ -37,6 +37,14 @@ class AppLockSettings extends StatelessWidget {
             label: const Text('Set up app lock'),
           )
         else ...[
+          ListTile(
+            key: const ValueKey('auto-lock-timing'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Auto-lock timing'),
+            subtitle: Text(lock.autoLockDelay.label),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: lock.busy ? null : () => _edit(context, _Action.delay),
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Fingerprint / biometrics'),
@@ -87,7 +95,14 @@ class AppLockSettings extends StatelessWidget {
   );
 }
 
-enum _Action { enable, change, disable, enableBiometric, disableBiometric }
+enum _Action {
+  enable,
+  change,
+  disable,
+  enableBiometric,
+  disableBiometric,
+  delay,
+}
 
 class _PinDialog extends StatefulWidget {
   const _PinDialog({required this.lock, required this.action});
@@ -104,6 +119,7 @@ class _PinDialogState extends State<_PinDialog> {
   final _confirm = TextEditingController();
   String? _error;
   bool _busy = false;
+  late AutoLockDelay _delay = widget.lock.autoLockDelay;
   bool get _settingPin =>
       widget.action == _Action.enable || widget.action == _Action.change;
 
@@ -151,9 +167,10 @@ class _PinDialogState extends State<_PinDialog> {
       _Action.disable => await lock.disable(_current.text),
       _Action.enableBiometric => await lock.setBiometric(true, _current.text),
       _Action.disableBiometric => await lock.setBiometric(false, _current.text),
+      _Action.delay => await lock.setAutoLockDelay(_delay, _current.text),
     };
-    _current.clear();
     if (!mounted) return;
+    _current.clear();
     if (accepted) {
       Navigator.of(context).pop();
     } else {
@@ -168,46 +185,78 @@ class _PinDialogState extends State<_PinDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
     child: AlertDialog(
+      scrollable: true,
       title: Text(switch (widget.action) {
         _Action.enable => 'Set up app lock',
         _Action.change => 'Change app PIN',
         _Action.disable => 'Disable app lock?',
         _Action.enableBiometric => 'Enable biometrics',
         _Action.disableBiometric => 'Disable biometrics',
+        _Action.delay => 'Auto-lock timing',
       }),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.action != _Action.enable)
-              _field(_current, 'Current app PIN'),
-            if (_settingPin) ...[
-              _field(_new, 'New six-digit PIN'),
-              _field(_confirm, 'Confirm new PIN'),
-              const Text(
-                'Remember your PIN. There is no recovery option. '
-                'Resetting app data removes your chat history and identity.',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.action != _Action.enable)
+            _field(_current, 'Current app PIN'),
+          if (widget.action == _Action.delay) ...[
+            DropdownButtonFormField<AutoLockDelay>(
+              key: const ValueKey('auto-lock-delay'),
+              initialValue: _delay,
+              isExpanded: true,
+              itemHeight: null,
+              decoration: const InputDecoration(
+                labelText: 'Require unlock after',
               ),
-            ],
-            if (widget.action == _Action.disable)
-              const Text(
-                'LocalChat will open without asking for authentication.',
-              ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            if (_busy)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: LinearProgressIndicator(),
-              ),
+              items: [
+                for (final delay in AutoLockDelay.values)
+                  DropdownMenuItem(value: delay, child: Text(delay.label)),
+              ],
+              selectedItemBuilder: (context) => [
+                for (final delay in AutoLockDelay.values)
+                  Text(
+                    delay.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _delay = value!),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Starts when LocalChat loses focus. Chats stay hidden while '
+              'you are away. Returning before the delay ends skips another unlock. '
+              'Launch and Lock now always require unlocking.',
+            ),
           ],
-        ),
+          if (_settingPin) ...[
+            _field(_new, 'New six-digit PIN'),
+            _field(_confirm, 'Confirm new PIN'),
+            const Text(
+              'Remember your PIN. There is no recovery option. '
+              'Resetting app data removes your chat history and identity.',
+            ),
+          ],
+          if (widget.action == _Action.disable)
+            const Text(
+              'LocalChat will open without asking for authentication.',
+            ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          if (_busy)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: LinearProgressIndicator(),
+            ),
+        ],
       ),
       actions: [
         TextButton(

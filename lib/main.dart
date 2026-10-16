@@ -74,6 +74,7 @@ class _LocalChatAppState extends State<LocalChatApp>
     controller.setAppForeground(
       lifecycle == null || lifecycle == AppLifecycleState.resumed,
     );
+    if (lifecycle != null) _lock.lifecycle(lifecycle);
     _lock.addListener(_accessChanged);
     controller.addListener(_notificationChanged);
     controller.notifications.addListener(_notificationChanged);
@@ -226,7 +227,17 @@ class _LocalChatAppState extends State<LocalChatApp>
                     canPop: false,
                     child: ListenableBuilder(
                       listenable: _lock,
-                      builder: (_, _) => AppLockScreen(lock: _lock),
+                      builder: (_, _) => _lock.covered
+                          ? const Scaffold(
+                              key: ValueKey('app-privacy-cover'),
+                              body: Center(
+                                child: Icon(
+                                  Icons.lock_outline,
+                                  semanticLabel: 'LocalChat hidden',
+                                ),
+                              ),
+                            )
+                          : AppLockScreen(lock: _lock),
                     ),
                   ),
                 ),

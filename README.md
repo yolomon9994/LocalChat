@@ -69,7 +69,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 - Password-encrypted chat export/import in Settings → Chat backups, with preview,
   safe merging and optional identity transfer to an empty new phone.
 - Optional six-digit app PIN, biometric unlock on supported Android phones,
-  automatic locking on launch/background, and manual Lock now in Settings.
+  launch/manual locking, and PIN-authorized auto-lock timing: Immediately (default),
+  30 seconds, 1 minute or 5 minutes. Chats hide immediately while away; see
+  [auto-lock timing and testing](docs/AUTO_LOCK_TIMING.md).
 - Light, dark and follow-system themes with mint, blue, purple and amber palettes;
   choose them in Settings → Appearance. Android remembers your choices.
 - Text-size presets that add to device scaling, high contrast in every palette,

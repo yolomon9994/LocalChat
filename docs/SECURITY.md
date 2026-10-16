@@ -276,12 +276,18 @@ Passwords/previews lose their UI references on background or route disposal;
 encrypted selection can survive system-picker locking. Managed-memory erasure
 is not guaranteed. See [backup format and tests](BACKUPS.md).
 
-Optional app lock gates startup before chat storage is opened and hides all
-application routes on launch/background until the user authenticates. A salted
+Optional app lock gates startup before chat storage is opened and removes all
+application routes immediately on background. The default requires immediate
+re-authentication; PIN-authorized 30-second, 1-minute and 5-minute choices retain
+an in-memory grant for a quick return to Chats. Launch/manual lock always require
+authentication. Resume checks expiry independently of background timer delivery. A salted
 PBKDF2-HMAC-SHA256 verifier and PIN attempt/cooldown state use secure storage;
 the PIN is not stored in plaintext. Android biometrics use the OS biometric-only
 prompt, with the LocalChat PIN as fallback. `FLAG_SECURE` is enabled while app
-lock is configured to block screenshots and hide Recents previews.
+lock is configured to block screenshots and hide Recents previews. Grace never
+keeps chat/notification previews accessible in background; access revisions still
+invalidate old actions. Lock record v2 stores only the configured duration, not
+a live grant. See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
 
 This is UI access control, not additional PIN encryption of the database or
 biometric-bound storage keys. An established connection may remain active while

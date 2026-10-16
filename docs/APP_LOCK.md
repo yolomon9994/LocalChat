@@ -4,10 +4,17 @@ App lock is optional and initially disabled. Enable it in **Settings > App
 lock > Set up app lock**, enter a six-digit PIN twice, and save. This PIN is
 specific to LocalChat and can differ from the phone's screen-lock PIN.
 
-When enabled, LocalChat locks on launch, when leaving the foreground, and when
-you tap **Lock now**. Unlock returns to the home screen. Open the connected
-conversation again if needed. Locking hides the interface; it does not promise
-background delivery or terminate an existing connection.
+When enabled, LocalChat requires unlocking on launch and after **Lock now**.
+Returning from background requires unlocking immediately by default. In
+**Settings > App lock > Auto-lock timing**, authorize with the current PIN to
+choose Immediately, 30 seconds, 1 minute or 5 minutes. A quick return within a
+chosen delay skips another PIN prompt; the interface still hides immediately
+while away. Returning opens Chats; reopen a conversation as needed.
+
+The grace grant is temporary and never survives restart. Privacy/access guards
+still activate immediately, and existing background connection rules remain.
+See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md) for timing, controls and the new
+phone/browser checklist. The checks below assume the Immediately default.
 
 ## Browser preview
 
@@ -63,7 +70,8 @@ Startup reads lock configuration before opening chat storage. A locked view
 replaces the entire application navigator with a separate lock navigator, so
 previously pushed chats, Settings, and dialogs cannot be exposed through Back.
 
-The secure-storage record contains a random 32-byte salt and a 32-byte
+The version-2 secure-storage record adds a validated auto-lock delay; version-1
+records default to Immediately without a startup rewrite. It contains a random 32-byte salt and a 32-byte
 PBKDF2-HMAC-SHA256 verifier (600,000 iterations), not the PIN. Native PIN hashing
 runs off the UI isolate. Failed PIN checks, retry deadlines, and the biometric
 preference persist in the same record. Five wrong valid-length PIN attempts

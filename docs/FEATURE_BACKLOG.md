@@ -3,9 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Private contact nicknames
+## Current milestone: Configurable auto-lock timing
 
-Implemented locally: 2026-10-16. Baseline `f045c38`; user handles Git.
+Implemented locally: 2026-10-16. Baseline `6e5afe8`; user handles Git.
+See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
+
+- [x] PIN-authorized Immediately/default, 30-second, 1-minute and 5-minute choices.
+- [x] Immediate privacy cover, route removal and access/foreground invalidation.
+- [x] One absence deadline; timer and resume checks, clock-change fail-closed behavior.
+- [x] Launch/manual/detach/locked/busy states cannot inherit an unlocked grant.
+- [x] V1->v2 secure lock record; PIN/biometric changes retain delay, generic retry.
+- [x] Notification redaction/tap gating and existing background/session rules retained.
+- [x] All 557 tests (20 new), eight Chrome UI checks and clean analysis.
+- [x] Android/web builds and final review; see VALIDATION.md.
+- [ ] Physical timing/biometric/notification/TalkBack checklist in AUTO_LOCK_TIMING.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Private contact nicknames: implemented and committed
+
+Implemented: 2026-10-16. Committed by the user as `6e5afe8`.
 See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
 
 - [x] Set/edit/remove private labels from saved direct chat options and toolbar.
@@ -17,7 +33,7 @@ See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
 - [x] All 537 tests (21 new), seven Chrome UI checks and clean analysis.
 - [x] Android/web builds and final review; see VALIDATION.md.
 - [ ] Physical phone/TalkBack checklist in CONTACT_NICKNAMES.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `6e5afe8`.
 
 ## Optional vibration feedback: implemented and committed
 
@@ -508,7 +524,9 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Group background protection; 362 tests pass. Physical checks pending.
 - [x] Browser group simulation; 382 tests and 20 Chrome checks pass. Manual checks pending.
 
-- [ ] Configurable auto-lock timeout and privacy for chat/notification previews.
+- [x] Configurable auto-lock timing with immediate privacy and notification redaction.
+      Physical checks pending; see AUTO_LOCK_TIMING.md.
+- [ ] Further controls for chat/notification preview privacy.
 - [ ] Group delivery behavior when members leave or the host disconnects.
 - [x] Backup format versioning, validation and explicit identity-migration flow.
 
@@ -530,7 +548,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 12. QR scanning for session verification (committed).
 13. Accessibility: adjustable text size and high contrast (committed); optional
     vibration feedback (committed).
-14. Private local contact nicknames (current).
+14. Private local contact nicknames (committed).
+15. Configurable auto-lock timing (current).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

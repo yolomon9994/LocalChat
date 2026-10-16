@@ -1,9 +1,73 @@
 # Validation for v0.1.0
 
+## Configurable auto-lock timing - validation 2026-10-16
+
+Baseline: `6e5afe8` (nicknames committed by the user). Work remains local and
+uncommitted; the user handles Git. See [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md).
+
+- Twenty new checks: twelve controller/timer/storage and eight UI. Covers all
+  delays and exact expiry, v1 migration/v2 malformed records, one absence across
+  inactive/hidden/paused, wall/elapsed timing and suspended timers, timer cleanup,
+  restart/manual/detach/locked/busy rules, write/PIN errors and retry, preserved
+  settings across PIN/biometric edits, late operations and biometric focus,
+  whole-route privacy/Back/drafts, notification taps/redaction and 320 x 568 at
+  2.34 text scaling.
+- Existing lock/notification checks before the new cases: **15 passed**, exit 0,
+  20s; `.dart_tool/auto-lock-existing.log`.
+- `flutter analyze`: **no issues**, exit 0, 7.3s;
+  `.dart_tool/auto-lock-analyze-verified.log`.
+- `flutter pub get --offline`: passed. fake_async 1.3.3 was already installed and
+  transitive through flutter_test; it is now a direct dev dependency for precise
+  timer-expiry/cancellation checks. No runtime version upgrades or downloads.
+- Development corrections: timing helper now reuses an open Settings route;
+  standalone widget initialization uses real crypto time. An early stalled UI
+  run was interrupted and is not a pass. Large-text checks needed settled scroll
+  frames and explicit dropdown-option scrolling. They also exposed a real dialog
+  overflow: title/content now scroll together, and dropdown items have variable
+  heights. The corrected narrow-screen case passed; temporary lint notes were
+  fixed. Failed/interrupted development runs are not counted as final passes.
+- Final focused `flutter test test/auto_lock_test.dart
+  test/auto_lock_screen_test.dart test/app_lock_test.dart
+  test/notification_navigation_test.dart test/appearance_test.dart --concurrency=2
+  --timeout=2m --reporter expanded`: **42 passed**, exit 0, 36s;
+  `.dart_tool/auto-lock-focused-verified.log` (20 new + 22 existing checks).
+- The theme regression now checks the background privacy cover instead of the
+  old background PIN widget. Review also caught a late-save callback clearing a
+  disposed PIN text controller; it now checks mounted first. An eighth UI case
+  gates the authorized storage write through background/return and confirms no
+  stale callback or unlock. Its fixture observes the intentional busy spinner
+  without waiting for animations to settle until the write completes. Earlier
+  incomplete/failed full runs were interrupted and are not counted as passes.
+- Headless Chrome `flutter test test/auto_lock_screen_test.dart --platform chrome
+  --timeout=2m --reporter expanded --verbose`: **8 passed**, exit 0, 30s after
+  startup; `.dart_tool/auto-lock-chrome-verified.log`. The existing ignored cached
+  CanvasKit helper supplied exact SDK JS/WASM to the isolated localhost test host
+  for Flutter 3.38.7's Windows asset-path issue. No SDK edits or downloads;
+  `.dart_tool/auto-lock-chrome-verified-assets.log`. The earlier seven-case browser
+  pass predates the late-save regression and is not the final result.
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **557 passed**, explicit exit 0 (537 existing + 20 new), 6m10s;
+  `.dart_tool/auto-lock-suite-verified.log`. Artifact builds started after the suite.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  **passed**, explicit Flutter exit 0, Gradle task 26.8s;
+  `.dart_tool/auto-lock-apk.log`.
+  Artifact: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: **passed**, explicit Flutter exit 0,
+  57.5s; `.dart_tool/auto-lock-web.log`, artifact `build/web`. The existing optional
+  Cupertino font warning is unchanged; no font or runtime package was added.
+- Final diff/whitespace, UTF-8, final newline and local documentation-link review
+  pass. The index is empty. All changes are saved locally; no staging, commit or
+  push was performed. Include both pubspec files with this milestone.
+- Lock records use v2 under the existing secure-storage key, with v1 compatibility;
+  SQLite stays 14 and chat backup payload support stays v1-v11. No native/permission,
+  identity, wire or runtime-package changes. PIN KDF/attempt state remains intact.
+- Physical phone timing, deep suspension, picker/biometric/Recents behavior,
+  keyboard and TalkBack remain pending; see AUTO_LOCK_TIMING.md.
+
 ## Private contact nicknames - validation 2026-10-16
 
-Baseline: `f045c38` (vibration feedback committed by the user). Changes are local;
-the user handles Git. See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
+Baseline: `f045c38` (vibration feedback committed by the user). The user
+subsequently committed nicknames as `6e5afe8`. The user handles Git. See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
 
 - Twenty-one new checks: nine portable service/controller/backup, seven UI and
   five SQLite cases. Coverage includes Unicode/byte/control validation, encrypted

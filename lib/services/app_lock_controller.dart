@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -79,6 +80,17 @@ Future<List<int>> _derivePin((String, List<int>) input) async =>
 Future<List<int>> hashAppPin(String pin, List<int> salt) =>
     compute(_derivePin, (pin, salt));
 
+enum AutoLockDelay {
+  immediately(0, 'Immediately'),
+  seconds30(30, '30 seconds'),
+  minute1(60, '1 minute'),
+  minutes5(300, '5 minutes');
+
+  const AutoLockDelay(this.seconds, this.label);
+  final int seconds;
+  final String label;
+}
+
 class _LockRecord {
   const _LockRecord({
     required this.salt,
@@ -86,12 +98,14 @@ class _LockRecord {
     this.biometrics = false,
     this.failures = 0,
     this.retryAt = 0,
+    this.delay = AutoLockDelay.immediately,
   });
   final List<int> salt;
   final List<int> hash;
   final bool biometrics;
   final int failures;
   final int retryAt;
+  final AutoLockDelay delay;
 
   factory _LockRecord.parse(String value) {
     final json = jsonDecode(value) as Map<String, dynamic>;
@@ -99,7 +113,13 @@ class _LockRecord {
     final hash = base64Decode(json['hash'] as String);
     final failures = json['failures'] as int;
     final retryAt = json['retryAt'] as int;
-    if (json['version'] != 1 ||
+    final version = json['version'];
+    final seconds = version == 1 ? 0 : json['autoLockSeconds'];
+    if (version is! int ||
+        (version != 1 && version != 2) ||
+        (version == 1 && json.containsKey('autoLockSeconds')) ||
+        seconds is! int ||
+        !AutoLockDelay.values.any((d) => d.seconds == seconds) ||
         json['iterations'] != 600000 ||
         salt.length != 32 ||
         hash.length != 32 ||
@@ -114,20 +134,27 @@ class _LockRecord {
       biometrics: json['biometrics'] as bool,
       failures: failures,
       retryAt: retryAt,
+      delay: AutoLockDelay.values.singleWhere((d) => d.seconds == seconds),
     );
   }
 
-  _LockRecord copy({bool? biometrics, int? failures, int? retryAt}) =>
-      _LockRecord(
-        salt: salt,
-        hash: hash,
-        biometrics: biometrics ?? this.biometrics,
-        failures: failures ?? this.failures,
-        retryAt: retryAt ?? this.retryAt,
-      );
+  _LockRecord copy({
+    bool? biometrics,
+    int? failures,
+    int? retryAt,
+    AutoLockDelay? delay,
+  }) => _LockRecord(
+    salt: salt,
+    hash: hash,
+    biometrics: biometrics ?? this.biometrics,
+    failures: failures ?? this.failures,
+    retryAt: retryAt ?? this.retryAt,
+    delay: delay ?? this.delay,
+  );
 
   String encode() => jsonEncode({
-    'version': 1,
+    'version': 2,
+    'autoLockSeconds': delay.seconds,
     'iterations': 600000,
     'salt': base64Encode(salt),
     'hash': base64Encode(hash),
@@ -144,10 +171,13 @@ class AppLockController extends ChangeNotifier {
     this.isDemo = false,
     PinHasher? hasher,
     DateTime Function()? now,
+    Duration Function()? elapsed,
     Future<void> Function(bool)? privacy,
   }) : _hasher = hasher ?? hashAppPin,
        _now = now ?? DateTime.now,
-       _privacy = privacy ?? _noPrivacy;
+       _privacy = privacy ?? _noPrivacy {
+    _elapsed = elapsed ?? () => _clock.elapsed;
+  }
 
   static Future<void> _noPrivacy(bool enabled) async {}
 
@@ -169,6 +199,11 @@ class AppLockController extends ChangeNotifier {
   final PinHasher _hasher;
   final DateTime Function() _now;
   final Future<void> Function(bool) _privacy;
+  final _clock = Stopwatch()..start();
+  late final Duration Function() _elapsed;
+  Timer? _graceTimer;
+  DateTime? _leftAt;
+  Duration? _leftElapsed;
   _LockRecord? _record;
   bool loading = true;
   bool locked = true;
@@ -183,7 +218,11 @@ class AppLockController extends ChangeNotifier {
 
   bool get enabled => _record != null;
   bool get biometricEnabled => _record?.biometrics ?? false;
-  bool get canAccess => !loading && !storageFailed && !locked;
+  AutoLockDelay get autoLockDelay =>
+      _record?.delay ?? AutoLockDelay.immediately;
+  bool get covered => enabled && !_foreground;
+  bool get canAccess =>
+      !_disposed && !loading && !storageFailed && !locked && !covered;
   int get retrySeconds => max(
     0,
     (((_record?.retryAt ?? 0) - _now().millisecondsSinceEpoch) / 1000).ceil(),
@@ -194,7 +233,9 @@ class AppLockController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    if (busy) return;
+    if (busy || _disposed) return;
+    _clearGrace();
+    _generation++;
     busy = true;
     loading = true;
     locked = true;
@@ -236,7 +277,9 @@ class AppLockController extends ChangeNotifier {
   }
 
   Future<bool> _operation(Future<bool> Function(int generation) action) async {
-    if (busy || loading || storageFailed) return false;
+    if (_disposed || busy || loading || storageFailed || !_foreground) {
+      return false;
+    }
     busy = true;
     error = null;
     final generation = _generation;
@@ -253,7 +296,11 @@ class AppLockController extends ChangeNotifier {
     }
   }
 
-  Future<_LockRecord> _newPin(String pin, {bool biometrics = false}) async {
+  Future<_LockRecord> _newPin(
+    String pin, {
+    bool biometrics = false,
+    AutoLockDelay delay = AutoLockDelay.immediately,
+  }) async {
     if (!validPin(pin)) throw const FormatException('Use a six-digit PIN');
     final random = Random.secure();
     final salt = List<int>.generate(32, (_) => random.nextInt(256));
@@ -261,6 +308,7 @@ class AppLockController extends ChangeNotifier {
       salt: salt,
       hash: await _hasher(pin, salt),
       biometrics: biometrics,
+      delay: delay,
     );
   }
 
@@ -343,7 +391,11 @@ class AppLockController extends ChangeNotifier {
     if (!canAccess || !validPin(replacement) || !await _checkPin(current)) {
       return false;
     }
-    final record = await _newPin(replacement, biometrics: biometricEnabled);
+    final record = await _newPin(
+      replacement,
+      biometrics: biometricEnabled,
+      delay: autoLockDelay,
+    );
     if (generation != _generation || !canAccess || !_foreground) return false;
     await _save(record);
     return true;
@@ -370,7 +422,38 @@ class AppLockController extends ChangeNotifier {
     return true;
   });
 
+  Future<bool> setAutoLockDelay(AutoLockDelay value, String current) =>
+      _operation((generation) async {
+        if (!enabled || !canAccess || !await _checkPin(current)) return false;
+        if (generation != _generation || !canAccess || !_foreground) {
+          return false;
+        }
+        await _save(_record!.copy(delay: value));
+        return true;
+      });
+
+  void _clearGrace() {
+    _graceTimer?.cancel();
+    _graceTimer = null;
+    _leftAt = null;
+    _leftElapsed = null;
+  }
+
+  bool get _withinGrace {
+    if (_leftAt == null || _leftElapsed == null) return false;
+    final wallAge = _now().difference(_leftAt!);
+    final elapsedAge = _elapsed() - _leftElapsed!;
+    final limit = Duration(seconds: autoLockDelay.seconds);
+    // Either clock can expire the grant. A rollback never extends access.
+    return !wallAge.isNegative &&
+        !elapsedAge.isNegative &&
+        wallAge < limit &&
+        elapsedAge < limit;
+  }
+
   void lock() {
+    if (_disposed) return;
+    _clearGrace();
     _generation++;
     if (enabled) locked = true;
     error = null;
@@ -378,11 +461,41 @@ class AppLockController extends ChangeNotifier {
   }
 
   void lifecycle(AppLifecycleState state) {
+    if (_disposed) return;
+    final wasForeground = _foreground;
     _foreground = state == AppLifecycleState.resumed;
-    if (_foreground) return;
+    if (_foreground) {
+      if (_leftAt != null && !_withinGrace) {
+        locked = enabled;
+      }
+      _clearGrace();
+      _notify();
+      return;
+    }
     // The OS biometric dialog can briefly make the activity inactive.
-    if (_biometricPrompt && state == AppLifecycleState.inactive) return;
-    lock();
+    if (_biometricPrompt && state == AppLifecycleState.inactive) {
+      _notify();
+      return;
+    }
+    if (state == AppLifecycleState.detached) {
+      lock();
+    } else if (enabled &&
+        !locked &&
+        !busy &&
+        wasForeground &&
+        autoLockDelay != AutoLockDelay.immediately) {
+      _generation++;
+      _leftAt = _now();
+      _leftElapsed = _elapsed();
+      _graceTimer = Timer(Duration(seconds: autoLockDelay.seconds), lock);
+      error = null;
+      _notify();
+    } else if (_leftAt != null) {
+      // Inactive -> hidden -> paused is one absence, not three new grants.
+      _notify();
+    } else {
+      lock();
+    }
     if (_biometricPrompt) {
       biometrics.cancel().catchError((Object _) {});
     }
@@ -390,6 +503,10 @@ class AppLockController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _clearGrace();
+    _generation++;
+    _foreground = false;
+    _clock.stop();
     _disposed = true;
     super.dispose();
   }

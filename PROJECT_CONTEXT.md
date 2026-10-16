@@ -36,11 +36,41 @@ Starred messages were committed by the user as `04f5682`.
 QR verification was committed by the user as `d84c754`.
 Text size and high contrast were committed by the user as `09533a1`.
 Optional vibration feedback was committed by the user as `f045c38`.
-The current milestone is private contact nicknames.
+Private contact nicknames were committed by the user as `6e5afe8`.
+The current milestone is configurable auto-lock timing.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Private contact nicknames - implemented locally, 2026-10-16
+## Auto-lock timing - implemented locally, 2026-10-16
+
+Baseline: `6e5afe8`; clean worktree at startup. User handles Git.
+See docs/AUTO_LOCK_TIMING.md and docs/VALIDATION.md.
+
+- Settings > App lock > Auto-lock timing: current-PIN authorized Immediately
+  (default), 30s, 1m or 5m. Version-2 record in app_lock_v1 adds autoLockSeconds;
+  v1 migrates as immediate without startup rewrite. Other lock data/cost unchanged.
+- Background always closes root routes, covers UI and sets chat access/foreground
+  false immediately. A valid quick return skips PIN but opens Chats; pushed routes
+  and unsaved dialog/PIN fields do not survive. Existing drafts stay saved.
+- One timer/grant per absence, from first loss of focus. Later hidden/paused
+  events do not reset it. Resume checks both wall and elapsed ages, including
+  exact expiry/negative ages, rather than depending on timer execution.
+- Launch/reinitialize, Lock now, detach, already-locked and busy lock operations
+  require authentication. Grant is memory-only, cleared on return/lock/disposal.
+  Biometric inactive-dialog exception stays covered; real background rejects
+  late acceptance. Authorized submitted setting writes can finish without unlock.
+- Notification previews redact/taps wait, native FLAG_SECURE stays enabled, and
+  existing background receive/relay and stale-action/verification rules remain.
+  No native/runtime package, SQLite-14, backup-v11, identity or wire change.
+  fake_async 1.3.3 is now an explicit test dependency, already cached/transitive.
+- All 557 tests (20 new), eight Chrome UI checks and clean analysis pass.
+  Android/web builds and final diff review pass; consult VALIDATION.md. Physical
+  timing, system picker, biometric, TalkBack and Recents checks remain pending.
+- All changes remain saved locally for user Git, including pubspec.yaml and
+  pubspec.lock for the test dependency. Do not start another milestone without
+  user direction.
+
+## Private contact nicknames - implemented and committed, 2026-10-16
 
 Baseline: `f045c38`; clean working tree at startup. User handles Git.
 See docs/CONTACT_NICKNAMES.md and docs/VALIDATION.md.
@@ -64,8 +94,8 @@ See docs/CONTACT_NICKNAMES.md and docs/VALIDATION.md.
   writes can finish. All 537 tests, seven Chrome UI checks and clean analysis
   pass. Final Android APK/web builds and diff review pass; consult VALIDATION.md.
   Physical restart, peer privacy, backup transfer and TalkBack checks remain pending.
-- Changes remain saved locally for user review and Git. Do not start another
-  milestone without user direction.
+- Committed by the user as `6e5afe8`. Auto-lock timing is now the current
+  milestone above.
 
 ## Action-feedback milestone - implemented locally, 2026-10-16
 

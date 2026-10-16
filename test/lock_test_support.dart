@@ -12,11 +12,13 @@ AppLockController testLock({
   LockStorage? storage,
   Biometrics? biometrics,
   DateTime Function()? now,
+  Duration Function()? elapsed,
   PinHasher? hasher,
 }) => AppLockController(
   storage: storage ?? MemoryLockStorage(),
   biometrics: biometrics ?? NoBiometrics(),
   hasher: hasher ?? fastTestPinHash,
   now: now,
+  elapsed: elapsed,
   isDemo: true,
 );

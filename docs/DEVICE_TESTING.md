@@ -119,3 +119,10 @@ physical-device and TalkBack checks remain pending.
 Follow [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md) for restart, original-name
 changes, search/stars, private reply metadata, encrypted transfer, privacy and
 large-text/TalkBack checks. Automated fakes do not establish phone behavior.
+
+## Auto-lock timing
+
+Follow [AUTO_LOCK_TIMING.md](AUTO_LOCK_TIMING.md) for short/expired returns,
+launch/manual locking, OS picker/biometric lifecycle, notification/Recents privacy,
+restart persistence and narrow-screen/TalkBack checks. Use Immediately as the
+default when following older lock checklists.

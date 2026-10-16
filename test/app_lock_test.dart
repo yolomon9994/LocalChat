@@ -278,11 +278,12 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsNothing);
-    expect(find.byType(AppLockScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('app-privacy-cover')), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byType(AppLockScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('app-privacy-cover')), findsOneWidget);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'App PIN'), '123456');
     await tester.tap(find.text('Unlock'));
     await tester.pumpAndSettle();
