@@ -3,9 +3,24 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Clearer group delivery feedback
+## Current milestone: Optional automatic reconnection for direct chats
 
-Implemented locally: 2026-10-17. Baseline `492dbb5`; user handles Git.
+Implemented locally: 2026-10-17. Baseline `9203437`; user handles Git.
+See [AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md).
+
+- [x] Default-off saved preference; temporary browser controls and generic retry.
+- [x] Three attempts with 2/5/10-second waits for a selected verified target.
+- [x] Current-list address gate, signed identity continuity and fresh verification.
+- [x] Status/Cancel in Nearby/chat; stale operation and privacy/lifecycle guards.
+- [x] Keep history/drafts/outbox evidence; no group or attachment auto-resume.
+- [x] Focused 55 checks, six Chrome UI cases, clean analysis and final Android/web builds.
+- [x] All 624 tests (33 new) pass; see VALIDATION.md.
+- [ ] Physical two-phone/OS/TalkBack checklist in AUTOMATIC_RECONNECT.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Clearer group delivery feedback: implemented and committed
+
+Implemented locally: 2026-10-17. Committed by the user as `9203437`.
 See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).
 
 - [x] Resolve a departing/removed recipient's pending status immediately.
@@ -16,7 +31,7 @@ See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).
 - [x] Focused tests, six Chrome UI checks, clean analysis and Android/web builds.
 - [x] All 591 tests (19 new) pass; see VALIDATION.md.
 - [ ] Physical three-phone/TalkBack checklist in GROUP_DELIVERY.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed group delivery feedback as `9203437`.
 
 ## Preview privacy controls: implemented and committed
 
@@ -525,7 +540,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] Saved drafts across navigation and restarts (Android); temporary browser drafts.
 - [x] Offline outbox and retry after fresh verification; distinguish queued,
       sending, delivered and unconfirmed messages; retry by original ID.
-- [ ] Automatic reconnection with troubleshooting and fresh verification.
+- [x] Optional direct-chat automatic reconnection with fresh verification.
+      All 624 tests pass; physical checks pending. See AUTOMATIC_RECONNECT.md.
 - [x] Pin, archive and delete individual conversations.
 - [x] Connection troubleshooting: Wi-Fi, permissions, discovery, retry actions
       and manual Reconnect to a device still listed.
@@ -588,7 +604,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 14. Private local contact nicknames (committed).
 15. Configurable auto-lock timing (committed).
 16. Preview privacy controls (committed).
-17. Clearer group delivery feedback for departures and host loss (current).
+17. Clearer group delivery feedback for departures and host loss (committed).
+18. Optional direct-chat automatic reconnection with fresh verification (current).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

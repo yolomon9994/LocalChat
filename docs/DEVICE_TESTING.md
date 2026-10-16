@@ -138,3 +138,9 @@ redaction and lock/grace behavior. Check both legacy migration and new choices.
 Follow [GROUP_DELIVERY.md](GROUP_DELIVERY.md) for three-phone departures, host
 loss, partially confirmed text/image/file delivery, original-host recovery,
 fresh verification, restart fallback and TalkBack/privacy checks.
+
+## Automatic direct reconnection
+
+Follow [AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md) for two-phone retry timing,
+Android pairing cancellation, fresh verification/outbox gating, radio/permission
+failures, changed addresses/identities, background/lock races and restart checks.

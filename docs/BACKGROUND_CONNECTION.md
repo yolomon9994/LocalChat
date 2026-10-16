@@ -1,5 +1,9 @@
 # Background connection protection
 
+Optional [automatic direct reconnection](AUTOMATIC_RECONNECT.md) is a separate
+foreground/unlocked setting. It never restores links in the background or starts
+this service to recover an offline connection. Group rejoining remains manual.
+
 This setting protects the current verified direct chat or hosted group. Groups
 can receive and relay text on admitted links; empty hosting and pending joins do
 not start protection. See [GROUP_BACKGROUND.md](GROUP_BACKGROUND.md) for activation,

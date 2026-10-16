@@ -9,6 +9,7 @@ import 'notification_settings.dart';
 import 'background_settings.dart';
 import 'feedback_settings.dart';
 import 'preview_privacy_settings.dart';
+import 'automatic_reconnect_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -69,6 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         FeedbackSettings(controller: widget.controller),
         PreviewPrivacySettings(controller: widget.controller),
         NotificationSettings(notifications: widget.controller.notifications),
+        AutomaticReconnectSettings(controller: widget.controller),
         BackgroundSettings(controller: widget.controller),
         ListTile(
           contentPadding: EdgeInsets.zero,

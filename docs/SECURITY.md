@@ -176,7 +176,13 @@ access check follows encryption; a gate change discards the unsent frame and
 session to avoid a sequence gap. Already submitted writes can complete while
 locked, and receiving/ACKs retain the existing app-lock model. ACKs only confirm
 IDs attempted in the current verified session, including late ACKs after timeout.
-There is no automatic reconnect. See [outbox behavior and tests](OUTBOX.md).
+Optional foreground/unlocked direct-chat reconnection can retry a selected,
+previously verified device still listed at the same address. Its signed hello
+must match the prior identity, then both phones compare and confirm a fresh code.
+This never trusts a saved identity automatically. Target/timers remain in memory;
+privacy changes, cancellation and queued lifecycle revisions invalidate work.
+No background/group reconnect or attachment resume is added. See
+[automatic reconnection](AUTOMATIC_RECONNECT.md) and [outbox behavior](OUTBOX.md).
 
 ## At-rest data
 
@@ -317,7 +323,9 @@ battery exemption is user-controlled and not automatically requested. Local
 permission/notification checks stop an invalid service; this is not a peer
 heartbeat. OS suspension can interrupt transport and background delivery is not
 guaranteed. Idle socket failure may become visible only when sending or when
-Android reports group/TCP loss. No automatic reconnect. See [background limits](BACKGROUND_CONNECTION.md).
+Android reports group/TCP loss. Automatic direct-chat retries, when enabled, are
+restricted to foreground unlock; background/group recovery stays manual. See
+[background limits](BACKGROUND_CONNECTION.md) and [reconnection](AUTOMATIC_RECONNECT.md).
 
 Manual recovery checks radio/permissions on foreground/unlock without starting
 discovery or connecting. Revoked access closes existing verification. The last

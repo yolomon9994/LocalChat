@@ -9,7 +9,7 @@ LocalChat was created in ChatGPT and continued in this Flutter workspace.
 It enables nearby offline messaging without a router, mobile data, accounts,
 backend, Firebase or cloud database. Version 0.1 is Android-first, with direct
 text/images/files and hosted text/image/file groups. Video playback, Bluetooth, multi-hop relaying, iOS and
-automatic reconnect are also future work. Local notifications and optional
+automatic group reconnect are also future work. Local notifications and optional
 background protection of the current running verified session are implemented;
 Doze/vendor restrictions still apply and hardware reliability is unvalidated.
 
@@ -39,13 +39,41 @@ Optional vibration feedback was committed by the user as `f045c38`.
 Private contact nicknames were committed by the user as `6e5afe8`.
 Configurable auto-lock timing was committed by the user as `f8c9cdc`.
 Preview privacy controls were committed by the user as `492dbb5`.
-The current milestone is clearer group delivery feedback.
+Group delivery feedback was committed by the user as `9203437`.
+The current milestone is optional automatic reconnection for direct chats.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Group delivery feedback - implemented locally, 2026-10-17
+## Automatic direct-chat reconnection - implemented locally, 2026-10-17
 
-Baseline: `492dbb5`; clean worktree at startup. User handles Git.
+Baseline: `9203437`; clean worktree at startup. User handles Git.
+See docs/AUTOMATIC_RECONNECT.md and docs/VALIDATION.md.
+
+- Default-off strict v1 secure preference automatic_reconnect_v1 (memory in demo).
+  Up to three attempts after 2/5/10 seconds, foreground/unlocked only. Only a
+  locally selected and fully verified session supplies a memory-only target.
+- Retry checks Nearby access and the same address in the current list; no auto
+  scan/name fallback. Signed hello must match the prior identity, then both
+  phones explicitly compare/confirm the fresh session before queued text drains.
+- Cancel/status in Nearby and affected chat. Ownership and lifecycle revisions
+  invalidate timers, queued loss events, awaited checks and late confirmations.
+  Cancelling owned pairing requests native disconnect; late direct events are
+  fenced until explicit Nearby action. Group/background recovery stays manual.
+- Preference failure retry and session-safe disable; cold starts/backups retain
+  no target or pending attempt. No schema-14, backup-v11, dependency, permission,
+  bridge or wire changes. Existing unconfirmed/attachment retry rules remain.
+- Thirty-three new tests: 27 controller/storage and six UI. Completed focused
+  run: 55 passed (33 new + 22 existing); six Chrome UI cases passed. Native-close
+  failures stop with generic recovery rather than stranding a burst. Re-enabling
+  the setting re-arms a still-live selected/verified connection. Final analysis
+  is clean and Android/web rebuilds passed. All 624 regression tests passed;
+  see VALIDATION.md for commands, results and fixture corrections.
+- Physical Android pairing/radio/permissions/address changes and TalkBack remain
+  pending. User handles staging, committing and pushing after testing.
+
+## Group delivery feedback - implemented and committed, 2026-10-17
+
+Baseline: `492dbb5`; subsequently committed by the user as `9203437`.
 See docs/GROUP_DELIVERY.md and docs/VALIDATION.md.
 
 - Host link loss/removal and guest validated roster departure immediately mark

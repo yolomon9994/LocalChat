@@ -11,8 +11,10 @@ send automatically, oldest queued first, while the sender is unlocked and in
 the foreground. This also applies to archived chats and when viewing another
 conversation. Connecting to a different identity never sends that queue.
 
-There is no automatic discovery, reconnect or background sending in this
-milestone. A saved chat can accept queued text while its connection awaits
+Optional [automatic direct-chat reconnection](AUTOMATIC_RECONNECT.md) can retry
+a dropped selected/verified connection while unlocked and foregrounded. It does
+not discover automatically or send before fresh verification. Background sending
+is not added. A saved chat can accept queued text while its connection awaits
 verification; an unknown peer cannot accept text until verified.
 
 ## Message states and actions

@@ -27,6 +27,9 @@ import 'image_content.dart';
 import 'image_transfers.dart';
 import 'action_feedback.dart';
 import 'preview_privacy.dart';
+import 'reconnect_preferences.dart';
+
+part 'automatic_reconnect.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -41,12 +44,28 @@ class ChatController extends ChangeNotifier {
     BackgroundConnection? background,
     ActionFeedback? feedback,
     PreviewPrivacy? previewPrivacy,
+    ReconnectPreferences? reconnectPreferences,
+    List<Duration> reconnectDelays = const [
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+      Duration(seconds: 10),
+    ],
     GroupTransport? groupTransport,
     ImageFiles? imageFiles,
     ChatFiles? chatFiles,
     this.fileTimeout = const Duration(seconds: 30),
     this.imageTimeout = const Duration(seconds: 30),
-  }) : previewPrivacy =
+  }) : assert(reconnectDelays.length == 3),
+       assert(reconnectDelays.every((delay) => !delay.isNegative)),
+       reconnectDelays = List.unmodifiable(reconnectDelays),
+       reconnectPreferences =
+           reconnectPreferences ??
+           ReconnectPreferences(
+             transport is WifiDirectTransport
+                 ? SecureReconnectStorage()
+                 : MemoryReconnectStorage(),
+           ),
+       previewPrivacy =
            previewPrivacy ??
            PreviewPrivacy(
              transport is WifiDirectTransport
@@ -92,6 +111,50 @@ class ChatController extends ChangeNotifier {
   final GroupTransport _groupTransport;
   final ActionFeedback feedback;
   final PreviewPrivacy previewPrivacy;
+  final ReconnectPreferences reconnectPreferences;
+  final List<Duration> reconnectDelays;
+  _ReconnectTarget? _eligibleReconnect;
+  Peer? _outgoingDevice;
+  _ReconnectRun? _autoRun;
+  Timer? _autoTimer;
+  bool _rejectAutoConnections = false;
+  String? _autoNotice, _autoNoticePeer;
+  bool get automaticReconnectActive => _autoRun != null;
+  Object? get automaticReconnectToken => _autoRun;
+  String? get automaticReconnectPeer =>
+      _autoRun?.target.identity ?? _autoNoticePeer;
+  String? get automaticReconnectStatus {
+    final run = _autoRun;
+    if (run == null) return _autoNotice;
+    return switch (run.phase) {
+      _ReconnectPhase.waiting =>
+        'Reconnecting to ${run.target.device.name}: attempt ${run.attempts + 1}/3 in ${run.delay.inSeconds}s.',
+      _ReconnectPhase.connecting =>
+        'Reconnecting to ${run.target.device.name}: attempt ${run.attempts}/3.',
+      _ReconnectPhase.verifying =>
+        'Reconnected. Compare the fresh code on both phones before messaging.',
+    };
+  }
+
+  Future<void> cancelAutomaticReconnect({Object? token}) {
+    if (token != null && !identical(token, _autoRun)) return Future.value();
+    return _cancelAutomatic(
+      notice: 'Automatic reconnection cancelled. Connect again from Nearby.',
+    );
+  }
+
+  Future<bool> setAutomaticReconnectEnabled(bool enabled) {
+    if (!_appAccessible ||
+        !_appForeground ||
+        _disposed ||
+        reconnectPreferences.loading ||
+        reconnectPreferences.saving) {
+      return Future.value(false);
+    }
+    if (!enabled) unawaited(cancelAutomaticReconnect());
+    return reconnectPreferences.setEnabled(enabled);
+  }
+
   void _previewChanged() {
     if (!_disposed) notifyListeners();
   }
@@ -439,17 +502,21 @@ class ChatController extends ChangeNotifier {
     background: background,
     canAct: () => initialized && !_disposed && _appAccessible && _appForeground,
   );
-  Future<bool> _prepareGroup() => _nearbyAction(() async {
-    await _disconnect();
-    await transport.stop();
-    // Reuse the established Android permission flow before changing radio mode.
-    await transport.start(store.name);
-    await transport.stop();
-    started = false;
-    scanning = false;
-    peers = [];
-    state = 'Group mode';
-  }, allowPermissionRequest: true);
+  Future<bool> _prepareGroup() async {
+    await _cancelAutomatic();
+    return _nearbyAction(() async {
+      await _disconnect();
+      await transport.stop();
+      // Reuse the established Android permission flow before changing radio mode.
+      await transport.start(store.name);
+      await transport.stop();
+      started = false;
+      scanning = false;
+      peers = [];
+      state = 'Group mode';
+    }, allowPermissionRequest: true);
+  }
+
   final ChatNotifications notifications;
   final BackgroundConnection background;
   int? _transportGeneration;
@@ -622,9 +689,14 @@ class ChatController extends ChangeNotifier {
   bool _appAccessible = true;
   bool _appForeground = true;
   String get profileName => store.name;
-  String? get code => _session?.verificationCode;
+  String? get code =>
+      _rejectAutoConnections ? null : _session?.verificationCode;
   String? get connectedPeer => _session?.peerId;
-  bool get ready => localVerified && remoteVerified && _session != null;
+  bool get ready =>
+      !_rejectAutoConnections &&
+      localVerified &&
+      remoteVerified &&
+      _session != null;
   bool get canSend => ready && selectedPeer == connectedPeer;
   bool get canSubmit =>
       initialized &&
@@ -667,6 +739,7 @@ class ChatController extends ChangeNotifier {
     if (_appAccessible == accessible) return;
     _appAccessible = accessible;
     if (!accessible) {
+      unawaited(cancelAutomaticReconnect());
       _pauseImages();
       _pauseFiles();
     }
@@ -677,6 +750,7 @@ class ChatController extends ChangeNotifier {
     _readVisible();
     notifyListeners();
     if (accessible) {
+      if (ready && _appForeground) _rememberReconnectTarget();
       _requestBackground();
       unawaited(refreshNearbyAccess());
       _requestDrain();
@@ -705,6 +779,7 @@ class ChatController extends ChangeNotifier {
     bool moveIdentity = false,
     required int accessToken,
   }) async {
+    await _cancelAutomatic();
     await groups.stop();
     late BackupMerge result;
     Object? failure;
@@ -754,6 +829,7 @@ class ChatController extends ChangeNotifier {
     _appForeground = foreground;
     interactionRevision++;
     if (!foreground) {
+      unawaited(cancelAutomaticReconnect());
       _pauseImages();
       _pauseFiles();
     }
@@ -763,6 +839,7 @@ class ChatController extends ChangeNotifier {
     // Cancel search immediately on background; refresh activity on return.
     notifyListeners();
     if (foreground) {
+      if (ready && _appAccessible) _rememberReconnectTarget();
       unawaited(notifications.refreshPermission());
       unawaited(background.refresh());
       _requestBackground();
@@ -803,6 +880,8 @@ class ChatController extends ChangeNotifier {
       await store.open();
       await feedback.initialize();
       await previewPrivacy.initialize();
+      await reconnectPreferences.initialize();
+      reconnectPreferences.addListener(_reconnectSettingsChanged);
       previewPrivacy.addListener(_previewChanged);
       await groups.initialize();
       groups.addListener(_groupChanged);
@@ -810,7 +889,17 @@ class ChatController extends ChangeNotifier {
       historyRevision++;
       _subscription = transport.events.listen(
         (event) {
-          unawaited(_run(() => _event(event)));
+          final interaction = interactionRevision;
+          final accessible = _appAccessible && _appForeground;
+          unawaited(
+            _run(
+              () => _event(
+                event,
+                allowAutomatic:
+                    accessible && interaction == interactionRevision,
+              ),
+            ),
+          );
         },
         onError: (Object e) {
           error = e.toString();
@@ -839,6 +928,9 @@ class ChatController extends ChangeNotifier {
         if (!_appAccessible || !_appForeground || _disposed) return;
         nearbyStatus = status;
         if (status.issue != null) {
+          _endAutomatic(
+            'Automatic reconnection stopped. Resolve Nearby access, then connect again.',
+          );
           unawaited(groups.stop());
           if (_session != null || state == 'Connecting') await _disconnect();
           if (status.issue == ConnectionIssue.wifiOff) {
@@ -932,6 +1024,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<bool> start() async {
+    await _cancelAutomatic();
+    _manualReconnectIntent();
     await groups.stop();
     return _startNearby();
   }
@@ -951,6 +1045,8 @@ class ChatController extends ChangeNotifier {
 
   Future<bool> scan() async {
     if (!canScan) return false;
+    await _cancelAutomatic();
+    _manualReconnectIntent();
     return _nearbyAction(() async {
       peers = [];
       await transport.scan();
@@ -958,6 +1054,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<bool> connect(Peer peer) async {
+    await _cancelAutomatic();
+    _manualReconnectIntent();
     await groups.stop();
     return _connectNearby(peer);
   }
@@ -966,6 +1064,7 @@ class ChatController extends ChangeNotifier {
     if (_session != null || state == 'Connecting') await _disconnect();
     final previousPeer = selectedPeer, previousName = selectedName;
     lastNearbyPeer = peer;
+    _outgoingDevice = peer;
     selectedPeer = null;
     messages = [];
     selectedName = peer.name;
@@ -1015,8 +1114,22 @@ class ChatController extends ChangeNotifier {
       unawaited(
         _run(() async {
           if (_disposed || !identical(_timeout, timer) || ready) return;
-          await _disconnect();
+          final retry = _autoRun;
+          if (retry != null) {
+            if (!await _closeAutomaticConnection()) return;
+          } else {
+            await _disconnect();
+          }
           _showConnectionIssue(ConnectionIssue.timeout);
+          if (retry != null && identical(_autoRun, retry)) {
+            if (retry.phase == _ReconnectPhase.verifying) {
+              _endAutomatic(
+                'Fresh-code verification timed out. Connect again from Nearby.',
+              );
+            } else {
+              _recoverAutomatic(null);
+            }
+          }
           notifyListeners();
         }),
       );
@@ -1024,7 +1137,10 @@ class ChatController extends ChangeNotifier {
     _timeout = timer;
   }
 
-  Future<void> _event(Map<String, dynamic> event) async {
+  Future<void> _event(
+    Map<String, dynamic> event, {
+    bool allowAutomatic = true,
+  }) async {
     if (_disposed || store.identityRecoveryRequired) return;
     switch (event['type']) {
       case 'peers':
@@ -1034,14 +1150,34 @@ class ChatController extends ChangeNotifier {
       case 'scanning':
         scanning = event['active'] == true;
       case 'connected':
+        if (_rejectAutoConnections ||
+            (_autoRun != null && !_autoCurrent(_autoRun!))) {
+          await _closeAutomaticConnection();
+          break;
+        }
+        _autoTimer?.cancel();
         if (_session != null) {
           await _disconnect();
           return;
+        }
+        if (_autoRun case final run?) {
+          if (run.phase == _ReconnectPhase.waiting) run.attempts++;
+          run.phase = _ReconnectPhase.connecting;
+          _outgoingDevice = run.target.device;
         }
         if (hasConnectionHelp) error = null;
         connectionIssue = null;
         _transportGeneration = event['generation'] as int?;
         _session = await SecureSession.create(store.identity, store.name);
+        if (_disposed) {
+          _session = null;
+          return;
+        }
+        if (_rejectAutoConnections ||
+            (_autoRun != null && !_autoCurrent(_autoRun!))) {
+          await _closeAutomaticConnection();
+          break;
+        }
         localVerified = false;
         remoteVerified = false;
         state = 'Exchanging keys';
@@ -1049,9 +1185,22 @@ class ChatController extends ChangeNotifier {
         await transport.send(jsonEncode(_session!.hello));
       case 'frame':
         try {
+          if (_rejectAutoConnections) {
+            await _closeAutomaticConnection();
+            break;
+          }
           await _frame(event['frame'] as String);
         } catch (_) {
-          await _disconnect();
+          if (_autoRun != null) {
+            _endAutomatic(
+              'Automatic reconnection stopped after a security check. Connect manually and compare fresh codes.',
+            );
+          }
+          if (_rejectAutoConnections) {
+            await _closeAutomaticConnection();
+          } else {
+            await _disconnect();
+          }
           _showConnectionIssue(ConnectionIssue.security);
         } finally {
           unawaited(background.frameProcessed(event['generation'] as int?));
@@ -1065,6 +1214,9 @@ class ChatController extends ChangeNotifier {
           break;
         }
         if (token != null && token != _transportGeneration) break;
+        _endAutomatic(
+          'Automatic reconnection stopped. Connect again from Nearby.',
+        );
         await transport.stop();
         started = false;
         scanning = false;
@@ -1075,13 +1227,24 @@ class ChatController extends ChangeNotifier {
         }
       case 'disconnected':
         final unexpected = _session != null || state == 'Connecting';
+        final retryTarget = ready && allowAutomatic ? _eligibleReconnect : null;
+        final retrying =
+            _autoRun?.phase != _ReconnectPhase.waiting && _autoRun != null;
         background.connectionEnded(unexpected: unexpected);
         await _reset();
         if (unexpected && connectionIssue == null) {
           _showConnectionIssue(ConnectionIssue.lost);
         }
+        if (unexpected || retrying) _recoverAutomatic(retryTarget);
       case 'error':
-        if (state == 'Connecting' || _session != null) await _disconnect();
+        final retryTarget = ready && allowAutomatic ? _eligibleReconnect : null;
+        if (state == 'Connecting' || _session != null) {
+          if (_autoRun != null) {
+            if (!await _closeAutomaticConnection()) break;
+          } else {
+            await _disconnect();
+          }
+        }
         final issue = ConnectionIssue.fromCode(event['code'] as String?);
         if (issue == ConnectionIssue.serviceStopped ||
             issue == ConnectionIssue.wifiOff) {
@@ -1091,8 +1254,16 @@ class ChatController extends ChangeNotifier {
           state = 'Offline';
         }
         _showConnectionIssue(issue);
+        if (issue == ConnectionIssue.connection ||
+            issue == ConnectionIssue.busy ||
+            issue == ConnectionIssue.lost) {
+          _recoverAutomatic(retryTarget);
+        } else {
+          _endAutomatic('Automatic reconnection stopped. Check Nearby access.');
+        }
       case 'wifi':
         if (event['enabled'] != true) {
+          _endAutomatic('Automatic reconnection stopped because Wi-Fi is off.');
           await transport.stop();
           started = false;
           scanning = false;
@@ -1111,6 +1282,18 @@ class ChatController extends ChangeNotifier {
     final frame = Map<String, dynamic>.from(jsonDecode(raw) as Map);
     if (frame['kind'] == 'hello') {
       await _session!.acceptHello(frame);
+      if (_disposed) return;
+      final retry = _autoRun;
+      if (_rejectAutoConnections ||
+          (retry != null &&
+              (!_autoCurrent(retry) ||
+                  connectedPeer != retry.target.identity))) {
+        _endAutomatic(
+          'The device identity changed. Automatic reconnection stopped. Connect manually and compare fresh codes.',
+        );
+        throw const FormatException('Unexpected reconnect identity');
+      }
+      if (retry != null) retry.phase = _ReconnectPhase.verifying;
       selectedPeer = connectedPeer;
       selectedName = _session!.peerName!;
       messages = await store.messages(selectedPeer!);
@@ -1237,6 +1420,7 @@ class ChatController extends ChangeNotifier {
     final session = _session;
     final qr = session?.verificationQr(VerificationScope.direct);
     if (_disposed ||
+        _rejectAutoConnections ||
         !initialized ||
         !_appAccessible ||
         !_appForeground ||
@@ -1324,6 +1508,7 @@ class ChatController extends ChangeNotifier {
 
   Future<void> _updateReady() async {
     if (ready) {
+      _rememberReconnectTarget();
       _timeout?.cancel();
       _timeout = null;
       state = 'Encrypted • verified';
@@ -1803,6 +1988,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   });
   Future<void> rename(String name) async {
+    await _cancelAutomatic();
     await groups.stop();
     await _rename(name);
   }
@@ -1822,6 +2008,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   });
   Future<void> clearHistory() async {
+    await _cancelAutomatic();
     await groups.stop();
     await _clearHistory();
   }
@@ -1919,6 +2106,10 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<bool> deleteConversation(String peer) async {
+    if (automaticReconnectPeer == peer ||
+        _eligibleReconnect?.identity == peer) {
+      await _cancelAutomatic();
+    }
     var success = false;
     await _run(() async {
       error = null;
@@ -1945,6 +2136,8 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> _reset() async {
+    _eligibleReconnect = null;
+    _outgoingDevice = null;
     background.connectionEnded();
     _transportGeneration = null;
     _timeout?.cancel();
@@ -1995,7 +2188,11 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  Future<void> disconnect() => _run(_disconnect);
+  Future<void> disconnect() async {
+    await _cancelAutomatic();
+    await _run(_disconnect);
+  }
+
   void dismissError() {
     error = null;
     connectionIssue = null;
@@ -2016,6 +2213,8 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _autoTimer?.cancel();
+    _autoRun = null;
     files.dispose();
     _pendingFile = null;
     _pendingFileKey = null;
@@ -2035,6 +2234,8 @@ class ChatController extends ChangeNotifier {
     feedback.dispose();
     previewPrivacy.removeListener(_previewChanged);
     previewPrivacy.dispose();
+    reconnectPreferences.removeListener(_reconnectSettingsChanged);
+    reconnectPreferences.dispose();
     background.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {

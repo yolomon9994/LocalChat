@@ -48,6 +48,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 - Separate Chats and Nearby tabs with bottom navigation; Settings in the toolbar.
 - Nearby access checks, actionable connection guidance and Android settings
   shortcuts; manual Reconnect to a device still listed, with fresh verification.
+- Optional automatic direct-chat reconnection: three foreground/unlocked attempts
+  with 2/5/10-second waits, current-device/identity checks and fresh verification.
+  See [automatic reconnection and testing](docs/AUTOMATIC_RECONNECT.md).
 - Latest-message previews, activity timestamps, persistent unread badges and
   recent-message ordering in Chats. Opening a visible conversation clears its unread count.
 - Private contact nicknames in saved direct chat options, conversation titles,
@@ -110,7 +113,7 @@ See [hosted group chats](docs/GROUP_CHATS.md) for the trust model, joining and t
 See [image sharing](docs/IMAGE_SHARING.md) for limits, controls and two-phone checks.
 See [file sharing](docs/FILE_SHARING.md) for attaching documents, saving copies and testing.
 
-Bluetooth, video playback, multi-hop relaying, iOS and automatic reconnection are future work. Optional background protection keeps the current running verified direct/group session; hosts must stay connected, and image/file transfers require participating apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
+Bluetooth, video playback, multi-hop relaying, iOS and automatic group reconnection are future work. Optional background protection keeps the current running verified direct/group session; hosts must stay connected, and image/file transfers require participating apps in the foreground. App closure/process termination ends connections, and Doze/vendor restrictions can interrupt delivery. Local notifications require an actually received message. The protocol is experimental and has not had an independent security audit. Read [SECURITY.md](docs/SECURITY.md).
 
 ## Run the project
 

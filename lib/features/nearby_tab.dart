@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import '../services/chat_controller.dart';
+import 'automatic_reconnect_status.dart';
 
 class NearbyTab extends StatelessWidget {
   const NearbyTab({
@@ -23,6 +24,7 @@ class NearbyTab extends StatelessWidget {
       primary: false,
       padding: const EdgeInsets.all(20),
       children: [
+        AutomaticReconnectStatus(controller: c),
         Text(
           'Find someone nearby',
           style: Theme.of(context).textTheme.headlineMedium,

@@ -28,6 +28,13 @@ repeated taps while their operation is pending.
 
 ## Reconnect and queued messages
 
+An independent default-off setting can make three automatic attempts after a
+selected verified direct connection is unexpectedly lost. It requires the same
+address in the current Nearby list, the prior signed identity and fresh code
+confirmation on both phones. Status and Cancel appear in Nearby and the affected
+chat. Lock/background, missing prerequisites, manual actions and exhausted
+attempts stop the burst; see [AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md).
+
 Nearby shows the **Last device** attempted during this app session. **Reconnect**
 is available when its address remains in the current nearby list and no session
 or pairing is active. A new scan clears the old list first. Addresses can change;
@@ -42,9 +49,10 @@ Unconfirmed messages still require explicit Retry. See [OUTBOX.md](OUTBOX.md).
 
 Tap **Why messages are queued** in a chat's toolbar to see whether it needs a
 connection, both-phone verification, foreground access or storage recovery.
-Locking hides that dialog with the rest of the app. This milestone provides
-manual recovery; it does not automatically reconnect, confirm codes or enable
-background delivery. Idle connection loss can still wait for a send or an
+Locking hides that dialog with the rest of the app. Manual recovery remains
+available alongside the separate optional automatic-retry setting. Neither
+automatically confirms codes or enables background delivery. Idle connection
+loss can still wait for a send or an
 Android group-loss event to become visible; there is no heartbeat.
 
 ## Android and browser behavior

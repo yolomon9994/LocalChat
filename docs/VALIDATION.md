@@ -1,9 +1,78 @@
 # Validation for v0.1.0
 
+## Optional automatic direct-chat reconnection - validation 2026-10-17
+
+Baseline: `9203437` (group delivery feedback committed by the user).
+Changes remain local for the user's Git workflow. See
+[AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md).
+
+- Thirty-three new checks: 27 preference/controller and six UI. Cover default-off,
+  persistence, malformed/read/write failures, serial saves/disposal, selected
+  identity/address binding, fresh-code outbox gating, preserved draft/queued IDs,
+  three-attempt exhaustion, request/verification timeouts, missing/changed peers,
+  reciprocal incoming reconnection, stale Cancel/confirmation callbacks,
+  background/lock/gated readiness/native returns, queued loss across absence,
+  prerequisites/status/native-cleanup failures, failed-disable cancellation, manual actions,
+  group mode/deletion, cold/incoming sessions, backup exclusion and security.
+  UI includes enlarged 2.34 text at 320 x 568, settings recovery, status/Cancel
+  and full-app PIN route removal.
+  Controller fixtures inject short retry delays and gateable fake radio checks;
+  actual 2/5/10-second timing and Android pairing behavior need phone validation.
+- Earlier focused `flutter test test/automatic_reconnect_test.dart
+  test/automatic_reconnect_screen_test.dart test/nearby_support_test.dart
+  test/outbox_test.dart --concurrency=2 --timeout=2m --reporter expanded`:
+  **50 passed**, exit 0, 36s; `.dart_tool/reconnect-focused-final.log`.
+  This precedes two added queued-loss lifecycle tests and final disposal guards.
+- Headless Chrome `flutter test test/automatic_reconnect_screen_test.dart
+  --platform chrome --timeout=2m --reporter expanded --verbose`: **six passed**,
+  exit 0; `.dart_tool/reconnect-chrome.log`. Existing isolated-browser helper
+  supplied two installed SDK CanvasKit files; `.dart_tool/reconnect-chrome-assets.log`.
+  This UI run precedes the final internal lifecycle-receipt guard.
+- Initial Android debug and web builds passed, exit 0 (36.3s Gradle, 80.0s web);
+  `.dart_tool/reconnect-apk.log` and `.dart_tool/reconnect-web.log`. Rebuilds after
+  the final lifecycle guard and final analysis/full suite are recorded below.
+- Development corrections: the fake demo wrapper must emit real loss events;
+  explicit offline acceptance uses the existing queueIfOffline API. Controller
+  fixtures account for simulated incoming greetings. UI cancellation reflow
+  needs scrolling back to the status, and full-app loss processing must drive
+  both real and widget queues. Early failed/interrupted runs are not final passes.
+  One brace lint was corrected. Final review added disposal and queued-loss
+  revision guards, and handles a reciprocal incoming link without leaving its
+  old waiting timer armed.
+- Added native-cleanup failure handling: cancellation/failed-attempt shutdown
+  cannot strand an active burst or expose raw platform errors/usable late codes.
+  The completed focused command above passed **55 checks**, exit 0, 33s
+  (33 new + 22 existing); `.dart_tool/reconnect-checks-complete.log`.
+- Final Chrome UI run: **six passed**, exit 0, 112s total Flutter invocation;
+  `.dart_tool/reconnect-chrome-final.log` and
+  `.dart_tool/reconnect-chrome-final-assets.log`. This includes the lifecycle and
+  native-cleanup guards; only the final still-live preference re-enable handler
+  was added afterwards and is covered by the focused controller run.
+- Final `flutter analyze`: **no issues**, exit 0, 5.6s;
+  `.dart_tool/reconnect-analysis-verified.log`. A second brace-only test-helper
+  lint was corrected before this run.
+- Final `flutter build apk --debug`: **passed**, exit 0, 23.0s Gradle task;
+  `.dart_tool/reconnect-apk-complete.log`.
+- Final `flutter build web`: **passed**, exit 0, 75.0s compilation;
+  `.dart_tool/reconnect-web-complete.log`. Existing Wasm dry-run compatibility and
+  optional Cupertino font warnings remain; the JavaScript artifact built.
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **all 624 passed**, exit 0, 5m56s (591 baseline + 33 new);
+  `.dart_tool/reconnect-suite-final.log`. Both artifact builds finished before
+  this run, which includes the final test-helper brace correction.
+  Formatting/diff checks passed, and relative links in ten touched documentation
+  files resolve.
+- No dependencies, permissions, native bridge, wire, SQLite or archive changes.
+  Current-list address and prior identity are eligibility/continuity checks;
+  they never replace explicit fresh verification. Runtime target/timers stay
+  memory-only and are excluded from backups.
+- Physical Android radio/pairing, callback delays, permissions, changing device
+  addresses, restart persistence, TalkBack and keyboard remain pending.
+
 ## Group delivery feedback - validation 2026-10-17
 
-Baseline: `492dbb5` (preview privacy committed by the user). All changes remain
-local for the user's Git workflow. See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).
+Baseline: `492dbb5` (preview privacy committed by the user). The user subsequently
+committed group delivery feedback as `9203437`. See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).
 
 - Nineteen new checks: thirteen controller/transfer and six UI. Includes immediate
   departures/removal, preserving other pending/received recipients, text slot

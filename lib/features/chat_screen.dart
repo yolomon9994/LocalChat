@@ -2,6 +2,7 @@ import 'conversation_menu.dart';
 import 'action_feedback.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'automatic_reconnect_status.dart';
 import '../core/models.dart';
 import '../core/starred_message.dart';
 import '../services/chat_controller.dart';
@@ -626,6 +627,15 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
         ),
         body: Column(
           children: [
+            if (c.automaticReconnectPeer == c.selectedPeer)
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * .22,
+                ),
+                child: SingleChildScrollView(
+                  child: AutomaticReconnectStatus(controller: c),
+                ),
+              ),
             if (c.error != null)
               ConstrainedBox(
                 constraints: BoxConstraints(
