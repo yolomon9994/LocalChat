@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-15. The workspace is authoritative; read README.md,
+Updated: 2026-10-16. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -34,13 +34,42 @@ Text copying was committed by the user as `b9ef43c`.
 Replies to text messages were committed by the user as `4dae7fe`.
 Starred messages were committed by the user as `04f5682`.
 QR verification was committed by the user as `d84c754`.
-The current milestone is text size and high contrast.
+Text size and high contrast were committed by the user as `09533a1`.
+The current milestone is optional vibration feedback.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Readability milestone - implemented locally, 2026-10-15
+## Action-feedback milestone - implemented locally, 2026-10-16
 
-Baseline: `d84c754`; clean working tree at startup. The user handles Git.
+Baseline: `09533a1`; clean working tree at startup. The user handles Git.
+See docs/ACTION_FEEDBACK.md and docs/VALIDATION.md.
+
+- Settings > Action feedback adds Vibration feedback (off by default) and explicit
+  Try vibration. Separate action_feedback_v1 secure-storage record; browser/demo
+  uses memory and never outputs action vibration. Appearance remains JSON v2.
+- Android adapter uses Flutter HapticFeedback.lightImpact (VIRTUAL_KEY), preserving
+  OS touch-feedback behavior without adding VIBRATE permission or native code.
+- Shared UI helper wraps successful local direct/group text/image/file sends,
+  explicit direct retries and manual/QR connection confirmation. No automatic
+  outbox, receipt, relay or scan-only pulse. Acceptance is not a delivery receipt
+  or the other phone's confirmation. Wire/controllers' trust rules are unchanged.
+- Single-use tickets capture preference revision plus origin route and root
+  foreground/access revision. Late results after cover/disposal/lock/background
+  or preference toggling cannot pulse. Overlapping native requests coalesce;
+  errors are swallowed and physical output is never awaited by the action.
+  An already submitted Android effect cannot be recalled.
+- Eight service/adapter and eight UI checks cover persistence/errors, single-use,
+  privacy/revisions, nonblocking native output, demo/unsupported silence, actual
+  stored direct text, signed group sends/admission, explicit QR and enlarged UI.
+  All 516 tests and eight Chrome UI checks pass; analysis is clean. Final Android
+  APK/web builds and review pass; see VALIDATION.md. Actual vibration/OS settings and TalkBack
+  remain pending. SQLite 13, backups v10, appearance v2 and dependencies unchanged.
+- All work is saved locally, unstaged/uncommitted. Private local contact nicknames
+  can be considered next; do not implement another milestone without user direction.
+
+## Readability milestone - implemented, 2026-10-15
+
+Baseline: `d84c754`; committed by the user as `09533a1`. The user handles Git.
 See docs/ACCESSIBILITY.md, docs/THEMES.md and docs/VALIDATION.md.
 
 - Appearance adds Follow system / Larger (+15%) / Largest (+30%), a high-contrast
@@ -62,8 +91,8 @@ See docs/ACCESSIBILITY.md, docs/THEMES.md and docs/VALIDATION.md.
   Android APK/web builds and diff review pass; see VALIDATION.md.
   Actual Android restart/font settings, TalkBack and manual browser checks remain
   pending. No native/permission/package/wire changes; SQLite 13 and backups v10.
-- All changes saved locally without staging or committing. Optional vibration is
-  the next planned step, not part of this milestone; do not implement it yet.
+- Committed by the user as `09533a1`. Optional vibration is the current
+  milestone above.
 
 ## QR-verification milestone - implemented, 2026-10-15
 

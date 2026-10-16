@@ -1,3 +1,4 @@
+import 'action_feedback.dart';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
@@ -62,9 +63,13 @@ class _ChatFileBubbleState extends State<ChatFileBubble> {
             c.selectedPeer != peer) {
           return;
         }
-        await c.sendFile(
-          SelectedFile(widget.message.file!.name, bytes),
-          retry: widget.message,
+        await withActionFeedback(
+          context,
+          c,
+          () => c.sendFile(
+            SelectedFile(widget.message.file!.name, bytes),
+            retry: widget.message,
+          ),
         );
       } else {
         final saved = await c.saveFileToPhone(widget.message);

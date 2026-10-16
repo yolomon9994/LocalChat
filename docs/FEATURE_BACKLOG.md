@@ -3,9 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Text size and high contrast
+## Current milestone: Optional vibration feedback
 
-Implemented locally: 2026-10-15. Baseline `d84c754`; user handles Git.
+Implemented locally: 2026-10-16. Baseline `09533a1`; user handles Git.
+See [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
+
+- [x] Default-off saved toggle and explicit Try vibration control in Settings.
+- [x] Android light touch feedback; browser/demo and unsupported paths stay silent.
+- [x] Accepted direct/group text, attachments, explicit retries and code/QR actions.
+- [x] Single-use requests with route, privacy, lifecycle and preference revision guards.
+- [x] Platform errors/pending pulses never block or fail the accepted action.
+- [x] Independent secure preference, recoverable read/write errors and no new permission.
+- [x] All 516 tests (16 new), eight Chrome UI checks and clean analysis.
+- [x] Final Android/web builds and diff review; see VALIDATION.md.
+- [ ] Physical haptic/system-setting and TalkBack checks in ACTION_FEEDBACK.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Text size and high contrast: implemented and committed
+
+Implemented: 2026-10-15. Committed by the user as `09533a1`.
 See [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 - [x] Follow system / Larger (+15%) / Largest (+30%), preserving device scaling.
@@ -17,7 +33,7 @@ See [ACCESSIBILITY.md](ACCESSIBILITY.md).
 - [x] All 500 tests (12 new), 12 Chrome checks and clean analysis.
 - [x] Final Android/web builds and diff review; see VALIDATION.md.
 - [ ] Manual phone/browser/TalkBack checklist in ACCESSIBILITY.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `09533a1`.
 
 ## QR session verification: implemented and committed
 
@@ -455,7 +471,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 - [x] QR session verification for direct/group links; Android camera and manual fallback.
       Physical offline/camera checks pending; see QR_VERIFICATION.md.
 - [x] Accessibility: adjustable text size and high contrast; see ACCESSIBILITY.md.
-- [ ] Optional vibration feedback (next planned step).
+- [x] Optional vibration feedback; Android action pulses with saved opt-in.
+      Physical checks pending; see ACTION_FEEDBACK.md.
 - [x] Direct-chat images: encrypted transfer, progress, cancellation, bounds,
       preview, offline viewer and encrypted backup support; hardware checks pending.
 - [x] Direct-chat files: implemented with bounds/progress/cancel, encrypted
@@ -494,8 +511,9 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 10. Copy text messages (committed); replies to text messages (committed).
 11. Starred messages (committed).
 12. QR scanning for session verification (committed).
-13. Accessibility: adjustable text size and high contrast (current); optional
-    vibration can follow as a separate milestone.
+13. Accessibility: adjustable text size and high contrast (committed); optional
+    vibration feedback (current).
+14. Private local contact nicknames can follow.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

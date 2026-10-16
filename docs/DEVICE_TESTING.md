@@ -2,7 +2,9 @@
 
 Readability has a [text-size/high-contrast checklist](ACCESSIBILITY.md), including
 OS font settings, theme migration, restart/PIN, combined enlargement, TalkBack and
-small-screen browser notices. Optional vibration is not implemented yet.
+small-screen browser notices. Vibration feedback has its own
+[action-feedback checklist](ACTION_FEEDBACK.md), including system haptic settings,
+restart, direct/group actions, demo silence and late-result privacy.
 
 QR verification has a [camera/direct/group checklist](QR_VERIFICATION.md), including
 first-use offline models, permission/PIN behavior, both confirmations, old/wrong QR

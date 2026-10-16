@@ -1,3 +1,4 @@
+import 'action_feedback.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
@@ -169,7 +170,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
         return;
       }
       if (send == true) {
-        await c.sendImage(bytes);
+        await withActionFeedback(context, c, () => c.sendImage(bytes));
       } else if (send == false) {
         c.discardPendingImage();
       }
@@ -231,7 +232,7 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
       return;
     }
     if (send == true) {
-      await c.sendFile(selection);
+      await withActionFeedback(context, c, () => c.sendFile(selection));
     } else if (send == false) {
       c.discardPendingFile();
     }
@@ -247,7 +248,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
     setState(() {
       _sending = true;
     });
-    await widget.controller.sendText(text, queueIfOffline: true);
+    await withActionFeedback(
+      context,
+      widget.controller,
+      () => widget.controller.sendText(text, queueIfOffline: true),
+    );
     if (!mounted) return;
     setState(() {
       _sending = false;
@@ -679,7 +684,12 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
                                 verification != null &&
                                     c.canConfirmVerification(verification)
                                 ? () => unawaited(
-                                    c.confirmCode(request: verification),
+                                    withActionFeedback(
+                                      context,
+                                      c,
+                                      () =>
+                                          c.confirmCode(request: verification),
+                                    ),
                                   )
                                 : null,
                             child: Text(

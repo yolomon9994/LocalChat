@@ -1,3 +1,4 @@
+import 'action_feedback.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -97,7 +98,11 @@ class _ChatImageBubbleState extends State<ChatImageBubble> {
         c.selectedPeer == peer &&
         access == c.accessRevision &&
         _bytes != null) {
-      await c.sendImage(_bytes!, retry: widget.message);
+      await withActionFeedback(
+        context,
+        c,
+        () => c.sendImage(_bytes!, retry: widget.message),
+      );
     }
   }
 

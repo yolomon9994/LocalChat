@@ -1,3 +1,4 @@
+import 'action_feedback.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/group_models.dart';
@@ -293,7 +294,11 @@ class GroupVerification extends StatelessWidget {
                         onPressed:
                             verification != null &&
                                 g.canConfirmVerification(verification)
-                            ? () => g.confirm(link.id, request: verification)
+                            ? () => withActionFeedback(
+                                context,
+                                controller,
+                                () => g.confirm(link.id, request: verification),
+                              )
                             : null,
                         child: const Text('Codes match'),
                       ),
@@ -434,11 +439,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
     if (_sending) return;
     setState(() => _sending = true);
     final text = _text.text;
-    await g.sendText(
-      text,
-      reply: g.drafts.replyFor(widget.id, group: true),
-      draftText: text,
-      draftRevision: g.drafts.revisionFor(widget.id, group: true),
+    await withActionFeedback(
+      context,
+      widget.controller,
+      () => g.sendText(
+        text,
+        reply: g.drafts.replyFor(widget.id, group: true),
+        draftText: text,
+        draftRevision: g.drafts.revisionFor(widget.id, group: true),
+      ),
     );
     if (!mounted) return;
     setState(() => _sending = false);
@@ -501,7 +510,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
         return;
       }
       if (send == true) {
-        await g.images.send(bytes);
+        await withActionFeedback(context, c, () => g.images.send(bytes));
       } else if (send == false) {
         g.images.discard();
       }
@@ -567,7 +576,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
       return;
     }
     if (send == true) {
-      await g.files.send(selection);
+      await withActionFeedback(context, c, () => g.files.send(selection));
     } else if (send == false) {
       g.files.discard();
     }

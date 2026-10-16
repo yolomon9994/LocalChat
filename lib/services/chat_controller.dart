@@ -25,6 +25,7 @@ import '../core/chat_file.dart';
 import 'file_transfers.dart';
 import 'image_content.dart';
 import 'image_transfers.dart';
+import 'action_feedback.dart';
 
 class ChatController extends ChangeNotifier {
   ChatController(
@@ -37,12 +38,21 @@ class ChatController extends ChangeNotifier {
     NearbyTools? nearbyTools,
     ChatNotifications? notifications,
     BackgroundConnection? background,
+    ActionFeedback? feedback,
     GroupTransport? groupTransport,
     ImageFiles? imageFiles,
     ChatFiles? chatFiles,
     this.fileTimeout = const Duration(seconds: 30),
     this.imageTimeout = const Duration(seconds: 30),
-  }) : nearbyTools =
+  }) : feedback =
+           feedback ??
+           ActionFeedback(
+             transport is WifiDirectTransport
+                 ? SecureFeedbackStorage()
+                 : MemoryFeedbackStorage(),
+             isDemo: isDemo,
+           ),
+       nearbyTools =
            nearbyTools ??
            (transport is WifiDirectTransport
                ? const AndroidNearbyTools()
@@ -71,6 +81,7 @@ class ChatController extends ChangeNotifier {
                ? WifiGroupTransport()
                : UnavailableGroupTransport());
   final GroupTransport _groupTransport;
+  final ActionFeedback feedback;
   final bool supportsReplies;
   bool get simulatedGroups => isDemo && _groupTransport is DemoGroupTransport;
   bool get canUseGroups => !isDemo || simulatedGroups;
@@ -769,6 +780,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     try {
       await store.open();
+      await feedback.initialize();
       await groups.initialize();
       groups.addListener(_groupChanged);
       conversations = await store.conversations();
@@ -1952,6 +1964,7 @@ class ChatController extends ChangeNotifier {
     _disposed = true;
     drafts.dispose();
     notifications.dispose();
+    feedback.dispose();
     background.dispose();
     _timeout?.cancel();
     for (final timer in _ackTimers.values) {

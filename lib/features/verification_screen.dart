@@ -1,3 +1,4 @@
+import 'action_feedback.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -132,7 +133,11 @@ class _VerificationScreenState extends State<VerificationScreen> {
       return;
     }
     setState(() => _submitting = true);
-    final success = await c.confirmVerification(widget.request, raw);
+    final success = await withActionFeedback(
+      context,
+      c,
+      () => c.confirmVerification(widget.request, raw),
+    );
     if (!mounted || !_actionable || generation != _generation) return;
     if (success) {
       Navigator.of(context).pop();

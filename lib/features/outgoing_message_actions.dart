@@ -1,3 +1,4 @@
+import 'action_feedback.dart';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
@@ -52,7 +53,7 @@ class _OutgoingMessageActionsState extends State<OutgoingMessageActions> {
     );
     if (confirmed == true && mounted) {
       if (retry) {
-        await c.retryMessage(message);
+        await withActionFeedback(context, c, () => c.retryMessage(message));
       } else {
         await c.cancelQueuedMessage(message);
       }

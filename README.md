@@ -72,6 +72,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 - Text-size presets that add to device scaling, high contrast in every palette,
   and a readability preview in Settings. Android saves the choices and applies them
   to the PIN screen; see [readability controls/testing](docs/ACCESSIBILITY.md).
+- Optional vibration feedback for accepted send/verification actions, off by default,
+  with a Try vibration button and Android touch-feedback settings respected.
+  See [action feedback controls/testing](docs/ACTION_FEEDBACK.md).
 - Opt-in local message notifications with hidden previews by default, lock-aware
   chat opening and suppression while reading the conversation. Configure in Settings.
 - Optional protection of the current verified connection while backgrounded,

@@ -19,7 +19,8 @@ Open **Settings → Appearance**. Below the existing theme/palette choices:
 Changes apply after a successful save, including the open Settings route,
 dialogs, direct/group chats, the demo notice and the PIN screen. Unsaved profile
 edits, the selected tab, drafts and conversation state remain intact. Theme
-mode and palette selections stay available. Optional vibration is still planned.
+mode and palette selections stay available. Optional vibration is now available in Settings > Action feedback; see
+  [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
 
 ## Persistence and failure behavior
 

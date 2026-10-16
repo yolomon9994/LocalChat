@@ -1,9 +1,63 @@
 # Validation for v0.1.0
 
+## Optional vibration feedback - validation 2026-10-16
+
+Baseline: `09533a1` (readability committed by the user). Changes are local,
+unstaged and uncommitted; the user handles Git. See [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
+
+- Sixteen new cases: eight service/platform and eight UI. Service checks cover
+  default-off persistence, malformed/unreadable records, failed/overlapping saves,
+  single-use/foreign/disposed tickets, privacy/preference epochs, coalescing,
+  harmless platform failures, unsupported/demo silence and Android's actual
+  HapticFeedback.vibrate channel/lightImpact argument. No physical actuator is used.
+- UI checks cover saved Settings opt-in/test/retry, accepted/failed direct local
+  text and programmatic work, background/lock/covered/disposed routes, nonblocking
+  output, an adversarial demo adapter, manual group confirmation/signed send,
+  explicit QR confirmation and 320 x 568 at 2.34 text. Existing notification
+  navigation tests are included in the focused run.
+- Development corrections: the first fixture referenced a nonexistent controller
+  idle getter; it now uses the existing settle helper. Awaiting queues from widget
+  fake time stalled programmatic and group admission checks; fixtures now drive
+  both real crypto time and UI frames. QR controllers must be constructed as well
+  as initialized inside runAsync, because their initial Future queues otherwise
+  belong to fake time. Stalled runs were interrupted, temporary probes removed,
+  and analyzer brace notes fixed. Failed/interrupted runs are not counted as passes.
+- Final `flutter analyze`: no issues, exit 0, 11.8s;
+  `.dart_tool/haptics-analyze-clean.log`.
+- Focused `flutter test test/action_feedback_test.dart
+  test/action_feedback_screen_test.dart test/notification_navigation_test.dart
+  --concurrency=2 --timeout=2m --reporter expanded`: **21 passed**, exit 0, 31s;
+  `.dart_tool/haptics-focused-complete.log` (16 new and five existing checks).
+- Headless Chrome `flutter test test/action_feedback_screen_test.dart --platform
+  chrome --timeout=2m --reporter expanded --verbose`: **8 passed**, exit 0, 23s
+  after startup; `.dart_tool/haptics-chrome-ui.log`. UI adapters are fakes; demo
+  suppression is asserted and no real physical vibration is claimed.
+- The existing ignored cached-CanvasKit helper remains necessary for Flutter
+  3.38.7's Windows test-server paths. It serves exact cached SDK JS/WASM only to
+  the isolated test browser; no SDK/app edits or downloads. Asset log:
+  `.dart_tool/haptics-chrome-assets.log`. An earlier combined browser run was
+  interrupted before asset setup while correcting the QR fixture; it is not a pass.
+- Final full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **516 passed**, exit 0 (500 existing + 16 new), 5m16s;
+  `.dart_tool/haptics-milestone-final.log`. No artifact builds ran during the suite.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  passed, explicit Flutter exit 0, 81.7s; `.dart_tool/haptics-apk-final.log`.
+  Artifact: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: passed, explicit Flutter exit 0, 66.6s;
+  `.dart_tool/haptics-web-final.log`, artifact `build/web`. The existing optional
+  Cupertino font warning remains; no new font/package was added.
+- Final diff, UTF-8, new-file whitespace and local documentation link review:
+  clean. `git diff --check` passes, the index is empty and all changes are saved
+  locally for the user to review and commit.
+- No native, permission, package, SQLite schema, backup, identity or wire changes.
+  New secure preference is independent of appearance v2, chat storage and backups.
+- Physical pulse strength, Android system-toggle behavior, no-vibrator devices,
+  restart, TalkBack and manual browser checks remain pending; see ACTION_FEEDBACK.md.
+
 ## Text size and high contrast - validation 2026-10-15
 
-Baseline: `d84c754` (QR verification committed by the user). Changes are local,
-unstaged and uncommitted; the user handles Git. See [ACCESSIBILITY.md](ACCESSIBILITY.md).
+Baseline: `d84c754` (QR verification committed by the user). The user subsequently
+committed readability as `09533a1`. See [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 - Existing `flutter test test/appearance_test.dart test/layout_test.dart
   --concurrency=2 --timeout=2m --reporter expanded`: **9 passed**, exit 0, 5s;
