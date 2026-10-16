@@ -1,3 +1,4 @@
+import 'conversation_menu.dart';
 import 'action_feedback.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -550,7 +551,9 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                c.selectedName.isEmpty ? 'Nearby chat' : c.selectedName,
+                c.selectedDisplayName.isEmpty
+                    ? 'Nearby chat'
+                    : c.selectedDisplayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -569,6 +572,11 @@ class _ChatScreenState extends State<ChatScreen> with RouteAware {
             ],
           ),
           actions: [
+            if (!verifying)
+              for (final peer in c.conversations.where(
+                (p) => p.id == c.selectedPeer,
+              ))
+                ConversationMenu(controller: c, peer: peer),
             if (!verifying && (c.canSend || c.pickingFile))
               IconButton(
                 tooltip: c.remoteSupportsFiles

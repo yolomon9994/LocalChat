@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'group_models.dart';
+import 'contact_nickname.dart';
 import 'chat_image.dart';
 import 'chat_file.dart';
 import 'message_reply.dart';
@@ -33,7 +34,9 @@ class BackupData {
   final List<Map<String, Object?>> peers, messages, drafts;
   final List<Map<String, Object?>> groups, groupDrafts, stars;
   Map<String, Object?> toJson() => {
-    'version': stars.isNotEmpty
+    'version': peers.any((p) => p.containsKey('nickname'))
+        ? 11
+        : stars.isNotEmpty
         ? 10
         : messages.any((m) => m.containsKey('reply')) ||
               drafts.any((d) => d.containsKey('reply')) ||
@@ -87,7 +90,7 @@ class BackupData {
   static Future<BackupData> parse(Object? raw) async {
     const invalid = FormatException('Invalid backup contents.');
     if (raw is! Map ||
-        !{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}.contains(raw['version'])) {
+        !{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}.contains(raw['version'])) {
       throw invalid;
     }
     if (raw['version'] == 1 && raw.containsKey('groups')) throw invalid;
@@ -140,6 +143,15 @@ class BackupData {
     for (final p in peers) {
       if (!ids.add(string(p, 'id', 128))) throw invalid;
       string(p, 'name', 256);
+      if (p.containsKey('nickname')) {
+        if (raw['version'] != 11 ||
+            p['nickname'] is! String ||
+            normalizeContactNickname(p['nickname'] as String) !=
+                p['nickname'] ||
+            (p['nickname'] as String).isEmpty) {
+          throw invalid;
+        }
+      }
       number(p, 'updated');
       boolean(p, 'pinned');
       boolean(p, 'archived');
@@ -269,7 +281,7 @@ class BackupData {
     final stars = <Map<String, Object?>>[];
     final starKeys = <String>{};
     if (raw.containsKey('stars')) {
-      if (raw['version'] != 10) throw invalid;
+      if ((raw['version'] as int) < 10) throw invalid;
       for (final row in rows('stars', 5000)) {
         final star = StarredMessage.parse(row);
         if (!starKeys.add(star.key) || !starSources.contains(star.key)) {

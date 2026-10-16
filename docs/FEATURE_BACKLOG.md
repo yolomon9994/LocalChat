@@ -3,9 +3,25 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Optional vibration feedback
+## Current milestone: Private contact nicknames
 
-Implemented locally: 2026-10-16. Baseline `09533a1`; user handles Git.
+Implemented locally: 2026-10-16. Baseline `f045c38`; user handles Git.
+See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
+
+- [x] Set/edit/remove private labels from saved direct chat options and toolbar.
+- [x] Original phone name remains separate; nicknames never enter wire/reply metadata.
+- [x] Chat titles/lists, original-name and nickname search, starred-message labels.
+- [x] Encrypted schema-14 storage, migration, restart and deletion cleanup.
+- [x] V11 encrypted archives; older imports and destination-choice precedence.
+- [x] Foreground/privacy/route guards, generic errors and enlarged-text editor.
+- [x] All 537 tests (21 new), seven Chrome UI checks and clean analysis.
+- [x] Android/web builds and final review; see VALIDATION.md.
+- [ ] Physical phone/TalkBack checklist in CONTACT_NICKNAMES.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Optional vibration feedback: implemented and committed
+
+Implemented: 2026-10-16. Committed by the user as `f045c38`.
 See [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
 
 - [x] Default-off saved toggle and explicit Try vibration control in Settings.
@@ -17,7 +33,7 @@ See [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
 - [x] All 516 tests (16 new), eight Chrome UI checks and clean analysis.
 - [x] Final Android/web builds and diff review; see VALIDATION.md.
 - [ ] Physical haptic/system-setting and TalkBack checks in ACTION_FEEDBACK.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the milestone as `f045c38`.
 
 ## Text size and high contrast: implemented and committed
 
@@ -481,7 +497,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
       individual receipts, offline viewing and backups; hardware checks pending.
 - [x] Group files: signed upload/relay, progress/cancel, individual receipts,
       encrypted history/backups and confirmed offline export; hardware checks pending.
-- [ ] Private local contact nicknames independent of advertised display names.
+- [x] Private local contact nicknames independent of advertised display names.
+      Physical checks pending; see CONTACT_NICKNAMES.md.
 
 ## Later refinements discussed
 
@@ -512,8 +529,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 11. Starred messages (committed).
 12. QR scanning for session verification (committed).
 13. Accessibility: adjustable text size and high contrast (committed); optional
-    vibration feedback (current).
-14. Private local contact nicknames can follow.
+    vibration feedback (committed).
+14. Private local contact nicknames (current).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

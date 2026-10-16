@@ -339,7 +339,7 @@ class _BackupScreenState extends State<BackupScreen>
               ),
               const SizedBox(height: 8),
               const Text(
-                'Existing chat names, pin/archive choices and read/delivery state are kept. '
+                'Existing chat names, private nicknames (including removed nicknames), pin/archive choices and read/delivery state are kept. '
                 'New chats use the backup choices. Imported stars are added; an old backup can restore a star you removed. Counts are checked again when importing.',
               ),
               CheckboxListTile(

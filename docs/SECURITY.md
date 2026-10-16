@@ -245,6 +245,14 @@ draft writes are invalidated without dropping other peers' edits. This deletes
 local records, not the other phone's history or forensic copies. Reconnecting
 and exchanging new messages can create a new conversation with that identity.
 
+Private contact nicknames use a nullable encrypted peer column in schema 14,
+with the existing history key and domain `["LocalChat/contact-nickname/1", peerId]`.
+There is no plaintext nickname search index. Peer IDs and advertised names remain
+ordinary metadata. Nicknames affect local labels only; verification and outgoing
+reply names retain the actual peer/session names. V11 password-encrypted archives
+include optional nicknames; existing destination choices win on merge. See
+[CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
+
 Android cloud backup and device transfer are excluded to avoid moving a database without its secure-storage keys. Uninstalling loses identity and chat history. Clearing history deletes database records, not a guaranteed forensic wipe of SQLite journals or flash storage. A device lock and OS security are still required.
 
 ## Implementation boundaries

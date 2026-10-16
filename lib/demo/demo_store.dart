@@ -1,3 +1,4 @@
+import '../core/contact_nickname.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
@@ -170,7 +171,8 @@ class DemoStore extends LocalStore {
           .map(
             (p) => <String, Object?>{
               'id': p.id,
-              'name': p.name,
+              'name': p.originalName,
+              if (p.nickname != null) 'nickname': p.nickname,
               'updated': p.updated,
               'pinned': p.pinned,
               'archived': p.archived,
@@ -258,6 +260,7 @@ class DemoStore extends LocalStore {
         p['id'] as String,
         p['name'] as String,
         p['updated'] as int,
+        nickname: p['nickname'] as String?,
         pinned: p['pinned'] as bool,
         archived: p['archived'] as bool,
       );
@@ -296,8 +299,9 @@ class DemoStore extends LocalStore {
       if (activity > p.updated) {
         _people[p.id] = Conversation(
           p.id,
-          p.name,
+          p.originalName,
           activity,
+          nickname: p.nickname,
           pinned: p.pinned,
           archived: p.archived,
         );
@@ -387,6 +391,7 @@ class DemoStore extends LocalStore {
       id,
       name,
       _people[id]?.updated ?? DateTime.now().millisecondsSinceEpoch,
+      nickname: _people[id]?.nickname,
       pinned: _people[id]?.pinned ?? false,
       archived: _people[id]?.archived ?? false,
     );
@@ -402,8 +407,9 @@ class DemoStore extends LocalStore {
       result.add(
         Conversation(
           peer.id,
-          peer.name,
+          peer.originalName,
           peer.updated,
+          nickname: peer.nickname,
           latestMessage: history.isEmpty ? null : history.last,
           unreadCount: _unread.where((key) => key.$1 == peer.id).length,
           pinned: peer.pinned,
@@ -452,8 +458,9 @@ class DemoStore extends LocalStore {
     if (peer != null) {
       _people[peer.id] = Conversation(
         peer.id,
-        peer.name,
+        peer.originalName,
         DateTime.now().millisecondsSinceEpoch,
+        nickname: peer.nickname,
         pinned: peer.pinned,
         archived: peer.archived,
       );
@@ -546,7 +553,11 @@ class DemoStore extends LocalStore {
     }
     final people = await conversations();
     final names = people
-        .where((p) => p.name.toLowerCase().contains(needle))
+        .where(
+          (p) =>
+              p.name.toLowerCase().contains(needle) ||
+              p.originalName.toLowerCase().contains(needle),
+        )
         .toList();
     final hits = <MessageSearchHit>[];
     var scanned = 0;
@@ -574,13 +585,35 @@ class DemoStore extends LocalStore {
   }
 
   @override
+  Future<bool> setNickname(
+    String peer,
+    String? nickname, {
+    bool Function()? isCurrent,
+  }) async {
+    final value = normalizeContactNickname(nickname);
+    if (isCurrent?.call() == false) return false;
+    final old = _people[peer];
+    if (old == null) return false;
+    _people[peer] = Conversation(
+      old.id,
+      old.originalName,
+      old.updated,
+      nickname: value,
+      pinned: old.pinned,
+      archived: old.archived,
+    );
+    return true;
+  }
+
+  @override
   Future<bool> setPinned(String peer, bool pinned) async {
     final old = _people[peer];
     if (old == null) return false;
     _people[peer] = Conversation(
       peer,
-      old.name,
+      old.originalName,
       old.updated,
+      nickname: old.nickname,
       pinned: pinned,
       archived: old.archived,
     );
@@ -593,8 +626,9 @@ class DemoStore extends LocalStore {
     if (old == null) return false;
     _people[peer] = Conversation(
       peer,
-      old.name,
+      old.originalName,
       old.updated,
+      nickname: old.nickname,
       pinned: old.pinned,
       archived: archived,
     );

@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 import 'models.dart';
+import 'contact_nickname.dart';
 import 'chat_backup.dart';
 import 'group_models.dart';
 import 'chat_image.dart';
@@ -45,7 +46,7 @@ class LocalStore {
     name = await _vault.read(key: 'profile_name') ?? name;
     _database = await openDatabase(
       path.join(await getDatabasesPath(), 'localchat.db'),
-      version: 13,
+      version: 14,
       onCreate: (db, version) async {
         await db.execute(
           'CREATE TABLE peers (id TEXT PRIMARY KEY, name TEXT NOT NULL, updated INTEGER NOT NULL)',
@@ -68,6 +69,7 @@ class LocalStore {
         await _createFiles(db);
         await _createReplyDrafts(db);
         await _createStars(db);
+        await _addNicknames(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -92,6 +94,7 @@ class LocalStore {
         if (oldVersion < 11) await _addGroupManagement(db);
         if (oldVersion < 12) await _createReplyDrafts(db);
         if (oldVersion < 13) await _createStars(db);
+        if (oldVersion < 14) await _addNicknames(db);
       },
     );
     await _recoverIdentity();
@@ -185,23 +188,25 @@ class LocalStore {
       if (matches.isEmpty) rows.add(draft);
       draft['reply'] = (await _decodeDraftReply(row)).toJson();
     }
+    final peerResult = <Map<String, Object?>>[];
+    for (final p in peers) {
+      final nickname = await _decodeNickname(p['id'] as String, p['nickname']);
+      peerResult.add({
+        'id': p['id'],
+        'name': p['name'],
+        'updated': p['updated'],
+        'pinned': p['pinned'] == 1,
+        'archived': p['archived'] == 1,
+        if (nickname != null) 'nickname': nickname,
+      });
+    }
     return BackupData(
       seed: seed,
       owner: owner,
       name: name,
       created: _now().millisecondsSinceEpoch,
       demo: false,
-      peers: peers
-          .map(
-            (p) => <String, Object?>{
-              'id': p['id'],
-              'name': p['name'],
-              'updated': p['updated'],
-              'pinned': p['pinned'] == 1,
-              'archived': p['archived'] == 1,
-            },
-          )
-          .toList(),
+      peers: peerResult,
       messages: result,
       drafts: draftResult,
       groupDrafts: groupDraftResult,
@@ -355,6 +360,10 @@ class LocalStore {
             'updated': p['updated'],
             'pinned': p['pinned'] == true ? 1 : 0,
             'archived': p['archived'] == true ? 1 : 0,
+            'nickname': await _encodeNickname(
+              p['id'] as String,
+              p['nickname'] as String?,
+            ),
           });
         }
         final peerActivity = {
@@ -924,6 +933,56 @@ class LocalStore {
     );
   }
 
+  static Future<void> _addNicknames(Database db) async {
+    if (!(await db.rawQuery(
+      'PRAGMA table_info(peers)',
+    )).any((r) => r['name'] == 'nickname')) {
+      await db.execute('ALTER TABLE peers ADD COLUMN nickname TEXT');
+    }
+  }
+
+  Future<String?> _encodeNickname(String peer, String? value) async {
+    final text = normalizeContactNickname(value);
+    if (text == null) return null;
+    final box = await _cipher.encrypt(
+      utf8.encode(text),
+      secretKey: _historyKey,
+      aad: utf8.encode(jsonEncode(['LocalChat/contact-nickname/1', peer])),
+    );
+    return base64Encode([...box.nonce, ...box.mac.bytes, ...box.cipherText]);
+  }
+
+  Future<String?> _decodeNickname(String peer, Object? value) async {
+    if (value == null) return null;
+    final bytes = base64Decode(value as String);
+    final clear = await _cipher.decrypt(
+      SecretBox(
+        bytes.sublist(40),
+        nonce: bytes.sublist(0, 24),
+        mac: Mac(bytes.sublist(24, 40)),
+      ),
+      secretKey: _historyKey,
+      aad: utf8.encode(jsonEncode(['LocalChat/contact-nickname/1', peer])),
+    );
+    return normalizeContactNickname(utf8.decode(clear));
+  }
+
+  Future<bool> setNickname(
+    String peer,
+    String? nickname, {
+    bool Function()? isCurrent,
+  }) async {
+    final body = await _encodeNickname(peer, nickname);
+    if (isCurrent?.call() == false) return false;
+    return await _database.update(
+          'peers',
+          {'nickname': body},
+          where: 'id = ?',
+          whereArgs: [peer],
+        ) ==
+        1;
+  }
+
   Future<bool> setPinned(String peer, bool pinned) async =>
       await _database.update(
         'peers',
@@ -1025,7 +1084,7 @@ class LocalStore {
 
   Future<List<Conversation>> conversations() async {
     final rows = await _database.rawQuery('''
-      SELECT p.id AS peer_id, p.name, p.updated, p.pinned, p.archived,
+      SELECT p.id AS peer_id, p.name, p.updated, p.pinned, p.archived, p.nickname,
              m.id, m.peer, m.body, m.timestamp, m.outgoing, m.status, m.kind,
              (SELECT COUNT(*) FROM messages u
               WHERE u.peer = p.id AND u.outgoing = 0 AND u.is_read = 0) AS unread_count,
@@ -1043,6 +1102,10 @@ class LocalStore {
           row['peer_id'] as String,
           row['name'] as String,
           row['updated'] as int,
+          nickname: await _decodeNickname(
+            row['peer_id'] as String,
+            row['nickname'],
+          ),
           latestMessage: row['id'] == null ? null : await _decodeMessage(row),
           unreadCount: row['unread_count'] as int,
           pinned: row['pinned'] == 1,
@@ -1324,18 +1387,22 @@ class LocalStore {
       'peers',
       orderBy: 'updated DESC, id ASC',
     );
-    final names = people
-        .where((p) => (p['name'] as String).toLowerCase().contains(needle))
-        .map(
-          (p) => Conversation(
-            p['id'] as String,
-            p['name'] as String,
-            p['updated'] as int,
-            pinned: p['pinned'] == 1,
-            archived: p['archived'] == 1,
-          ),
-        )
-        .toList();
+    final names = <Conversation>[];
+    for (final p in people) {
+      if (isCancelled?.call() == true) return const LocalSearchResults();
+      final peer = Conversation(
+        p['id'] as String,
+        p['name'] as String,
+        p['updated'] as int,
+        pinned: p['pinned'] == 1,
+        archived: p['archived'] == 1,
+        nickname: await _decodeNickname(p['id'] as String, p['nickname']),
+      );
+      if (peer.name.toLowerCase().contains(needle) ||
+          peer.originalName.toLowerCase().contains(needle)) {
+        names.add(peer);
+      }
+    }
     final hits = <MessageSearchHit>[];
     int? before;
     while (true) {
@@ -1343,7 +1410,7 @@ class LocalStore {
       // Scan ciphertext in small batches. No plaintext index or duplicate body.
       final rows = await _database.rawQuery('''
         SELECT m.rowid AS search_rowid, m.*, p.name AS peer_name, p.updated AS peer_updated,
-               p.pinned AS peer_pinned, p.archived AS peer_archived
+               p.pinned AS peer_pinned, p.archived AS peer_archived, p.nickname AS peer_nickname
         FROM messages m JOIN peers p ON p.id = m.peer
         ${before == null ? '' : 'WHERE m.rowid < ?'}
         ORDER BY m.rowid DESC LIMIT 100
@@ -1372,6 +1439,10 @@ class LocalStore {
               row['peer_updated'] as int,
               pinned: row['peer_pinned'] == 1,
               archived: row['peer_archived'] == 1,
+              nickname: await _decodeNickname(
+                message.peerId,
+                row['peer_nickname'],
+              ),
             ),
             message,
           ),

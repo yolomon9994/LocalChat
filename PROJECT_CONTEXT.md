@@ -35,9 +35,37 @@ Replies to text messages were committed by the user as `4dae7fe`.
 Starred messages were committed by the user as `04f5682`.
 QR verification was committed by the user as `d84c754`.
 Text size and high contrast were committed by the user as `09533a1`.
-The current milestone is optional vibration feedback.
+Optional vibration feedback was committed by the user as `f045c38`.
+The current milestone is private contact nicknames.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
+
+## Private contact nicknames - implemented locally, 2026-10-16
+
+Baseline: `f045c38`; clean working tree at startup. User handles Git.
+See docs/CONTACT_NICKNAMES.md and docs/VALIDATION.md.
+
+- Set/Edit/Remove nickname in saved direct chat options (Chats, archive, toolbar).
+  Unicode/single-line, trim and 128 UTF-8 byte bound; original phone name visible.
+  Generic errors preserve input for retry; large-text scrollable dialog.
+- Conversation.originalName holds the advertised name, nickname is separate,
+  name getter resolves the local label. selectedName stays original for replies;
+  selectedDisplayName is UI-only. No nicknames sent to peers or used for trust.
+- Labels appear in chats/titles/search/stars; both original and private names are
+  searchable. Edits refresh historyRevision but preserve drafts/unread/activity,
+  organization, outbox and live sessions. Group author names are unchanged.
+- SQLite 14 nullable peers.nickname encrypts with existing history key and
+  peer-bound nickname AAD. Idempotent migration, restart, deletion and rollback.
+  V11 backups validate optional peer nickname; new contacts inherit, existing
+  destination choices (including absence) win. Retains v1-v10 imports and existing
+  envelope/KDF/identity constraints. Browser uses temporary in-tab DemoStore.
+- Editor dismisses/clears on lock/background; controller/store check privacy
+  revision and route before writes, including after encryption. Submitted database
+  writes can finish. All 537 tests, seven Chrome UI checks and clean analysis
+  pass. Final Android APK/web builds and diff review pass; consult VALIDATION.md.
+  Physical restart, peer privacy, backup transfer and TalkBack checks remain pending.
+- Changes remain saved locally for user review and Git. Do not start another
+  milestone without user direction.
 
 ## Action-feedback milestone - implemented locally, 2026-10-16
 
@@ -64,8 +92,8 @@ See docs/ACTION_FEEDBACK.md and docs/VALIDATION.md.
   All 516 tests and eight Chrome UI checks pass; analysis is clean. Final Android
   APK/web builds and review pass; see VALIDATION.md. Actual vibration/OS settings and TalkBack
   remain pending. SQLite 13, backups v10, appearance v2 and dependencies unchanged.
-- All work is saved locally, unstaged/uncommitted. Private local contact nicknames
-  can be considered next; do not implement another milestone without user direction.
+- Committed by the user as `f045c38`. Private contact nicknames are now the
+  current milestone above.
 
 ## Readability milestone - implemented, 2026-10-15
 
@@ -956,7 +984,8 @@ and battery checks remain pending.
   XChaCha20-Poly1305 (`secure_session.dart`). Both phones must compare and
   explicitly confirm the complete security code on each connection.
 - Encrypted message bodies in SQLite, identity/history keys in
-  flutter_secure_storage (`local_store.dart`). Metadata remains unencrypted.
+  flutter_secure_storage (`local_store.dart`). Ordinary transport metadata remains
+  unencrypted; private contact nicknames use encrypted schema-14 metadata.
 - Material 3 nearby devices, chat, settings, acknowledgements and saved history,
   coordinated by a serialized ChangeNotifier controller (`chat_controller.dart`).
 - Both apps must remain open for transmission. Offline queues wait for a freshly

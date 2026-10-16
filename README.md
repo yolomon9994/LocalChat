@@ -48,6 +48,9 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
   shortcuts; manual Reconnect to a device still listed, with fresh verification.
 - Latest-message previews, activity timestamps, persistent unread badges and
   recent-message ordering in Chats. Opening a visible conversation clears its unread count.
+- Private contact nicknames in saved direct chat options, conversation titles,
+  search and starred-message lists, with encrypted local storage and backups.
+  Original phone names remain separate; see [nickname controls/testing](docs/CONTACT_NICKNAMES.md).
 - Offline name/message search from the Chats toolbar; tap a message result to
   open its conversation at the highlighted message.
 - Star saved text, replies, images and files in direct/group chats. Browse Starred

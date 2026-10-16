@@ -34,8 +34,9 @@ class ChatMessage {
 class Conversation {
   const Conversation(
     this.id,
-    this.name,
+    this.originalName,
     this.updated, {
+    this.nickname,
     this.latestMessage,
     this.unreadCount = 0,
     this.pinned = false,
@@ -43,7 +44,9 @@ class Conversation {
     this.queuedCount = 0,
   });
   final String id;
-  final String name;
+  final String originalName;
+  final String? nickname;
+  String get name => nickname ?? originalName;
   final int updated;
   final ChatMessage? latestMessage;
   final int unreadCount;

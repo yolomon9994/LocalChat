@@ -113,3 +113,9 @@ Never include secret keys or private conversations in diagnostic logs. The nativ
 Run the Android/browser/restart/import/privacy checklist in
 [STARRED_MESSAGES.md](STARRED_MESSAGES.md). Automated results are in VALIDATION.md;
 physical-device and TalkBack checks remain pending.
+
+## Private contact nicknames
+
+Follow [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md) for restart, original-name
+changes, search/stars, private reply metadata, encrypted transfer, privacy and
+large-text/TalkBack checks. Automated fakes do not establish phone behavior.

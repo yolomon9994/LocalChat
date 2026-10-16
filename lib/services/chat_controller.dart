@@ -520,6 +520,13 @@ class ChatController extends ChangeNotifier {
   List<Conversation> conversations = [];
   List<ChatMessage> messages = [];
   String? selectedPeer;
+  String get selectedDisplayName {
+    for (final p in conversations) {
+      if (p.id == selectedPeer) return p.name;
+    }
+    return selectedName;
+  }
+
   String selectedName = '';
   int historyRevision = 0;
   List<StarredMessage> starred = const [];
@@ -1758,7 +1765,7 @@ class ChatController extends ChangeNotifier {
         _visibleChat = null;
       }
       selectedPeer = peer.id;
-      selectedName = peer.name;
+      selectedName = peer.originalName;
       messages = history;
       conversations = summaries;
       if (_canReadSelected) {
@@ -1826,6 +1833,51 @@ class ChatController extends ChangeNotifier {
     selectedName = connectedPeer == null ? '' : _session!.peerName!;
     notifyListeners();
   });
+
+  Future<bool> setNickname(
+    String peer,
+    String? nickname, {
+    bool Function()? isCurrent,
+  }) async {
+    final revision = interactionRevision;
+    var success = false;
+    await _run(() async {
+      if (_disposed ||
+          !initialized ||
+          !appAccessible ||
+          !appForeground ||
+          revision != interactionRevision ||
+          isCurrent?.call() == false) {
+        return;
+      }
+      error = null;
+      try {
+        success = await store.setNickname(
+          peer,
+          nickname,
+          isCurrent: () =>
+              !_disposed &&
+              appAccessible &&
+              appForeground &&
+              revision == interactionRevision &&
+              isCurrent?.call() != false,
+        );
+        if (_disposed) return;
+        if (!success &&
+            (revision != interactionRevision || isCurrent?.call() == false)) {
+          return;
+        }
+        if (!success) throw StateError('Missing contact');
+        conversations = await store.conversations();
+        historyRevision++;
+      } catch (_) {
+        success = false;
+        error = 'Could not save the nickname. Please try again.';
+      }
+      if (!_disposed) notifyListeners();
+    });
+    return success;
+  }
 
   Future<bool> setPinned(String peer, bool pinned) =>
       _manageConversation(() => store.setPinned(peer, pinned));

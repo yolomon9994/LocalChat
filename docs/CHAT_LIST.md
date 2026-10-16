@@ -1,5 +1,9 @@
 # Chats list testing
 
+Saved direct chats can show a private nickname. Set/edit/remove it through Chat
+options in Chats, Archived chats or the conversation toolbar. Nicknames preserve
+activity order and unread state; see [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
+
 Search chats includes saved group names/messages and archived groups. Open a
 message at its highlighted bubble, with drafts and archive choices preserved;
 see [GROUP_SEARCH.md](GROUP_SEARCH.md).

@@ -51,19 +51,26 @@ See [GROUP_FILES.md](GROUP_FILES.md).
 Archives with nonempty group drafts use payload **v7**, including validated
 `groupDrafts` rows (`group`, `text`). Existing destination drafts win, missing
 drafts import even without new messages, and conflicting group hosts cannot
-receive each other's drafts. Current builds import v1-v10; older builds reject v7.
+receive each other's drafts. Current builds import v1-v11; older builds reject v7.
 Both history-only and empty-phone identity imports support group drafts. The
 same encrypted envelope/KDF and 20 MiB total limit apply. See [GROUP_DRAFTS.md](GROUP_DRAFTS.md).
 
 Archives with pinned or archived groups select payload **v8**. Group choices
 are validated booleans; older archives default missing choices to false. Existing
 destination choices always win, while new groups inherit the archive choices.
-Current builds import v1-v10. Mixed direct/group attachments and drafts are
+Current builds import v1-v11. Mixed direct/group attachments and drafts are
 supported, with the same envelope/KDF and total limits. Older builds reject v8.
 See [GROUP_MANAGEMENT.md](GROUP_MANAGEMENT.md).
 
 Export does not delete or change source history. Failed draft saves/loads must
 be resolved before export so the backup does not silently omit unsaved edits.
+
+Archives with private contact nicknames select payload **v11**. The optional
+peer nickname is validated and re-encrypted locally. New contacts inherit the
+archive label; existing contacts keep their destination nickname, including no
+nickname. Older archives remain supported; older app builds reject v11.
+The encrypted envelope/KDF, identity rules and 20 MiB limit remain unchanged.
+See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
 
 ## Import and phone migration
 

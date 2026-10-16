@@ -1,3 +1,4 @@
+import 'contact_nickname_dialog.dart';
 import 'package:flutter/material.dart';
 import '../core/models.dart';
 import '../services/chat_controller.dart';
@@ -25,6 +26,12 @@ class _ConversationMenuState extends State<ConversationMenu> {
     try {
       bool success;
       switch (action) {
+        case 'nickname':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => ContactNicknameDialog(controller: c, peer: peer),
+          );
+          return;
         case 'pin':
           success = await c.setPinned(peer.id, !peer.pinned);
         case 'archive':
@@ -81,6 +88,12 @@ class _ConversationMenuState extends State<ConversationMenu> {
     enabled: !_busy,
     onSelected: _act,
     itemBuilder: (_) => [
+      PopupMenuItem(
+        value: 'nickname',
+        child: Text(
+          widget.peer.nickname == null ? 'Set nickname' : 'Edit nickname',
+        ),
+      ),
       PopupMenuItem(
         value: 'pin',
         child: Text(widget.peer.pinned ? 'Unpin chat' : 'Pin chat'),

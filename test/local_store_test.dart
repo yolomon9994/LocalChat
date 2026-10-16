@@ -64,6 +64,165 @@ void main() {
     updated: 1,
   );
 
+  test(
+    'Schema 13 migration keeps history, identity and metadata with no nickname',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      await (await openDatabase(
+        databasePath,
+      )).update('messages', {'status': 'received'});
+      await store.saveDraft('alice', 'keep');
+      await store.setPinned('alice', true);
+      final key = (await store.identity.extractPublicKey()).bytes;
+      final before = (await store.exportBackup()).toJson();
+      await store.close();
+      final old = await openDatabase(databasePath);
+      await old.execute('ALTER TABLE peers DROP COLUMN nickname');
+      await old.setVersion(13);
+      await old.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      expect(await (await openDatabase(databasePath)).getVersion(), 14);
+      expect((await store.exportBackup()).toJson(), before);
+      expect((await store.identity.extractPublicKey()).bytes, key);
+      expect((await store.conversations()).single.nickname, isNull);
+    },
+  );
+
+  test(
+    'Nicknames encrypt, survive restart/name updates, search and leave chat state intact',
+    () async {
+      await store.saveMessage(message(outgoing: false));
+      await store.saveDraft('alice', 'keep draft');
+      await store.setArchived('alice', true);
+      await store.setPinned('alice', true);
+      final before = (await store.conversations()).single;
+      expect(await store.setNickname('alice', '  Friend سلام 👋  '), isTrue);
+      final db = await openDatabase(databasePath);
+      final encrypted = (await db.query('peers')).single['nickname'] as String;
+      expect(encrypted, isNot(contains('Friend')));
+      expect(
+        (await store.search('friend')).conversations.single.name,
+        'Friend سلام 👋',
+      );
+      expect(
+        (await store.search('alice')).conversations.single.originalName,
+        'Alice',
+      );
+      expect(
+        (await store.search('Private')).messages.single.conversation.name,
+        'Friend سلام 👋',
+      );
+      await store.savePeer('alice', 'New phone name');
+      await store.close();
+      store = LocalStore(now: () => clock);
+      await store.open();
+      final after = (await store.conversations()).single;
+      expect(after.name, 'Friend سلام 👋');
+      expect(after.originalName, 'New phone name');
+      expect(after.updated, before.updated);
+      expect(after.unreadCount, before.unreadCount);
+      expect(after.pinned, isTrue);
+      expect(after.archived, isTrue);
+      expect(await store.draft('alice'), 'keep draft');
+      expect(await store.setNickname('missing', 'Test'), isFalse);
+      expect(await store.setNickname('alice', '   '), isTrue);
+      expect((await store.conversations()).single.name, 'New phone name');
+    },
+  );
+
+  test(
+    'Nickname ciphertext is bound to peer and authentication rejects tampering',
+    () async {
+      await store.savePeer('bob', 'Bob');
+      await store.setNickname('alice', 'Secret nickname');
+      final db = await openDatabase(databasePath);
+      final body = (await db.query(
+        'peers',
+        where: 'id = ?',
+        whereArgs: ['alice'],
+      )).single['nickname'];
+      await db.update(
+        'peers',
+        {'nickname': body},
+        where: 'id = ?',
+        whereArgs: ['bob'],
+      );
+      await expectLater(
+        store.conversations(),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+      await db.update(
+        'peers',
+        {'nickname': null},
+        where: 'id = ?',
+        whereArgs: ['bob'],
+      );
+      final bytes = base64Decode(body as String);
+      bytes[40] ^= 1;
+      await db.update(
+        'peers',
+        {'nickname': base64Encode(bytes)},
+        where: 'id = ?',
+        whereArgs: ['alice'],
+      );
+      await expectLater(
+        store.exportBackup(),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+    },
+  );
+
+  test(
+    'Nickname save rollback and privacy guard preserve old encrypted value',
+    () async {
+      await store.setNickname('alice', 'Original');
+      expect(
+        await store.setNickname('alice', 'Discard', isCurrent: () => false),
+        isFalse,
+      );
+      final db = await openDatabase(databasePath);
+      await db.execute(
+        "CREATE TRIGGER fail_nickname BEFORE UPDATE OF nickname ON peers BEGIN SELECT RAISE(ABORT, 'private failure'); END",
+      );
+      await expectLater(
+        store.setNickname('alice', 'Replacement'),
+        throwsA(anything),
+      );
+      expect((await store.conversations()).single.name, 'Original');
+      await db.execute('DROP TRIGGER fail_nickname');
+      await store.deleteConversation('alice');
+      await store.savePeer('alice', 'Alice');
+      expect((await store.conversations()).single.nickname, isNull);
+    },
+  );
+
+  test(
+    'Native backup restores encrypted nicknames, preserves destination choices and identity rules',
+    () async {
+      await store.setNickname('alice', 'Imported');
+      final data = await store.exportBackup();
+      expect(data.toJson()['version'], 11);
+      await store.setNickname('alice', null);
+      await store.importBackup(data);
+      expect((await store.conversations()).single.nickname, isNull);
+      await store.clearHistory();
+      final key = (await store.identity.extractPublicKey()).bytes;
+      await store.importBackup(data);
+      expect((await store.conversations()).single.name, 'Imported');
+      expect((await store.identity.extractPublicKey()).bytes, key);
+      final db = await openDatabase(databasePath);
+      expect(
+        (await db.query('peers')).single['nickname'],
+        isNot(contains('Imported')),
+      );
+      await expectLater(
+        store.importBackup(data, moveIdentity: true),
+        throwsFormatException,
+      );
+    },
+  );
+
   const reply = MessageReply(
     id: 'original',
     outgoing: false,
@@ -95,7 +254,7 @@ void main() {
       store = LocalStore(now: () => clock);
       await store.open();
       final db = await openDatabase(databasePath);
-      expect(await db.getVersion(), 13);
+      expect(await db.getVersion(), 14);
       expect((await db.query('messages')).single['body'], body);
       expect(await store.draft('alice'), 'Keep draft');
       expect(await store.starredMessages(), isEmpty);
@@ -295,7 +454,7 @@ void main() {
       store = LocalStore(now: () => clock);
       await store.open();
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 13);
+      expect(await upgraded.getVersion(), 14);
       expect((await upgraded.query('messages')).single['body'], body);
       expect(await store.draft('alice'), 'Old draft');
       expect(await store.draftReply('alice'), isNull);
@@ -534,7 +693,7 @@ void main() {
       expect(await store.groupDraft(group.id), 'Secret unsearched draft');
       final afterDb = await openDatabase(databasePath);
       expect((await afterDb.query('group_history')).single, before);
-      expect(await afterDb.getVersion(), 13);
+      expect(await afterDb.getVersion(), 14);
       expect(
         await afterDb.query(
           'sqlite_master',
@@ -573,7 +732,7 @@ void main() {
       store = LocalStore();
       await store.open();
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 13);
+      expect(await upgraded.getVersion(), 14);
       expect((await upgraded.query('group_history')).single['body'], body);
       final restored = (await store.groupHistories()).single;
       expect(restored.pinned || restored.archived, isFalse);
@@ -732,7 +891,7 @@ void main() {
       await old.close();
       store = LocalStore();
       await store.open();
-      expect(await (await openDatabase(databasePath)).getVersion(), 13);
+      expect(await (await openDatabase(databasePath)).getVersion(), 14);
       expect((await store.messages('alice')).single.text, message().text);
       expect(await store.draft('alice'), 'Direct draft');
       expect((await store.groupHistories()).single.id, group.id);
@@ -921,7 +1080,7 @@ void main() {
       await store.open();
       expect((await store.messages('alice')).single.text, message().text);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 13);
+      expect(await upgraded.getVersion(), 14);
       expect(await upgraded.query('images'), isEmpty);
     },
   );
@@ -1005,7 +1164,7 @@ void main() {
       );
       expect((await store.exportBackup()).seed, seed);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 13);
+      expect(await upgraded.getVersion(), 14);
       expect(await upgraded.query('files'), isEmpty);
     },
   );
@@ -1094,7 +1253,7 @@ void main() {
         utf8.decode(base64Decode(ciphertext), allowMalformed: true),
         isNot(contains(m.image!.digest)),
       );
-      expect(await db.getVersion(), 13);
+      expect(await db.getVersion(), 14);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -1154,7 +1313,7 @@ void main() {
       final raw = utf8.decode(base64Decode(ciphertext), allowMalformed: true);
       expect(raw, isNot(contains(m.file!.name)));
       expect(raw, isNot(contains(m.file!.digest)));
-      expect(await db.getVersion(), 13);
+      expect(await db.getVersion(), 14);
       await store.close();
       store = LocalStore();
       await store.open();
@@ -1553,7 +1712,8 @@ void main() {
       final oldPeer =
           Map<String, Object?>.from((await db.query('peers')).single)
             ..remove('pinned')
-            ..remove('archived');
+            ..remove('archived')
+            ..remove('nickname');
       final key = (await store.identity.extractPublicKey()).bytes;
       await store.close();
       await deleteDatabase(databasePath);
@@ -1584,7 +1744,7 @@ void main() {
       );
       expect((await store.conversations()).single.unreadCount, 0);
       final upgraded = await openDatabase(databasePath);
-      expect(await upgraded.getVersion(), 13);
+      expect(await upgraded.getVersion(), 14);
       await store.saveMessage(
         ChatMessage(
           id: 'after-upgrade',
@@ -1995,7 +2155,7 @@ void main() {
       expect(p.unreadCount, 1);
       expect(await store.draft('alice'), 'Version four draft');
       expect((await store.exportBackup()).seed, seed);
-      expect(await (await openDatabase(databasePath)).getVersion(), 13);
+      expect(await (await openDatabase(databasePath)).getVersion(), 14);
     },
   );
   test(
@@ -2074,7 +2234,7 @@ void main() {
       expect(peer.pinned && peer.archived, isTrue);
       expect(peer.queuedCount, 1);
       expect((await store.exportBackup()).seed, identity);
-      expect(await (await openDatabase(databasePath)).getVersion(), 13);
+      expect(await (await openDatabase(databasePath)).getVersion(), 14);
     },
   );
 

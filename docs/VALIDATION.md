@@ -1,9 +1,61 @@
 # Validation for v0.1.0
 
+## Private contact nicknames - validation 2026-10-16
+
+Baseline: `f045c38` (vibration feedback committed by the user). Changes are local;
+the user handles Git. See [CONTACT_NICKNAMES.md](CONTACT_NICKNAMES.md).
+
+- Twenty-one new checks: nine portable service/controller/backup, seven UI and
+  five SQLite cases. Coverage includes Unicode/byte/control validation, encrypted
+  persistence/AAD tampering, v13->v14 migration, restart, rollback/deletion,
+  original-name and nickname search, live labels, preserved drafts/organization,
+  v11 encrypted roundtrip/mixed group+star archives, identity/destination rules,
+  actual paired-session reply metadata, delayed privacy/route/disposal rejection,
+  failed-save retry and a 320 x 568 dialog at 2.34 text scaling.
+- New portable tests: `flutter test test/contact_nickname_test.dart
+  test/contact_nickname_screen_test.dart --concurrency=2 --timeout=2m
+  --reporter expanded`: **16 passed**, exit 0, 10s;
+  `.dart_tool/nicknames-portable-pass.log`.
+- `flutter analyze`: **no issues**, exit 0, 4.7s;
+  `.dart_tool/nicknames-analyze-final.log`.
+- Headless Chrome `flutter test test/contact_nickname_screen_test.dart --platform
+  chrome --timeout=2m --reporter expanded --verbose`: **7 passed**, exit 0, 13s
+  after startup; `.dart_tool/nicknames-chrome-final.log`. The existing cached
+  CanvasKit localhost helper supplies exact installed SDK assets for the Windows
+  test-server path issue; no app/SDK modifications or downloads.
+  `.dart_tool/nicknames-chrome-assets.log` records the cached assets.
+- Development fixture corrections: old-schema fixtures now remove the new column
+  and expect version 14; the migration snapshot uses a stable received status to
+  avoid existing startup recovery of sending messages. Windows shell piping was
+  corrected to preserve Unicode test literals. Widget saves drive both real and
+  fake clocks; offscreen menus scroll into view, dialogs inherit root text scale,
+  and delayed-save/star finders use actual queue ownership and UI labels. An
+  intermediate search refactor and group-star fixture compile error were fixed.
+  Failed development runs are not counted as passes.
+- Full `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **537 passed**, exit 0 (516 existing + 21 new), 6m02s;
+  `.dart_tool/nicknames-suite-final.log`. Artifact builds started after the suite.
+- `flutter build apk --debug --target-platform android-arm64 --split-per-abi`:
+  **passed**, explicit Flutter exit 0, Gradle task 29.3s;
+  `.dart_tool/nicknames-apk-final.log`.
+  Artifact: `build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk`.
+- `flutter build web --no-wasm-dry-run`: **passed**, explicit Flutter exit 0,
+  53.2s; `.dart_tool/nicknames-web-final.log`, artifact `build/web`. The existing
+  optional Cupertino font warning is unchanged; no font/package was added.
+- Final diff/whitespace, UTF-8, final newlines and local documentation links pass.
+  The index is empty. All changes are saved locally for the user to review and
+  commit; no Git staging, commit or push was performed.
+- Physical restart, keyboard, TalkBack, peer privacy and phone backup migration
+  checks remain pending; see CONTACT_NICKNAMES.md. Automated checks use fakes or
+  desktop SQLite, not physical phones.
+- Schema 14 adds only encrypted nickname metadata; archives containing nicknames
+  select v11 and retain older import support. No packages, native permissions,
+  wire protocol, trust rules, identity keys or archive envelope/KDF changes.
+
 ## Optional vibration feedback - validation 2026-10-16
 
-Baseline: `09533a1` (readability committed by the user). Changes are local,
-unstaged and uncommitted; the user handles Git. See [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
+Baseline: `09533a1` (readability committed by the user). The user subsequently
+committed vibration feedback as `f045c38`. The user handles Git. See [ACTION_FEEDBACK.md](ACTION_FEEDBACK.md).
 
 - Sixteen new cases: eight service/platform and eight UI. Service checks cover
   default-off persistence, malformed/unreadable records, failed/overlapping saves,
