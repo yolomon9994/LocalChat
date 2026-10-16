@@ -142,7 +142,9 @@ void main() {
     () async {
       tb.dropAcks = true;
       await a.sendFile(SelectedFile('notes.pdf', bytes));
-      await settle();
+      // Lock as soon as the receiver is waiting. A fixed drain delay can
+      // outlast the deliberately short transfer timeout on a busy test host.
+      await until(() => b.files.progress.isNotEmpty);
       expect(b.files.progress, isNotEmpty);
       a.setAppAccess(false);
       await until(() => a.files.progress.isEmpty && b.files.progress.isEmpty);

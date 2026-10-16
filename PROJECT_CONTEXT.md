@@ -38,13 +38,40 @@ Text size and high contrast were committed by the user as `09533a1`.
 Optional vibration feedback was committed by the user as `f045c38`.
 Private contact nicknames were committed by the user as `6e5afe8`.
 Configurable auto-lock timing was committed by the user as `f8c9cdc`.
-The current milestone is preview privacy controls.
+Preview privacy controls were committed by the user as `492dbb5`.
+The current milestone is clearer group delivery feedback.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Preview privacy - implemented locally, 2026-10-16
+## Group delivery feedback - implemented locally, 2026-10-17
 
-Baseline: `f8c9cdc`; clean worktree at startup. User handles Git.
+Baseline: `492dbb5`; clean worktree at startup. User handles Git.
+See docs/GROUP_DELIVERY.md and docs/VALIDATION.md.
+
+- Host link loss/removal and guest validated roster departure immediately mark
+  only that member's pending receipts unconfirmed. Confirmed recipients and
+  other pending text attempts survive; resolved attempts release timer slots.
+- GroupDeliveryDetails adds session-only reasons and remembered roster names.
+  Receipt values stay authoritative; late valid receipts clear explanations.
+  Restart uses generic uncertainty. Deletion prunes details; disposal clears them.
+  No SQLite-14, backup-v11, wire/capability, permission or package changes.
+- Offline group screens explain original-host reopening and guest fresh-code
+  verification. Open group finder only navigates; foreground/access/interaction,
+  route/history and running/busy checks reject stale callbacks. No automatic resend.
+- Failed status writes never block link cleanup or claim a saved transition.
+  Existing image/file cancellation preserves completed bytes/receipts, and new
+  members still receive future messages only. Detailed device behavior is pending.
+- Nineteen new tests: thirteen controller/transfer and six UI. Final focused run
+  passed 33 checks (19 new + 14 direct-file regressions); six Chrome UI checks
+  passed, final analysis is clean and final Android/web rebuilds passed. The
+  final full suite passed all 591 tests in 5m49s. See VALIDATION.md for commands,
+  results and fixture corrections. Physical three-phone checks remain pending.
+- User handles staging, committing and pushing. Do not start another milestone
+  without direction.
+
+## Preview privacy - implemented and committed, 2026-10-16 to 2026-10-17
+
+Baseline: `f8c9cdc`; subsequently committed by the user as `492dbb5`.
 See docs/PREVIEW_PRIVACY.md and docs/VALIDATION.md.
 
 - Independent PreviewPrivacy service stores strict {v:1, hidden:bool} in

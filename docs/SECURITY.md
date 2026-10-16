@@ -432,3 +432,15 @@ preferences are excluded from backups. Dart/native notification modes separately
 enforce hidden/sender/full choices, with redaction before setting changes and
 conservative in-session filtering after a failed restrictive save. See
 [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).
+
+## Group delivery explanations
+
+Per-recipient Received remains a persistence report, not a read receipt; guests
+trust the host's relayed confirmations. Observed departures resolve pending
+recipients without downgrading received confirmations. Local reason/name caches
+decorate uncertainty but are neither signed delivery evidence nor persisted or
+exported. A disconnect does not prove an intentional departure. Unconfirmed can
+still mean delivered; a manual resend creates a new message. Saved statuses,
+signatures, membership checks and fresh verification are unchanged. Recovery
+navigation rechecks privacy/route/interaction state and never joins or resends
+automatically. See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).

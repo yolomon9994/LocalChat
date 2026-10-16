@@ -718,7 +718,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
               ),
               for (final id in message.targets.where((id) => id != g.selfId))
                 Text(
-                  '${g.members.where((m) => m.id == id).isNotEmpty ? g.members.firstWhere((m) => m.id == id).name : id.substring(0, 8)}: ${message.receipts[id] ?? 'unconfirmed'}',
+                  '${g.delivery.name(widget.id, id)}: ${g.delivery.status(widget.id, message, id)}',
                   style: Theme.of(
                     context,
                   ).textTheme.labelSmall?.copyWith(color: foreground),
@@ -983,6 +983,55 @@ class _GroupChatScreenState extends State<GroupChatScreen> with RouteAware {
                         ? g.state
                         : 'Saved history • join the original host to continue',
                   ),
+                  if (history != null && !active) ...[
+                    if (g.delivery.ending(widget.id) case final reason?)
+                      Text('Session ended: ${reason.label}.'),
+                    Text(
+                      history.host == g.selfPublic
+                          ? 'Hosting has ended on this phone. Reopen this group and compare fresh codes with each member to continue.'
+                          : 'The group is offline on this phone. Ask the original host to reopen it, then find that host and compare fresh codes to continue.',
+                    ),
+                    const Text(
+                      'Saved messages and drafts remain available. Messages are not resent automatically.',
+                    ),
+                    if (history.host != g.selfPublic)
+                      TextButton(
+                        key: const ValueKey('group-delivery-find-host'),
+                        onPressed:
+                            c.canUseGroups &&
+                                !g.busy &&
+                                !g.running &&
+                                c.appAccessible &&
+                                c.appForeground
+                            ? () {
+                                if (!mounted ||
+                                    !c.appAccessible ||
+                                    !c.appForeground ||
+                                    c.interactionRevision != interaction ||
+                                    g.running ||
+                                    g.busy ||
+                                    !g.histories.any((h) => h.id == groupId) ||
+                                    ModalRoute.of(context)?.isCurrent != true) {
+                                  return;
+                                }
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => GroupHubScreen(
+                                      controller: c,
+                                      routeObserver: widget.routeObserver,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                        child: const Text('Open group finder'),
+                      ),
+                  ],
+                  if (history?.messages.any((m) => m.author == g.selfId) ??
+                      false)
+                    const Text(
+                      'Received means saved on that phone, not read. Unconfirmed can still mean the message arrived. Sending it again creates a new message and may duplicate it.',
+                    ),
                   if (g.error != null)
                     Text(
                       g.error!,

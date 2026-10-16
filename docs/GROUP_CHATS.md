@@ -59,9 +59,17 @@ author signatures do not prevent a malicious host admitting a lookalike identity
 Outgoing text is saved before transmission and shows individual received/pending/
 unconfirmed receipts for the recipients at send time. A receipt means that phone
 reported persistence, not that a person read it; guest receipts are reported through
-the host. After 30 seconds, disconnect or restart, outstanding attempts become
+the host. Departures observed by the host or validated roster resolve that member's
+pending receipts immediately; other pending text recipients keep their timers.
+After 30 seconds, session end or restart, outstanding attempts become
 unconfirmed. There is no automatic group retry or offline group outbox. Missing
 receipts can mean the message arrived: manually sending again creates a new ID.
+
+Delivery rows include local session explanations and retain observed departed
+member names. Saved offline chats explain reopening/rejoining with fresh codes
+and provide a guarded guest shortcut to the group finder. These details do not
+prove delivery and their explanations are not persisted; see
+[GROUP_DELIVERY.md](GROUP_DELIVERY.md) for behavior and physical checks.
 Identical signed IDs are deduplicated while receiver history is retained.
 
 ## Saved history, privacy and backups

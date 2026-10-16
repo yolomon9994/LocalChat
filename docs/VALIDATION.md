@@ -1,9 +1,88 @@
 # Validation for v0.1.0
 
+## Group delivery feedback - validation 2026-10-17
+
+Baseline: `492dbb5` (preview privacy committed by the user). All changes remain
+local for the user's Git workflow. See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).
+
+- Nineteen new checks: thirteen controller/transfer and six UI. Includes immediate
+  departures/removal, preserving other pending/received recipients, text slot
+  cleanup, host loss and fresh rejoining, restart and backup exclusion, original
+  delayed authenticated receipts, failed-save link cleanup, image/file departure
+  and host-loss partial delivery, access lost during local attachment acceptance,
+  no old history for newcomers, semantics, host/
+  guest guidance, finder navigation, stale callbacks, PIN privacy and 2.34 text
+  at 320 x 568.
+- Corrected focused `flutter test test/group_delivery_test.dart
+  test/group_delivery_screen_test.dart test/group_controller_test.dart
+  test/group_image_test.dart test/group_file_test.dart --concurrency=2
+  --timeout=2m --reporter expanded`: **66 passed**, exit 0, 1m01s;
+  `.dart_tool/group-delivery-focused-verified.log`. This includes 16 new checks
+  and 50 existing; one additional receipt-slot check was then added for the full run.
+- Development fixture correction: a simulated dropped ACK consumed its encrypted
+  frame number. Creating a second ACK correctly failed sequence validation. The
+  late-receipt test now delivers the original captured encrypted frame. The first
+  run (59 passed, one failed) is not counted as a complete pass.
+- Initial analysis found one unnecessary test import; removed. Final
+  `flutter analyze`: **no issues**, exit 0, 55.1s;
+  `.dart_tool/group-delivery-analyze-verified.log`.
+- Headless Chrome `flutter test test/group_delivery_screen_test.dart --platform
+  chrome --timeout=2m --reporter expanded --verbose`: **six UI tests passed**,
+  exit 0, 15s execution (171s invocation including browser setup);
+  `.dart_tool/group-delivery-chrome-verified.log`. The installed SDK's CanvasKit
+  assets were supplied to the isolated browser using the existing temporary
+  helper; `.dart_tool/group-delivery-chrome-verified-assets.log`. An earlier
+  run completed five cases and stalled at PIN hashing under the simulated test
+  clock. It was stopped and is not a complete pass. Moving that fixture's PIN
+  setup to `tester.runAsync` fixed the browser-specific stall. These UI checks
+  precede the final internal attachment-interruption label correction; the UI
+  and recovery callback behavior are unchanged by that correction.
+- `flutter build apk --debug`: **passed**, exit 0, 99.0s Gradle task;
+  `.dart_tool/group-delivery-apk.log`.
+- `flutter build web`: **passed**, exit 0, 162.4s compilation;
+  `.dart_tool/group-delivery-web.log`. Existing Wasm dry-run compatibility and
+  optional Cupertino font warnings remain; the JavaScript artifact built.
+- The first full suite reported an existing direct-file cancellation fixture
+  expecting partial transfer progress after a fixed drain wait, which can
+  outlast its deliberately short 400ms timeout on a busy host. The case passed
+  alone (exit 0, 1s; `.dart_tool/group-delivery-file-cancellation-recheck.log`).
+  Its fixture now waits for actual receiver progress before locking instead of
+  spending a fixed delay. This changes no production direct-file code. The
+  first full run finished with 588 passes and one failure, exit 1, 9m16s;
+  `.dart_tool/group-delivery-suite.log`. It is not counted as a complete pass.
+- Corrected direct-file regression: **all 14 passed**, exit 0, 9s;
+  `.dart_tool/group-delivery-file-regression.log`. A second full run was stopped
+  during final review after discovering that attachment access loss immediately
+  after local persistence used the timeout label. That branch now reports
+  interrupted sending, with two image/file acceptance cases. The stopped second
+  run is not counted as a pass. Final checks after that correction are recorded
+  below.
+  Dart formatting and `git diff --check` pass;
+  relative links in all eight touched documentation files resolve.
+- Final focused `flutter test test/group_delivery_test.dart
+  test/group_delivery_screen_test.dart test/file_transfers_test.dart
+  --concurrency=2 --timeout=2m --reporter expanded`: **33 passed**, exit 0, 28s
+  (19 new + 14 existing); `.dart_tool/group-delivery-final-focused.log`.
+- Final `flutter analyze`: **no issues**, exit 0, 8.3s;
+  `.dart_tool/group-delivery-analyze-complete.log`.
+- Final Android rebuild: **passed**, exit 0, 31.8s Gradle task;
+  `.dart_tool/group-delivery-apk-complete.log`.
+- Final web rebuild: **passed**, exit 0, 75.3s compilation;
+  `.dart_tool/group-delivery-web-complete.log` (same existing non-blocking warnings).
+- Final `flutter test --concurrency=2 --timeout=2m --reporter expanded`:
+  **all 591 passed**, exit 0, 5m49s (572 baseline + 19 new);
+  `.dart_tool/group-delivery-suite-complete.log`. This run started after the
+  artifact builds finished and includes the corrected cancellation fixture.
+- No schema, archive, signature, wire, capability, permission or dependency change.
+  Reason/name caches remain temporary and separate from saved receipt values.
+- Physical phone/radio interruptions, OS lifecycle, TalkBack and keyboard checks
+  remain pending. Test transports/browser simulation do not establish hardware
+  reliability.
+
 ## Preview privacy controls - validation 2026-10-16 to 2026-10-17
 
-Baseline: `f8c9cdc` (auto-lock timing committed by the user). All changes remain
-local for user review/Git. See [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).
+Baseline: `f8c9cdc` (auto-lock timing committed by the user). The user subsequently
+committed preview privacy as `492dbb5`. See [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).
 
 - Fifteen new checks: nine preference/controller/channel and six UI. Coverage
   includes default/persistence/malformed/error cases, serial saves/disposal,

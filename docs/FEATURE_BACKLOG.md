@@ -3,14 +3,29 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Preview privacy controls
+## Current milestone: Clearer group delivery feedback
 
-Implemented locally: 2026-10-16. Baseline `f8c9cdc`; user handles Git.
+Implemented locally: 2026-10-17. Baseline `492dbb5`; user handles Git.
+See [GROUP_DELIVERY.md](GROUP_DELIVERY.md).
+
+- [x] Resolve a departing/removed recipient's pending status immediately.
+- [x] Preserve confirmed receipts, other pending text attempts and saved content.
+- [x] Local session explanations and remembered recipient names; restart fallback.
+- [x] Offline original-host/guest recovery guidance and guarded finder shortcut.
+- [x] Text/image/file interruption, error, privacy and enlarged-text tests.
+- [x] Focused tests, six Chrome UI checks, clean analysis and Android/web builds.
+- [x] All 591 tests (19 new) pass; see VALIDATION.md.
+- [ ] Physical three-phone/TalkBack checklist in GROUP_DELIVERY.md.
+- [ ] User reviews, commits and pushes the milestone.
+
+## Preview privacy controls: implemented and committed
+
+Implemented locally: 2026-10-16. Committed by the user as `492dbb5`.
 See [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md).
 
 Resumed and automated validation completed on 2026-10-17. The Chrome fixture
 stall is fixed. Results and remaining device checks are recorded in
-[VALIDATION.md](VALIDATION.md). All changes remain local and uncommitted.
+[VALIDATION.md](VALIDATION.md). Subsequently committed by the user as `492dbb5`.
 
 - [x] Saved Hide chat-list previews toggle, shared with archived direct chats.
 - [x] Preserve names/counts/times/history/drafts; group rows retain summary-only text.
@@ -21,7 +36,7 @@ stall is fixed. Results and remaining device checks are recorded in
 - [x] Focused tests: 33 passed; analysis: no issues.
 - [x] All 572 tests (15 new), six Chrome UI checks and Android/web builds; see VALIDATION.md.
 - [ ] Physical notification/restart/TalkBack checklist in PREVIEW_PRIVACY.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed the preview privacy milestone as `492dbb5`.
 
 ## Configurable auto-lock timing: implemented and committed
 
@@ -548,7 +563,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
       Physical checks pending; see AUTO_LOCK_TIMING.md.
 - [x] Chat-list privacy and three notification preview modes.
       Physical checks pending; see PREVIEW_PRIVACY.md.
-- [ ] Group delivery behavior when members leave or the host disconnects.
+- [x] Clearer group delivery feedback for member departures and host loss.
+      All 591 tests pass; physical checks pending. See GROUP_DELIVERY.md.
 - [x] Backup format versioning, validation and explicit identity-migration flow.
 
 ## Proposed order after app lock
@@ -571,7 +587,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
     vibration feedback (committed).
 14. Private local contact nicknames (committed).
 15. Configurable auto-lock timing (committed).
-16. Preview privacy controls (current).
+16. Preview privacy controls (committed).
+17. Clearer group delivery feedback for departures and host loss (current).
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.

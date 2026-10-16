@@ -6,6 +6,7 @@ import '../core/local_store.dart';
 import '../core/secure_session.dart';
 import '../core/session_verification.dart';
 import 'group_transport.dart';
+import 'group_delivery.dart';
 import 'draft_controller.dart';
 import 'chat_notifications.dart';
 import 'background_connection.dart';
@@ -86,6 +87,7 @@ class GroupController extends ChangeNotifier {
   final links = <String, GroupLink>{};
   final _receiptTimers = <String, Timer>{};
   final _attempted = <String>{};
+  final delivery = GroupDeliveryDetails();
   List<GroupHistory> histories = [];
   int historyRevision = 0;
   int? transportGeneration;
@@ -165,6 +167,7 @@ class GroupController extends ChangeNotifier {
   });
   Future<void> _reload() async {
     histories = await store.groupHistories();
+    delivery.prune(histories);
     historyRevision++;
     if (active != null) {
       final matches = histories.where((g) => g.id == active!.id);
@@ -391,7 +394,7 @@ class GroupController extends ChangeNotifier {
   }
 
   Future<void> reject(String id) => _run(() async {
-    if (canAct()) await _drop(id);
+    if (canAct()) await _drop(id, reason: GroupDeliveryReason.memberRemoved);
     _notify();
   });
   Future<void> _send(GroupLink link, Map<String, dynamic> payload) async {
@@ -425,6 +428,8 @@ class GroupController extends ChangeNotifier {
 
   Future<void> _roster() async {
     if (!hosting || active == null) return;
+    delivery.remember(active!.id, members);
+    delivery.joined(active!.id);
     await images.membershipChanged();
     await files.membershipChanged();
     view++;
@@ -642,6 +647,15 @@ class GroupController extends ChangeNotifier {
                 host: p['host'] as String,
               )
             : old.first;
+        delivery.remember(id, members);
+        await _membersUnavailable(
+          members
+              .map((m) => m.id)
+              .toSet()
+              .difference(roster.map((m) => m.id).toSet()),
+        );
+        delivery.remember(id, roster);
+        delivery.joined(id);
         await images.membershipChanged();
         await files.membershipChanged();
         members = roster;
@@ -766,7 +780,10 @@ class GroupController extends ChangeNotifier {
         if (hosting || !link.admitted || p['key'] is! String) {
           throw const FormatException('Invalid rejection');
         }
-        await _uncertain(p['key'] as String);
+        await _uncertain(
+          p['key'] as String,
+          reason: GroupDeliveryReason.membershipChanged,
+        );
         error =
             'Membership changed before delivery. Check the member list and send again.';
       default:
@@ -961,11 +978,11 @@ class GroupController extends ChangeNotifier {
             });
           }
         } catch (_) {
-          await _uncertain(m.key);
+          await _uncertain(m.key, reason: GroupDeliveryReason.interrupted);
           error = 'Message saved; delivery is unconfirmed.';
         }
       } else {
-        await _uncertain(m.key);
+        await _uncertain(m.key, reason: GroupDeliveryReason.interrupted);
       }
       sent = true;
       _notify();
@@ -998,10 +1015,14 @@ class GroupController extends ChangeNotifier {
     files.receiptsChanged();
   }
 
-  Future<void> _uncertain(String key) async {
+  Future<void> _uncertain(
+    String key, {
+    GroupDeliveryReason reason = GroupDeliveryReason.timeout,
+  }) async {
     _receiptTimers.remove(key)?.cancel();
     if (active == null) return;
-    final next = active!.copy(
+    final before = active!;
+    final next = before.copy(
       messages: [
         for (final m in active!.messages)
           if (m.key == key)
@@ -1016,8 +1037,49 @@ class GroupController extends ChangeNotifier {
       ],
     );
     await store.saveGroupHistory(next);
+    delivery.record(before, next, reason);
     active = next;
     await _reload();
+    images.receiptsChanged();
+    files.receiptsChanged();
+  }
+
+  Future<void> _membersUnavailable(
+    Set<String> removed, {
+    GroupDeliveryReason reason = GroupDeliveryReason.memberLeft,
+  }) async {
+    if (active == null || removed.isEmpty) return;
+    final before = active!;
+    if (!before.messages.any(
+      (m) => removed.any((id) => m.receipts[id] == 'pending'),
+    )) {
+      return;
+    }
+    final next = before.copy(
+      messages: [
+        for (final m in before.messages)
+          if (removed.any((id) => m.receipts[id] == 'pending'))
+            m.copy(
+              receipts: {
+                for (final e in m.receipts.entries)
+                  e.key: removed.contains(e.key) && e.value == 'pending'
+                      ? 'unconfirmed'
+                      : e.value,
+              },
+            )
+          else
+            m,
+      ],
+    );
+    await store.saveGroupHistory(next);
+    delivery.record(before, next, reason);
+    active = next;
+    await _reload();
+    for (final m in next.messages) {
+      if (!m.receipts.values.contains('pending')) {
+        _receiptTimers.remove(m.key)?.cancel();
+      }
+    }
     images.receiptsChanged();
     files.receiptsChanged();
   }
@@ -1026,11 +1088,21 @@ class GroupController extends ChangeNotifier {
     String id, {
     bool close = true,
     bool announce = true,
+    GroupDeliveryReason reason = GroupDeliveryReason.memberLeft,
   }) async {
     final link = links.remove(id);
     _publicByLink.remove(id);
     if (link == null) return;
     link.timer?.cancel();
+    // Resolve only this recipient before attachment cleanup can mark it generic.
+    if (hosting && link.admitted) {
+      try {
+        await _membersUnavailable({link.session.peerId!}, reason: reason);
+      } catch (_) {
+        // A storage error must not prevent removing/closing the lost link.
+        error = 'Member disconnected; could not save delivery status.';
+      }
+    }
     for (final hub in <GroupAttachments<dynamic>>[images, files]) {
       try {
         await hub.drop(id);
@@ -1048,16 +1120,18 @@ class GroupController extends ChangeNotifier {
       if (announce) await _roster();
       state = 'Hosting • ${members.length} verified members';
     } else if (!hosting) {
-      await _stop();
+      await _stop(reason: GroupDeliveryReason.hostDisconnected);
       error = 'The host disconnected. History is saved; join and verify again.';
     }
   }
 
   Future<void> stop() => _run(() async {
-    await _stop();
+    await _stop(reason: GroupDeliveryReason.stopped);
     _notify();
   });
-  Future<void> _stop() async {
+  Future<void> _stop({
+    GroupDeliveryReason reason = GroupDeliveryReason.connectionEnded,
+  }) async {
     images.stop();
     files.stop();
     _joinTimer?.cancel();
@@ -1074,7 +1148,10 @@ class GroupController extends ChangeNotifier {
     _attempted.clear();
     try {
       if (active != null) {
-        final next = active!.copy(
+        final before = active!;
+        delivery.remember(before.id, members);
+        delivery.ended(before.id, reason);
+        final next = before.copy(
           messages: [
             for (final m in active!.messages)
               m.copy(
@@ -1086,6 +1163,7 @@ class GroupController extends ChangeNotifier {
           ],
         );
         await store.saveGroupHistory(next);
+        delivery.record(before, next, reason);
       }
     } finally {
       try {
@@ -1170,6 +1248,7 @@ class GroupController extends ChangeNotifier {
   void dispose() {
     images.stop();
     files.stop();
+    delivery.clear();
     drafts.removeListener(_notify);
     if (_ownsDrafts) drafts.dispose();
     _disposed = true;

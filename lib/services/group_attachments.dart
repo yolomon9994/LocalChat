@@ -179,7 +179,7 @@ abstract class GroupAttachments<T> {
       discard();
       accepted = true;
       if (!g.canAct() || access != _access) {
-        await g._uncertain(m.key);
+        await g._uncertain(m.key, reason: GroupDeliveryReason.interrupted);
       } else if (g.hosting) {
         await _relay(m);
       } else {
@@ -250,7 +250,8 @@ abstract class GroupAttachments<T> {
     if (received) {
       await g._receipt(m.key, member);
     } else {
-      final next = g.active!.copy(
+      final before = g.active!;
+      final next = before.copy(
         messages: [
           for (final row in g.active!.messages)
             if (row.key == m.key)
@@ -260,6 +261,7 @@ abstract class GroupAttachments<T> {
         ],
       );
       await g.store.saveGroupHistory(next);
+      g.delivery.record(before, next, GroupDeliveryReason.transferStopped);
       g.active = next;
       await g._reload();
       receiptsChanged();
@@ -284,7 +286,7 @@ abstract class GroupAttachments<T> {
     } else if (!g.hosting &&
         member == g.links.values.firstOrNull?.session.peerId) {
       if (!received) {
-        await g._uncertain(m.key);
+        await g._uncertain(m.key, reason: GroupDeliveryReason.transferStopped);
       } else if (g.active!.messages
           .firstWhere((row) => row.key == m.key)
           .receipts
@@ -334,7 +336,10 @@ abstract class GroupAttachments<T> {
       for (final l in _links.values.toList()) {
         if (l.outgoing?.key == p['key']) await l.engine.cancel();
       }
-      await g._uncertain(p['key'] as String);
+      await g._uncertain(
+        p['key'] as String,
+        reason: GroupDeliveryReason.transferStopped,
+      );
       return;
     }
     final transfer = _link(link);
@@ -408,7 +413,9 @@ abstract class GroupAttachments<T> {
         await g._stop();
       }
     }
-    if (origin != null) await g._uncertain(origin);
+    if (origin != null) {
+      await g._uncertain(origin, reason: GroupDeliveryReason.transferStopped);
+    }
     notice =
         'Group $_kind transfer stopped. Some members may already have received it.';
     g._notify();

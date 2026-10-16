@@ -6,6 +6,8 @@ Android-first Flutter app for nearby encrypted direct chats and hosted text/imag
 
 - Hosted nearby text/image/file groups: create/find/join, verify each host–guest connection,
   signed authors, member lists/removal, individual receipts and encrypted saved history.
+  Delivery rows explain observed departures/timeouts, and offline chats guide
+  host reopening and guest verification; see [group delivery feedback](docs/GROUP_DELIVERY.md).
   The host reads and relays messages; it must remain connected. No host migration.
   Group images provide preview, per-link progress/cancellation and offline zoom.
   All members need the updated app; active transfers require foreground unlock.

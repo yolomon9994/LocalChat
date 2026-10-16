@@ -132,3 +132,9 @@ default when following older lock checklists.
 Follow [PREVIEW_PRIVACY.md](PREVIEW_PRIVACY.md) for chat/archive/group snippets,
 TalkBack text omission, saved preferences, three OS notification modes, native
 redaction and lock/grace behavior. Check both legacy migration and new choices.
+
+## Group delivery feedback
+
+Follow [GROUP_DELIVERY.md](GROUP_DELIVERY.md) for three-phone departures, host
+loss, partially confirmed text/image/file delivery, original-host recovery,
+fresh verification, restart fallback and TalkBack/privacy checks.
