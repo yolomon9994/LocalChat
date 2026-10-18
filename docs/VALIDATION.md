@@ -1,9 +1,33 @@
 # Validation for v0.1.0
 
+## Android hardware test handoff - 2026-10-18
+
+App source: `0293b61`, automatic direct reconnection committed by the user.
+Documentation-only changes prepare [43 physical-device cases](HARDWARE_TEST_CHECKLIST.md),
+installation instructions, expected outcomes and a failure-report template.
+No physical-device test has been run as part of this handoff.
+
+- `flutter build apk --debug`: **passed**, exit 0; 57.5s Gradle task.
+  Log: `.dart_tool/hardware-testing-apk-2026-10-18.log`.
+- Copied the universal output into the ignored build directory as
+  `build/hardware-testing/LocalChat-0.1.0-0293b61-universal-debug.apk`.
+  Size: **189,649,067 bytes / 180.9 MiB**.
+- Android SDK 36 `aapt dump badging`: package `dev.localchat.app`, version
+  `0.1.0` / code `1`, minimum API **24**, target API **36**, debuggable,
+  native ABIs **armeabi-v7a, arm64-v8a and x86_64**.
+- Android SDK 36 `apksigner verify` on the named copy: **passed**, exit 0.
+- SHA-256 of the named copy:
+  `50fd7a2cdedf130438a59e317aa7a3aac3d30381f6a6c122f734917a1e352dc4`.
+- Relative document links and `git diff --check` passed. No Dart/native/dependency
+  changes; the prior 624-test, analysis and Chrome results below remain the
+  automated baseline and were not rerun for this documentation/build handoff.
+- Installation, real radios/pairing, camera, biometrics, battery/notification
+  behavior and accessibility remain **pending physical hardware observation**.
+
 ## Optional automatic direct-chat reconnection - validation 2026-10-17
 
 Baseline: `9203437` (group delivery feedback committed by the user).
-Changes remain local for the user's Git workflow. See
+Subsequently committed by the user as `0293b61`. See
 [AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md).
 
 - Thirty-three new checks: 27 preference/controller and six UI. Cover default-off,

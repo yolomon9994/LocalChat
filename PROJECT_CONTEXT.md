@@ -1,6 +1,6 @@
 # LocalChat project context
 
-Updated: 2026-10-17. The workspace is authoritative; read README.md,
+Updated: 2026-10-18. The workspace is authoritative; read README.md,
 docs/SECURITY.md, docs/VALIDATION.md and the relevant code before making changes.
 
 ## Goal and scope
@@ -40,13 +40,21 @@ Private contact nicknames were committed by the user as `6e5afe8`.
 Configurable auto-lock timing was committed by the user as `f8c9cdc`.
 Preview privacy controls were committed by the user as `492dbb5`.
 Group delivery feedback was committed by the user as `9203437`.
-The current milestone is optional automatic reconnection for direct chats.
+Automatic direct-chat reconnection was committed by the user as `0293b61`.
+The current milestone is Android hardware validation and fixes. Agreed feature
+additions are complete; see docs/HARDWARE_TEST_CHECKLIST.md for installation,
+two/three-phone test order, expected outcomes and a result-report template.
+All hardware cases remain pending until observed on physical devices.
+On 2026-10-18, prepared 43 hardware cases and built/signature-checked the universal
+debug APK at build/hardware-testing/LocalChat-0.1.0-0293b61-universal-debug.apk.
+Version 0.1.0+1, minimum API 24, three ABIs, 180.9 MiB. Build/hash results are in
+docs/VALIDATION.md; no application code changed and no hardware pass is claimed.
 Work on one milestone at a
 time; the user will stage, commit and push it themselves after testing.
 
-## Automatic direct-chat reconnection - implemented locally, 2026-10-17
+## Automatic direct-chat reconnection - implemented and committed, 2026-10-17
 
-Baseline: `9203437`; clean worktree at startup. User handles Git.
+Baseline: `9203437`; subsequently committed by the user as `0293b61`.
 See docs/AUTOMATIC_RECONNECT.md and docs/VALIDATION.md.
 
 - Default-off strict v1 secure preference automatic_reconnect_v1 (memory in demo).

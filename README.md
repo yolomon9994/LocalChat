@@ -130,6 +130,9 @@ flutter run -d DEVICE_ID
 
 Build an installable testing APK:
 
+Use the [Android hardware test checklist](docs/HARDWARE_TEST_CHECKLIST.md) to
+record physical-device results, including the separate three-phone group tests.
+
 ```bash
 flutter build apk --debug --target-platform android-arm64 --split-per-abi
 ```

@@ -1,5 +1,9 @@
 # Two-device acceptance tests
 
+Start with the consolidated [Android hardware test checklist](HARDWARE_TEST_CHECKLIST.md)
+for installation, test order, two/three-phone coverage and a results template.
+The detailed feature checklists below cover additional edge cases.
+
 Readability has a [text-size/high-contrast checklist](ACCESSIBILITY.md), including
 OS font settings, theme migration, restart/PIN, combined enlargement, TalkBack and
 small-screen browser notices. Vibration feedback has its own

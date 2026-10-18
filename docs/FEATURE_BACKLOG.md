@@ -3,9 +3,22 @@
 Created: 2026-10-10. Keep this file updated as features are implemented and tested.
 Work on one feature at a time; validate it before the user commits and starts the next.
 
-## Current milestone: Optional automatic reconnection for direct chats
+## Current milestone: Android hardware validation
 
-Implemented locally: 2026-10-17. Baseline `9203437`; user handles Git.
+Prepared: 2026-10-18. Feature additions are complete for the agreed backlog.
+Start with [HARDWARE_TEST_CHECKLIST.md](HARDWARE_TEST_CHECKLIST.md) for installation,
+two-phone direct-chat tests, three-phone group tests and recording results.
+
+- [x] Consolidated feature checklist and expected results for physical devices.
+- [x] Universal debug APK built and signature checked; artifact details in checklist.
+- [ ] Install the same universal testing APK on the participating Android phones.
+- [ ] Run two-phone checks, including interrupted links, privacy and migration.
+- [ ] Run three-phone group checks, including host loss and screen-off relay.
+- [ ] Record device/Android coverage and fix reproducible failures before expanding scope.
+
+## Optional automatic reconnection for direct chats: implemented and committed
+
+Implemented locally: 2026-10-17. Committed by the user as `0293b61`.
 See [AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md).
 
 - [x] Default-off saved preference; temporary browser controls and generic retry.
@@ -16,7 +29,7 @@ See [AUTOMATIC_RECONNECT.md](AUTOMATIC_RECONNECT.md).
 - [x] Focused 55 checks, six Chrome UI cases, clean analysis and final Android/web builds.
 - [x] All 624 tests (33 new) pass; see VALIDATION.md.
 - [ ] Physical two-phone/OS/TalkBack checklist in AUTOMATIC_RECONNECT.md.
-- [ ] User reviews, commits and pushes the milestone.
+- [x] User committed automatic direct-chat reconnection as `0293b61`.
 
 ## Clearer group delivery feedback: implemented and committed
 
@@ -605,7 +618,8 @@ Implemented and validated, 2026-10-12. Committed by the user as `3ec26b5`.
 15. Configurable auto-lock timing (committed).
 16. Preview privacy controls (committed).
 17. Clearer group delivery feedback for departures and host loss (committed).
-18. Optional direct-chat automatic reconnection with fresh verification (current).
+18. Optional direct-chat automatic reconnection with fresh verification (committed).
+19. Android hardware validation and fixes (current); see HARDWARE_TEST_CHECKLIST.md.
 
 The user chose app lock first so it can be tested before committing. This order
 can change; unchecked items are plans, not existing capabilities.
